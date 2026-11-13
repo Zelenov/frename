@@ -650,7 +650,22 @@ mod tests {
     fn a_comment_and_points_that_were_saved_are_not_told_as_lost() {
         let tagger = ProductionFileTagger;
         let points = [(0.05, 0.15), (0.0, 0.15), (0.05, 0.2)];
-        for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
+        // Every pair of homes for the comment and the points (#440).
+        let mixed_text = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let mixed_video = MetadataStorage {
+            comment: CommentStorage::InVideo,
+            in_out: InOutStorage::Comment,
+        };
+        let storages = [
+            ("text", TEXT),
+            ("adobe", ADOBE),
+            ("text-points-in-video", mixed_text),
+            ("video-points-in-comment", mixed_video),
+        ];
+        for (name, storage) in storages {
             for (i, (start, end)) in points.into_iter().enumerate() {
                 let path = clip_named(&format!("saved-comment-{name}-{i}"), "clip.mov");
                 let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
@@ -665,7 +680,9 @@ mod tests {
                 let saved_path = tagger.save_with(&wanted, &path, storage);
                 let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
                 assert!(saved.comment().contains("вторая строка"), "{name}: written");
-                let points_in_comment = storage.in_out == InOutStorage::Comment;
+                // As the app decides it after a save.
+                let points_in_comment = storage.in_out == InOutStorage::Comment
+                    || crate::recovery::points_kept_in_text(&saved_path);
                 assert!(
                     !crate::recovery::comment_or_points_not_saved(
                         &wanted,

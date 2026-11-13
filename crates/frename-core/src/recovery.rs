@@ -492,10 +492,11 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
     // An `In/Out:` line is read back as the in/out points, not as comment text: a comment of
     // only that line is saved when it reads back empty.
     let (text, _) = crate::metadata::split_in_out_line(wanted.comment());
+    // Tidied as a save leaves it: a comment of only control characters is stored empty (#440).
     !wanted.comment_loading()
         && !saved.comment_loading()
-        && !text.trim().is_empty()
-        && saved.comment().trim().is_empty()
+        && !tidy_comment(&text).is_empty()
+        && tidy_comment(saved.comment()).is_empty()
 }
 
 /// Whether a save left the comment or the in/out points other than `wanted` asked, though the
@@ -573,13 +574,10 @@ fn tidy_comment(comment: &str) -> String {
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.
 pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
-    // A NUL is stored as a space in the video (#441): that is the comment saved.
-    let text = |s: &str| {
-        s.replace("\r\n", "\n")
-            .replace('\0', " ")
-            .trim()
-            .to_string()
-    };
+    // The comment as a save may leave it (line endings, control characters such as a NUL the
+    // video stores as a space, spaces at line ends, blank lines), as the #425 note compares it
+    // (#440): a save that only tidied it is the comment saved.
+    let text = tidy_comment;
     wanted.tags() == saved.tags()
         && wanted.name_without_extension() == saved.name_without_extension()
         && wanted.extension().eq_ignore_ascii_case(saved.extension())
@@ -1356,6 +1354,26 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// #440: the journal and the #425 note agree on what was saved: tidied spacing and control
+    /// characters are the comment saved, and a comment of only control characters that reads back
+    /// empty is not lost.
+    #[test]
+    fn a_tidied_comment_is_saved_for_the_journal_and_not_lost() {
+        let with = |comment: &str| {
+            let mut snapshot = FileSnapshot::parse("clip.mp4");
+            snapshot.set_comment(comment.to_string());
+            snapshot
+        };
+        let wanted = with("Note  \r\n\r\n\r\nAI: ctl\u{b}x");
+        let saved = with("Note\n\nAI: ctl x");
+        assert!(saved_what_was_wanted(&wanted, &saved));
+        assert!(!comment_or_points_not_saved(&wanted, &saved, false));
+        assert!(!comment_not_saved(&with("\0 \u{1}"), &with("")));
+        assert!(saved_what_was_wanted(&with("\0 \u{1}"), &with("")));
+        assert!(comment_not_saved(&with("Note"), &with("")));
+        assert!(!saved_what_was_wanted(&with("Note"), &with("Other")));
     }
 
     /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.
