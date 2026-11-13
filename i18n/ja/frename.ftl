@@ -792,6 +792,7 @@ recovery-comment = コメント
 recovery-in-out = イン点／アウト点
 recovery-edits = 編集
 folder-frame-saved = フレームを保存しました
+folder-frame-not-saved = フレームを保存できませんでした: ファイル名が長すぎるか、フォルダーが読み取り専用です
 folder-not-saved = 保存できませんでした: 同じ名前のファイルがすでにあるか、読み取り専用または使用中です
 folder-comment-not-saved = { $name } のコメントは保存されませんでした: .comment.txt ファイルを書き込めませんでした（ファイル名が長すぎるか、フォルダーが読み取り専用です）。名前が長ければ短くしてから、コメントをもう一度書いてください。
 markers-deleted-notice = マーカーを削除しました
