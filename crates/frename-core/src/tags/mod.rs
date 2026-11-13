@@ -29,4 +29,4 @@ pub use screenshot::Screenshot;
 pub use stored_tag::StoredTag;
 pub use tag::{Tag, TagId};
 pub use tag_color_mapping::TagColorMapping;
-pub use tag_list::{is_allowed_tag_name, TagList, TagOrderState};
+pub use tag_list::{has_forbidden_file_name_char, is_allowed_tag_name, TagList, TagOrderState};

@@ -1082,13 +1082,19 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 }
 
-/// Whether `name` can be a tag. A tag becomes part of the clip's file name, so it holds none of
-/// the characters a file name cannot (`\ / : * ? " < > |` on Windows; `/` moves the clip into a
-/// folder elsewhere) and no control character: the same rule as typing a new file name (#418).
-pub fn is_allowed_tag_name(name: &str) -> bool {
-    !name.chars().any(|c| {
+/// Whether `name` holds a character no file name can (`\\ / : * ? " < > |` on Windows; `/`
+/// moves a file into a folder elsewhere) or a control character. The one rule for a name typed
+/// for a file and for a tag, which becomes part of a file name.
+pub fn has_forbidden_file_name_char(name: &str) -> bool {
+    name.chars().any(|c| {
         matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
     })
+}
+
+/// Whether `name` can be a tag: it holds no [forbidden
+/// character](has_forbidden_file_name_char) (#418).
+pub fn is_allowed_tag_name(name: &str) -> bool {
+    !has_forbidden_file_name_char(name)
 }
 
 /// Where [`TagList::insert_new_tag`] puts a new tag.
