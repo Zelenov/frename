@@ -474,6 +474,12 @@ fn restore_one(dir: &Path, file: &Path, entry: &Entry) -> Restored {
 }
 
 /// Whether two segment points are the same time: the file keeps them in milliseconds.
+/// Whether `saved` read back the in/out points `wanted` asked for.
+fn same_points(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    same_point(wanted.segment_start(), saved.segment_start())
+        && same_point(wanted.segment_end(), saved.segment_end())
+}
+
 fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
     match (wanted, saved) {
         (None, None) => true,
@@ -554,21 +560,16 @@ pub fn points_in_comment(path: &Path) -> bool {
     crate::metadata_storage().in_out == crate::InOutStorage::Comment || points_kept_in_text(path)
 }
 
-/// [`points_in_comment`] for a save that wanted `wanted` and read back `saved`, looked up only
-/// when their points differ: when they are the same, the answer changes nothing, and the clip's
-/// files are not opened again on every save (#442).
-pub fn points_in_comment_after_save(
-    wanted: &FileSnapshot,
-    saved: &FileSnapshot,
-    path: &Path,
-) -> bool {
+/// What to pass as `points_in_comment` to [`comment_or_points_not_saved`] and
+/// [`saved_what_was_wanted`] after a save that wanted `wanted` and read back `saved`. It is false
+/// when the points read back as wanted, whatever the storage, and only then is the answer of
+/// [`points_in_comment`] not needed; it is looked up otherwise, so the clip's files are not
+/// opened again on every save (#442). Not an answer to where the points are kept.
+pub fn points_to_compare(wanted: &FileSnapshot, saved: &FileSnapshot, path: &Path) -> bool {
     // Points typed as an `In/Out:` line are compared against the read-back too.
     let (_, typed) = crate::metadata::split_in_out_line(wanted.comment());
-    let same = typed.start.is_none()
-        && typed.end.is_none()
-        && same_point(wanted.segment_start(), saved.segment_start())
-        && same_point(wanted.segment_end(), saved.segment_end());
-    !same && points_in_comment(path)
+    let typed = typed.start.is_some() || typed.end.is_some();
+    (typed || !same_points(wanted, saved)) && points_in_comment(path)
 }
 
 /// `comment` as a save may leave it: `\n` line endings, control characters as the spaces the
@@ -616,9 +617,7 @@ pub fn saved_what_was_wanted(
         // Points kept in the video read back other than set even when saved (an in point at 0 s,
         // an out point at the clip's end), so only points kept as an `In/Out:` line are compared,
         // as the #425 note does (#448).
-        && (!points_in_comment
-            || (same_point(wanted.segment_start(), saved.segment_start())
-                && same_point(wanted.segment_end(), saved.segment_end())))
+        && (!points_in_comment || same_points(wanted, saved))
 }
 
 /// Save the entry's state to its clip, the way leaving the clip would (keep the marker handling
@@ -668,7 +667,7 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
     if !saved_what_was_wanted(
         &wanted,
         &saved,
-        points_in_comment_after_save(&wanted, &saved, &new_path),
+        points_to_compare(&wanted, &saved, &new_path),
     ) {
         return None;
     }
@@ -1434,28 +1433,30 @@ mod tests {
         wanted.set_segment_start(Some(1.0));
         // A path that does not exist: looking it up would say the video cannot take the points.
         let missing = Path::new("/nonexistent/frename-442/clip.mp4");
-        assert!(!points_in_comment_after_save(
-            &wanted,
-            &wanted.clone(),
-            missing
-        ));
+        assert!(!points_to_compare(&wanted, &wanted.clone(), missing));
         let saved = FileSnapshot::parse("clip.mp4");
-        assert!(points_in_comment_after_save(&wanted, &saved, missing));
+        assert!(points_to_compare(&wanted, &saved, missing));
+        // A typed line whose points did read back is not told, looked up or not.
+        let mut typed_saved = FileSnapshot::parse("clip.mp4");
+        typed_saved.set_comment("Note".to_string());
+        typed_saved.set_segment_start(Some(1.0));
+        let mut typed_wanted = typed_saved.clone();
+        typed_wanted.set_comment("Note\nIn/Out: 00:00:01.000 – end".to_string());
         assert!(!comment_or_points_not_saved(
-            &wanted,
-            &wanted.clone(),
-            points_in_comment_after_save(&wanted, &wanted.clone(), missing)
+            &typed_wanted,
+            &typed_saved,
+            points_to_compare(&typed_wanted, &typed_saved, missing)
         ));
         // A typed line that a read-only file did not take is still looked up, and told.
         let mut typed = FileSnapshot::parse("clip.mp4");
         typed.set_comment("Note\nIn/Out: 00:00:01.000 – end".to_string());
         let mut old = FileSnapshot::parse("clip.mp4");
         old.set_comment("Note".to_string());
-        assert!(points_in_comment_after_save(&typed, &old, missing));
+        assert!(points_to_compare(&typed, &old, missing));
         assert!(comment_or_points_not_saved(
             &typed,
             &old,
-            points_in_comment_after_save(&typed, &old, missing)
+            points_to_compare(&typed, &old, missing)
         ));
     }
 

@@ -1,7 +1,7 @@
 # 0.220
 ## Fixed
-- Leaving a clip no longer opens its video a second time to check how its in/out points were saved, unless they read back differently; an online-only clip is no longer downloaded for that check.
-- The note about a comment or in/out points that could not be saved reads better in French, Spanish, Russian, Ukrainian and Japanese.
+- Leaving a clip with in/out points no longer downloads an online-only (cloud) video just to check where its points were saved.
+- The note about a comment or in/out points that could not be saved is worded more naturally in French, Spanish, Russian, Ukrainian and Japanese.
 
 # 0.219
 ## Fixed
