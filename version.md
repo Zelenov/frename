@@ -1,3 +1,7 @@
+# 0.207
+## Fixed
+- With the comment kept in the video, a crash while frename renames a clip can no longer bring back an older comment from a leftover `.comment.txt` file.
+
 # 0.205
 ## Fixed
 - If frename crashes or is closed by force while it renames a clip, the next start moves the clip's comment, subtitles and screenshots to the new name.
