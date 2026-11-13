@@ -829,6 +829,7 @@ recovery-in-out = in/out points
 recovery-edits = edits
 folder-frame-saved = Frame saved
 folder-not-saved = Not saved: a file with that name already exists, or it is read-only or in use
+folder-comment-not-saved = Comment not saved: the clip's name is too long
 markers-deleted-notice = Marker deleted
 markers-not-saved-notice = Markers not saved: the file is read-only or in use
 markers-comment-not-saved-notice = Markers not saved: the comment file is read-only or in use

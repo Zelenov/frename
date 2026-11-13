@@ -867,6 +867,7 @@ recovery-in-out = In-/Out-Punkte
 recovery-edits = Änderungen
 folder-frame-saved = Bild gespeichert
 folder-not-saved = Nicht gespeichert: Eine Datei mit diesem Namen existiert schon, oder sie ist schreibgeschützt oder in Gebrauch
+folder-comment-not-saved = Kommentar nicht gespeichert: Der Clipname ist zu lang
 markers-deleted-notice = Marker gelöscht
 markers-not-saved-notice = Marker nicht gespeichert: Die Datei ist schreibgeschützt oder in Gebrauch
 markers-comment-not-saved-notice = Marker nicht gespeichert: Die Kommentardatei ist schreibgeschützt oder in Gebrauch

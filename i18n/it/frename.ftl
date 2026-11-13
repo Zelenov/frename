@@ -890,6 +890,7 @@ recovery-in-out = punti di attacco/stacco
 recovery-edits = modifiche
 folder-frame-saved = Fotogramma salvato
 folder-not-saved = Non salvato: esiste già un file con quel nome, oppure è di sola lettura o in uso
+folder-comment-not-saved = Commento non salvato: il nome della clip è troppo lungo
 markers-deleted-notice = Marcatore eliminato
 markers-not-saved-notice = Marcatori non salvati: il file è di sola lettura o in uso
 markers-comment-not-saved-notice = Marcatori non salvati: il file del commento è di sola lettura o in uso

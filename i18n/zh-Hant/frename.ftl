@@ -791,6 +791,7 @@ recovery-in-out = 入點／出點
 recovery-edits = 編輯
 folder-frame-saved = 影格已儲存
 folder-not-saved = 未儲存：已有同名檔案，或檔案為唯讀或使用中
+folder-comment-not-saved = 未儲存註解：片段名稱過長
 markers-deleted-notice = 標記已刪除
 markers-not-saved-notice = 標記未儲存：檔案為唯讀或使用中
 markers-comment-not-saved-notice = 標記未儲存：註解檔為唯讀或使用中

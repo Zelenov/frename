@@ -904,6 +904,7 @@ recovery-in-out = точки входа и выхода
 recovery-edits = правки
 folder-frame-saved = Кадр сохранён
 folder-not-saved = Не сохранено: файл с таким именем уже есть, либо он только для чтения или занят
+folder-comment-not-saved = Комментарий не сохранён: слишком длинное имя клипа
 markers-deleted-notice = Маркер удалён
 markers-not-saved-notice = Маркеры не сохранены: файл только для чтения или занят
 markers-comment-not-saved-notice = Маркеры не сохранены: файл комментария только для чтения или занят

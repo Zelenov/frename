@@ -893,6 +893,7 @@ recovery-in-out = ulazne i izlazne tačke
 recovery-edits = izmene
 folder-frame-saved = Kadar je sačuvan
 folder-not-saved = Nije sačuvano: datoteka sa tim nazivom već postoji, ili je samo za čitanje ili u upotrebi
+folder-comment-not-saved = Komentar nije sačuvan: naziv klipa je predugačak
 markers-deleted-notice = Marker je obrisan
 markers-not-saved-notice = Markeri nisu sačuvani: datoteka je samo za čitanje ili je u upotrebi
 markers-comment-not-saved-notice = Markeri nisu sačuvani: datoteka komentara je samo za čitanje ili je u upotrebi

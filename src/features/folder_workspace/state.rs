@@ -2235,6 +2235,12 @@ impl FolderWorkspace {
             } else {
                 Self::notice(&fl!("folder-not-saved"))
             }
+        } else if frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save) {
+            // Its text file could not be written (#416); the journal keeps a copy. A comment
+            // that is gone must be read, not glanced at: the long note.
+            Task::done(Message::MediaViewer(media_viewer::Message::Video(
+                media_viewer_video::Message::ShowLongNotice(fl!("folder-comment-not-saved")),
+            )))
         } else {
             Task::none()
         };

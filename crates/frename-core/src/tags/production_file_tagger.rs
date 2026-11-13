@@ -590,6 +590,31 @@ mod tests {
         assert_eq!(intents.count(), 0);
     }
 
+    /// #416: a clip whose name leaves no room for `<name>.comment.txt` (122 Cyrillic letters are
+    /// 248 bytes with `.mov`; the comment file would be 260, over the 255-byte limit of ext4 and
+    /// APFS) cannot keep a comment in a text file. The save cannot say so itself; the clip read
+    /// back has no comment, and `comment_not_saved` tells the caller.
+    #[cfg(unix)]
+    #[test]
+    fn a_comment_that_cannot_be_written_is_told_from_one_that_was() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("long-name-comment", &format!("{}.mov", "я".repeat(122)));
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_comment("Вода в кадре, перемонтировать".to_string());
+
+        let new_path = tagger.save_with(&wanted, &path, TEXT);
+        let saved = tagger.parse_with(&new_path, &FolderInfo::default(), TEXT);
+
+        assert!(crate::recovery::comment_not_saved(&wanted, &saved));
+        // A short name keeps it, and nothing is reported.
+        let short = clip_named("short-name-comment", "clip.mov");
+        let mut wanted = tagger.parse_with(&short, &FolderInfo::default(), TEXT);
+        wanted.set_comment("Вода в кадре".to_string());
+        let saved_path = tagger.save_with(&wanted, &short, TEXT);
+        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
+        assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+    }
+
     #[test]
     fn a_failed_rename_keeps_the_comment_with_the_video() {
         let tagger = ProductionFileTagger;

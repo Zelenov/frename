@@ -887,6 +887,7 @@ recovery-in-out = puntos de entrada/salida
 recovery-edits = ediciones
 folder-frame-saved = Fotograma guardado
 folder-not-saved = No guardado: ya existe un archivo con ese nombre, o es de solo lectura o está en uso
+folder-comment-not-saved = Comentario no guardado: el nombre del clip es demasiado largo
 markers-deleted-notice = Marcador eliminado
 markers-not-saved-notice = Marcadores no guardados: el archivo es de solo lectura o está en uso
 markers-comment-not-saved-notice = Marcadores no guardados: el archivo de comentario es de solo lectura o está en uso

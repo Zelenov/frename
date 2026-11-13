@@ -791,6 +791,7 @@ recovery-in-out = 인/아웃 포인트
 recovery-edits = 편집 내용
 folder-frame-saved = 프레임 저장됨
 folder-not-saved = 저장하지 못했습니다: 같은 이름의 파일이 이미 있거나, 읽기 전용이거나 사용 중입니다
+folder-comment-not-saved = 코멘트를 저장하지 못했습니다: 클립 이름이 너무 깁니다
 markers-deleted-notice = 마커를 삭제했습니다
 markers-not-saved-notice = 마커를 저장하지 못했습니다: 파일이 읽기 전용이거나 사용 중입니다
 markers-comment-not-saved-notice = 마커를 저장하지 못했습니다: 코멘트 파일이 읽기 전용이거나 사용 중입니다

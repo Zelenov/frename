@@ -120,6 +120,10 @@ pub struct DemoScenario {
     /// second it is in the recovery journal, so the file name card says so (#155). Demo only.
     #[serde(default)]
     pub type_in_comment: Option<String>,
+    /// Go on to the next file after the steps above, which saves the open one (#416: a comment
+    /// that could not be saved says so).
+    #[serde(default)]
+    pub next_file: bool,
     /// The name of the staged folder (it shows in the recent folders); `folder` when not given.
     #[serde(default)]
     pub folder_name: Option<String>,

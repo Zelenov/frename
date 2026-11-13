@@ -885,6 +885,7 @@ recovery-in-out = points d’entrée/de sortie
 recovery-edits = modifications
 folder-frame-saved = Image enregistrée
 folder-not-saved = Non enregistré : un fichier portant ce nom existe déjà, ou il est en lecture seule ou utilisé
+folder-comment-not-saved = Commentaire non enregistré : le nom du clip est trop long
 markers-deleted-notice = Marqueur supprimé
 markers-not-saved-notice = Marqueurs non enregistrés : le fichier est en lecture seule ou utilisé
 markers-comment-not-saved-notice = Marqueurs non enregistrés : le fichier de commentaire est en lecture seule ou utilisé

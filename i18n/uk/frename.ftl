@@ -903,6 +903,7 @@ recovery-in-out = точки входу й виходу
 recovery-edits = правки
 folder-frame-saved = Кадр збережено
 folder-not-saved = Не збережено: файл із таким іменем уже є, або він лише для читання чи використовується
+folder-comment-not-saved = Коментар не збережено: задовге ім’я кліпу
 markers-deleted-notice = Позначку видалено
 markers-not-saved-notice = Позначки не збережено: файл лише для читання або використовується
 markers-comment-not-saved-notice = Позначки не збережено: файл коментаря лише для читання або використовується

@@ -482,6 +482,17 @@ fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
     }
 }
 
+/// Whether a save lost the comment: `wanted` had one, and the clip read back after the save has
+/// none. That is a comment text file that could not be written (#416): the clip's name is too
+/// close to the 255-character limit for `<name>.comment.txt`, or the folder refuses it. A
+/// snapshot whose comment was not read stays out.
+pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    !wanted.comment_loading()
+        && !saved.comment_loading()
+        && !wanted.comment().trim().is_empty()
+        && saved.comment().trim().is_empty()
+}
+
 /// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.

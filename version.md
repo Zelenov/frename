@@ -1,3 +1,7 @@
+# 0.208
+## Fixed
+- When a clip's name is too long to keep its comment in a `.comment.txt` file next to it, frename now says the comment was not saved instead of losing it without a word.
+
 # 0.206
 ## Fixed
 - A tag can no longer hold a character a file name cannot (`\ / : * ? " < > |`): typing one in the tag search says so instead of offering to create it. Before, a tag like "AC/DC" moved the clip into a folder `AC` or made every save fail.
