@@ -465,10 +465,86 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
     std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
+/// Whether another video in the folder of `video_path` has the same name without its extension
+/// (`A001.mov` next to `A001.mp4`, a camera original and its proxy). The subtitles, CAPT file and
+/// transcript are named without the extension (`A001.srt`), so they belong to both and to neither
+/// alone (#417).
+pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
+    stem_held_by_another(video_path, video_path)
+}
+
+/// Whether a video in the folder of `video_path` other than `video_path` and `except` has the
+/// same name without its extension: one that holds the files named after it.
+pub(crate) fn stem_held_by_another(video_path: &Path, except: &Path) -> bool {
+    let (Some(stem), Some(name)) = (video_path.file_stem(), video_path.file_name()) else {
+        return false;
+    };
+    let except = except.file_name();
+    let folder = match video_path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return false;
+    };
+    let stem = stem.to_string_lossy();
+    entries.filter_map(Result::ok).any(|entry| {
+        let other = entry.path();
+        let other_name = entry.file_name();
+        other_name != name
+            && Some(other_name.as_os_str()) != except
+            && other
+                .file_stem()
+                .is_some_and(|s| same_stem(&s.to_string_lossy(), &stem))
+            && other
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| crate::file_kind::FileKind::from_extension(e).is_media())
+    })
+}
+
+/// Whether the files of `video_path` named without its extension (subtitles, CAPT, transcript)
+/// stay where they are when it is renamed: it has some, and another video shares the name
+/// ([`stem_is_shared`]). The folder is listed only for a clip that has such files.
+pub fn keeps_stem_files(video_path: &Path) -> bool {
+    has_stem_files(video_path) && stem_is_shared(video_path)
+}
+
+/// Whether a rename of `video_path` moves its files named without the extension: it has some,
+/// and no other video shares the name. What an undo or redo replays as "moved" (#417).
+pub fn moves_stem_files(video_path: &Path) -> bool {
+    has_stem_files(video_path) && !stem_is_shared(video_path)
+}
+
+fn has_stem_files(video_path: &Path) -> bool {
+    stem_files(video_path).iter().any(|p| p.is_file())
+}
+
+/// The files of `video_path` named without its extension: its subtitles (the CAPT file among
+/// them) and its transcript.
+pub(crate) fn stem_files(video_path: &Path) -> Vec<PathBuf> {
+    let mut files = subtitle_candidates(video_path);
+    files.push(transcript_path(video_path));
+    files
+}
+
+/// Whether two names without extension name the same files: on Windows and macOS `A001` and
+/// `a001` do (`A001.srt` is `a001.srt` there), on Linux they do not. Decided by the platform,
+/// not the volume: a case-insensitive card mounted on Linux, or a case-sensitive APFS volume, is
+/// judged by its platform's usual file system.
+fn same_stem(a: &str, b: &str) -> bool {
+    if cfg!(any(windows, target_os = "macos")) {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a == b
+    }
+}
+
 /// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
 /// video is renamed, so they keep matching. Does nothing for a file that is not there; never
-/// overwrites an existing one.
-pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
+/// overwrites an existing one. Whether they move at all while another video shares their name is
+/// the caller's decision (`tags::rename_sidecars_with`, #417).
+pub(crate) fn move_subtitle_files(old_video_path: &Path, new_video_path: &Path) {
     for (old, new) in subtitle_candidates(old_video_path)
         .iter()
         .zip(subtitle_candidates(new_video_path).iter())
@@ -581,7 +657,7 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(subtitle_path(&old_video), "old").expect("write srt");
 
-        rename_subtitle_file(&old_video, &new_video);
+        move_subtitle_files(&old_video, &new_video);
         assert!(!subtitle_path(&old_video).exists());
         assert_eq!(
             std::fs::read_to_string(subtitle_path(&new_video))
@@ -592,7 +668,7 @@ mod tests {
 
         // A subtitle file already at the destination is left alone.
         std::fs::write(subtitle_path(&old_video), "other").expect("write srt");
-        rename_subtitle_file(&old_video, &new_video);
+        move_subtitle_files(&old_video, &new_video);
         assert_eq!(
             std::fs::read_to_string(subtitle_path(&new_video))
                 .ok()
@@ -611,7 +687,7 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(capt_path(&old_video), "capt").expect("write capt");
 
-        rename_subtitle_file(&old_video, &new_video);
+        move_subtitle_files(&old_video, &new_video);
         assert!(!capt_path(&old_video).exists());
         assert_eq!(capt_path(&new_video), dir.join("tag.clip.capt"));
         assert!(capt_path(&new_video).is_file());
@@ -626,7 +702,7 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(transcript_path(&old_video), "{}").expect("write marker");
 
-        rename_subtitle_file(&old_video, &new_video);
+        move_subtitle_files(&old_video, &new_video);
         assert!(!transcript_path(&old_video).exists());
         assert_eq!(
             transcript_path(&new_video),
@@ -708,7 +784,7 @@ mod tests {
         std::fs::write(dir.join("clip.ass"), "a").expect("ass");
         std::fs::write(dir.join("clip.ssa"), "s").expect("ssa");
 
-        rename_subtitle_file(&old_video, &new_video);
+        move_subtitle_files(&old_video, &new_video);
         assert!(!dir.join("clip.ass").exists() && !dir.join("clip.ssa").exists());
         assert_eq!(
             std::fs::read_to_string(dir.join("tag.clip.ass"))
@@ -1049,7 +1125,7 @@ and the gulls follow them home across the quiet water until the lights go out."
             "{bytes} vs the JSON's {json_len}"
         );
 
-        rename_subtitle_file(&video, &dir.join("tag.clip.mp4"));
+        move_subtitle_files(&video, &dir.join("tag.clip.mp4"));
         assert!(!dir.join("clip.premiere.json").exists());
         assert!(dir.join("tag.clip.premiere.json").is_file());
         let _ = std::fs::remove_dir_all(&dir);

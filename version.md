@@ -1,3 +1,7 @@
+# 0.209
+## Fixed
+- Tagging one of two clips with the same name (`A001.mov` and `A001.mp4`) no longer takes their shared subtitles, CAPT file and transcript away from the other, and the other can then take the same tags.
+
 # 0.208
 ## Fixed
 - When a comment cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder), frename now says so instead of losing it silently.
