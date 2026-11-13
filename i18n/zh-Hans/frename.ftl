@@ -791,6 +791,7 @@ recovery-in-out = 入点/出点
 recovery-edits = 编辑
 folder-frame-saved = 帧已保存
 folder-not-saved = 未保存：已存在同名文件，或文件为只读或正被占用
+folder-comment-not-saved = { $name } 的注释未保存：无法写入其 .comment.txt 文件（文件名过长，或文件夹为只读）。如果名称过长，请先缩短，再重新写注释。
 markers-deleted-notice = 标记已删除
 markers-not-saved-notice = 标记未保存：文件为只读或正被占用
 markers-comment-not-saved-notice = 标记未保存：注释文件为只读或正被占用

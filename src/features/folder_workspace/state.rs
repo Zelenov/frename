@@ -2228,6 +2228,8 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
+        let comment_lost =
+            !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
             if self.marker_reading_clip() {
@@ -2235,6 +2237,14 @@ impl FolderWorkspace {
             } else {
                 Self::notice(&fl!("folder-not-saved"))
             }
+        } else if comment_lost {
+            // Its text file could not be written (#416); the journal keeps a copy. It shows over
+            // the next clip, so it names this one, by the name it has on disk now (a rename that
+            // added tags is what made it long).
+            Self::long_notice(fl!(
+                "folder-comment-not-saved",
+                name = short_file_name(&new_path)
+            ))
         } else {
             Task::none()
         };
@@ -2267,7 +2277,8 @@ impl FolderWorkspace {
                 // only records that this one was said.
                 let notice =
                     self.keep_unsaved_markers(id, wanted, &marker_actions::markers_not_saved());
-                if !refused {
+                // The note that the comment was lost covers the marker lines it held.
+                if !refused && !comment_lost {
                     markers_notice = notice;
                 }
             }
@@ -3710,6 +3721,23 @@ impl FolderWorkspace {
     pub fn folder_width(&self) -> f32 {
         self.folder_width
     }
+}
+
+/// The file name of `path` for a note, at most 40 characters: a longer one keeps its start
+/// and its end around "…" (#416: the names that lose a comment are the longest).
+fn short_file_name(path: &std::path::Path) -> String {
+    const MAX: usize = 40;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let chars: Vec<char> = name.chars().collect();
+    if chars.len() <= MAX {
+        return name;
+    }
+    let head: String = chars[..MAX / 2].iter().collect();
+    let tail: String = chars[chars.len() - (MAX / 2 - 1)..].iter().collect();
+    format!("{head}…{tail}")
 }
 
 /// Why `typed` cannot replace `current` as a file name in `folder`, if it cannot. A rename
@@ -6061,6 +6089,19 @@ mod tests {
             ),
             Ok(()),
             "case-only rename"
+        );
+    }
+
+    /// #416: a note names a long clip by its start and end.
+    #[test]
+    fn a_long_file_name_is_shortened_in_the_middle_for_a_note() {
+        let long = format!("{}.webm", "я".repeat(122));
+        let short = super::short_file_name(std::path::Path::new(&long));
+        assert_eq!(short.chars().count(), 40);
+        assert!(short.starts_with("яяя") && short.ends_with("я.webm") && short.contains('…'));
+        assert_eq!(
+            super::short_file_name(std::path::Path::new("/a/clip.mov")),
+            "clip.mov"
         );
     }
 

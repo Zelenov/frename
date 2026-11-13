@@ -1,3 +1,7 @@
+# 0.208
+## Fixed
+- When a comment cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder), frename now says so instead of losing it silently.
+
 # 0.207
 ## Fixed
 - With the comment kept in the video, a crash while frename renames a clip can no longer bring back an older comment from a leftover `.comment.txt` file.
