@@ -796,6 +796,7 @@ tag-grid-unstar = Retirer l’étoile
 tag-grid-save = Ajouter aux tags du dossier
 tag-grid-delete = Supprimer « { $tag } » des tags du dossier
 tag-grid-create = Créer « { $tag } »
+tag-grid-dot-not-allowed = Interdit dans un tag : « . »
 tag-grid-no-file = Ouvrir un clip pour le tagger
 tag-grid-no-tags = Aucun tag pour l’instant
 tag-grid-no-tags-hint = Taper un nom et appuyer sur Entrée pour créer le premier.

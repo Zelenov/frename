@@ -1092,9 +1092,10 @@ pub fn has_forbidden_file_name_char(name: &str) -> bool {
 }
 
 /// Whether `name` can be a tag: it holds no [forbidden
-/// character](has_forbidden_file_name_char) (#418).
+/// character](has_forbidden_file_name_char) (#418) and no `.`, which separates the tags in a
+/// file name: "v1.2" would read back as two tags, "v1" and "2" (#420).
 pub fn is_allowed_tag_name(name: &str) -> bool {
-    !has_forbidden_file_name_char(name)
+    !has_forbidden_file_name_char(name) && !name.contains('.')
 }
 
 /// Where [`TagList::insert_new_tag`] puts a new tag.
@@ -1151,6 +1152,13 @@ mod tests {
     fn a_tag_a_file_name_cannot_hold_is_not_created() {
         let mut list = list_with_unsaved_zork();
         for name in ["AC/DC", "a\\b", "why?", "x:y", "tab\tname"] {
+            assert!(!is_allowed_tag_name(name), "{name}");
+            assert!(list.create_new_tag(name).is_none(), "{name}");
+            list.set_checked_by_name(name, true);
+            assert!(!list.has_tag_with_name(name), "{name}");
+        }
+        // #420: a dot separates the tags in a file name.
+        for name in ["v1.2", "Mr. Smith", ".hidden"] {
             assert!(!is_allowed_tag_name(name), "{name}");
             assert!(list.create_new_tag(name).is_none(), "{name}");
             list.set_checked_by_name(name, true);

@@ -1,3 +1,7 @@
+# 0.209
+## Fixed
+- A tag can no longer contain a dot: it separates the tags in a file name, so a tag like "v1.2" came back as two tags, "v1" and "2". Typing a name with a dot in the tag search says so instead of offering to create it.
+
 # 0.208
 ## Fixed
 - When a comment cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder), frename now says so instead of losing it silently.

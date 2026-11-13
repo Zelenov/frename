@@ -796,6 +796,7 @@ tag-grid-unstar = Desfavoritar
 tag-grid-save = Adicionar às tags da pasta
 tag-grid-delete = Excluir “{ $tag }” das tags da pasta
 tag-grid-create = Criar “{ $tag }”
+tag-grid-dot-not-allowed = Não permitido em uma tag: “.”
 tag-grid-no-file = Abra um clipe para aplicar tags
 tag-grid-no-tags = Ainda não há tags
 tag-grid-no-tags-hint = Digite um nome e pressione Enter para criar a primeira.
