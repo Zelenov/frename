@@ -968,7 +968,7 @@ impl VideoPlayerState {
                 }
             }
             Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
-            Message::ShowLongNotice(text) => self.show_notice(text, LONG_NOTICE_DURATION),
+            Message::ShowLongNotice(text) => self.show(text, LONG_NOTICE_DURATION, false, true),
             Message::ClearNotice(number) => {
                 if self
                     .notice
@@ -1185,8 +1185,7 @@ impl VideoPlayerState {
 
     /// Show `text` over the picture for `duration`; a newer note replaces it.
     fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
-        let long = duration >= LONG_NOTICE_DURATION;
-        self.show(text, duration, false, long)
+        self.show(text, duration, false, false)
     }
 
     /// Show the note that says where the clip continued: it starts the clip over when clicked

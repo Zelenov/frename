@@ -2239,10 +2239,11 @@ impl FolderWorkspace {
             }
         } else if comment_lost {
             // Its text file could not be written (#416); the journal keeps a copy. It shows over
-            // the next clip, so it names this one.
+            // the next clip, so it names this one, by the name it has on disk now (a rename that
+            // added tags is what made it long).
             Self::long_notice(fl!(
                 "folder-comment-not-saved",
-                name = short_file_name(&path_before)
+                name = short_file_name(&new_path)
             ))
         } else {
             Task::none()

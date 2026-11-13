@@ -486,7 +486,8 @@ fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
 /// none. That is a comment text file that could not be written (#416): the clip's name is too
 /// close to the 255-character limit for `<name>.comment.txt`, or the folder refuses it. A
 /// snapshot whose comment was not read stays out, and so does a comment of only an `In/Out:`
-/// line (it reads back as the in/out points).
+/// line (it reads back as the in/out points). Narrower than [`saved_what_was_wanted`], which
+/// keeps the journal entry for any difference: this one only says when to tell the editor.
 pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
     // An `In/Out:` line is read back as the in/out points, not as comment text: a comment of
     // only that line is saved when it reads back empty.
