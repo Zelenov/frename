@@ -470,9 +470,16 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
 /// transcript are named without the extension (`A001.srt`), so they belong to both and to neither
 /// alone (#417).
 pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
+    stem_held_by_another(video_path, video_path)
+}
+
+/// Whether a video in the folder of `video_path` other than `video_path` and `except` has the
+/// same name without its extension: one that holds the files named after it.
+pub(crate) fn stem_held_by_another(video_path: &Path, except: &Path) -> bool {
     let (Some(stem), Some(name)) = (video_path.file_stem(), video_path.file_name()) else {
         return false;
     };
+    let except = except.file_name();
     let folder = match video_path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,
         _ => Path::new("."),
@@ -483,7 +490,9 @@ pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
     let stem = stem.to_string_lossy();
     entries.filter_map(Result::ok).any(|entry| {
         let other = entry.path();
-        entry.file_name() != name
+        let other_name = entry.file_name();
+        other_name != name
+            && Some(other_name.as_os_str()) != except
             && other
                 .file_stem()
                 .is_some_and(|s| same_stem(&s.to_string_lossy(), &stem))

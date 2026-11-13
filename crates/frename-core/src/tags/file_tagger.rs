@@ -337,16 +337,26 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
         old_path,
         new_path,
         crate::subtitles::keeps_stem_files(old_path),
-    )
+    ) || stem_held_by_another_video(old_path, new_path)
+}
+
+/// Whether the files named without the extension at `new_path` belong to another video of that
+/// name: a save must not join it, or they become shared and that video's next rename leaves them
+/// behind with this clip (#417). Files no video holds (left behind) do not count. Only a save
+/// asks: an undo or redo goes back to a state that was.
+fn stem_held_by_another_video(old_path: &Path, new_path: &Path) -> bool {
+    crate::subtitles::stem_files(new_path)
+        .iter()
+        .any(|p| p.exists())
+        && crate::subtitles::stem_held_by_another(new_path, old_path)
 }
 
 /// [`target_name_taken`] where the caller decided whether the files named without the extension
 /// stay where they are (`keep_stem_files`; an undo replays what its save did, #417).
 ///
-/// A file named without the extension at the new name counts only when this clip moves its own
-/// file of that kind onto it. So a clip may take a name next to another video's subtitles of
-/// another kind (its `.capt` beside their `.srt`), and both are then shown for both: nothing is
-/// overwritten, which is all this guard is for.
+/// A file named without the extension at the new name counts when this clip moves its own file
+/// of that kind onto it. A save also refuses a name whose such files another video holds
+/// ([`target_name_taken`]); one that no video holds does not block (#417).
 pub(crate) fn target_name_taken_with(
     old_path: &Path,
     new_path: &Path,
@@ -494,6 +504,23 @@ mod tests {
             .path(&tagged_mp4)
             .exists());
         assert!(crate::subtitles::capt_path(&tagged_mp4).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #417: a clip with no subtitles never joins a name whose subtitles another video holds:
+    /// they would become shared, and that video's next rename would leave them behind.
+    #[test]
+    fn a_name_whose_subtitles_another_video_holds_is_taken() {
+        let dir = crate::test_support::fresh_dir("stem-held");
+        let owner = dir.join("Food.A001.mp4");
+        std::fs::write(&owner, b"mp4").expect("owner");
+        std::fs::write(dir.join("Food.A001.srt"), "1").expect("srt");
+        let joining = dir.join("Drink.A001.mov");
+        std::fs::write(&joining, b"mov").expect("mov");
+        assert!(target_name_taken(&joining, &dir.join("Food.A001.mov")));
+        // With the owner gone, the leftover file blocks nothing.
+        std::fs::remove_file(&owner).expect("remove");
+        assert!(!target_name_taken(&joining, &dir.join("Food.A001.mov")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
