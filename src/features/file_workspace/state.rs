@@ -263,7 +263,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         let id = self.tag_list.create_new_tag(name).ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                "tag with this name already exists",
+                "a tag with this name exists, or a file name cannot hold it",
             )) as Box<dyn std::error::Error + Send + Sync>
         })?;
         self.tag_list.save_tag(id)?;

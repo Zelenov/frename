@@ -157,6 +157,18 @@ fn action<'a>(tag: &'a Tag, cursor: bool) -> Element<'a, Message> {
     }
 }
 
+/// The first cell while the search names no tag and cannot be one: why, nothing to press.
+pub fn not_allowed<'a>() -> Element<'a, Message> {
+    let body = container(text::secondary(fl!("folder-rename-error-bad-character")))
+        .padding(CHIP_PADDING)
+        .height(CHIP_HEIGHT)
+        .center_y(CHIP_HEIGHT);
+    container(body)
+        .padding(GRID_CELL_INSET)
+        .width(Length::Shrink)
+        .into()
+}
+
 /// The first cell while the search names no tag: "Create “text”" and its key.
 pub fn create<'a>(name: &str) -> Element<'a, Message> {
     let content = row![
