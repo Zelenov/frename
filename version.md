@@ -1,6 +1,6 @@
 # 0.216
 ## Fixed
-- A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save: the character becomes a space.
+- A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save, with a note wrongly blaming the file name: the character becomes a space.
 
 # 0.214
 ## Fixed
