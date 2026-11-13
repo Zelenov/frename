@@ -480,10 +480,13 @@ pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(folder) else {
         return false;
     };
+    let stem = stem.to_string_lossy();
     entries.filter_map(Result::ok).any(|entry| {
         let other = entry.path();
         entry.file_name() != name
-            && other.file_stem() == Some(stem)
+            && other
+                .file_stem()
+                .is_some_and(|s| same_stem(&s.to_string_lossy(), &stem))
             && other
                 .extension()
                 .and_then(|e| e.to_str())
@@ -491,10 +494,21 @@ pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
     })
 }
 
+/// Whether two names without extension name the same files: on Windows and macOS `A001` and
+/// `a001` do (`A001.srt` is `a001.srt` there), on Linux they do not.
+fn same_stem(a: &str, b: &str) -> bool {
+    if cfg!(any(windows, target_os = "macos")) {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a == b
+    }
+}
+
 /// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
 /// video is renamed, so they keep matching. Does nothing for a file that is not there; never
 /// overwrites an existing one. Leaves them where they are when another video shares the name
 /// they are named after ([`stem_is_shared`]): moving them would take them from that video.
+#[cfg(test)]
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
     if stem_is_shared(old_video_path) {
         log::info!(
@@ -503,6 +517,11 @@ pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
         );
         return;
     }
+    move_subtitle_files(old_video_path, new_video_path);
+}
+
+/// [`rename_subtitle_file`] without the check for a shared name: the caller decided.
+pub(crate) fn move_subtitle_files(old_video_path: &Path, new_video_path: &Path) {
     for (old, new) in subtitle_candidates(old_video_path)
         .iter()
         .zip(subtitle_candidates(new_video_path).iter())

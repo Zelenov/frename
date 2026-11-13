@@ -1,6 +1,6 @@
 # 0.209
 ## Fixed
-- Two clips with the same name and different extensions (`A001.mov` and `A001.mp4`, a camera original and its proxy) no longer lose their shared subtitles, CAPT file or transcript when one of them is tagged, and the other can then take the same tags.
+- Tagging one of two clips with the same name (`A001.mov` and `A001.mp4`) no longer takes their shared subtitles, CAPT file and transcript away from the other, and the other can then take the same tags.
 
 # 0.207
 ## Fixed

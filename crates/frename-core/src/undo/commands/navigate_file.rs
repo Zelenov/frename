@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use super::super::traits::Undoable;
 use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
-use crate::tags::target_name_taken;
+use crate::tags::target_name_taken_with;
 use crate::{FileId, FileSnapshot};
 
 /// Records a file navigation (next / previous / indexed) together with its deferred save.
@@ -24,11 +24,16 @@ pub struct NavigateFileCommand {
 /// Rename `from` to `to` with the comment, subtitle and transcript files that travel with it.
 /// Refuses, changing nothing, when `to` or one of its sidecars exists: the same guard as the
 /// save that made the rename, so Ctrl+Z / Ctrl+Y never replace another clip.
-fn rename_with_sidecars(from: &Path, to: &Path) -> Result<(), UndoError> {
-    if target_name_taken(from, to) {
+///
+/// `keep_stem_files`: whether the files named without the extension (subtitles, CAPT,
+/// transcript) stay where they are because another video shares the name (#417). A redo decides
+/// it as the save did, by the name the clip leaves; an undo by the name it goes back to, so it
+/// moves them back exactly when the save moved them.
+fn rename_with_sidecars(from: &Path, to: &Path, keep_stem_files: bool) -> Result<(), UndoError> {
+    if target_name_taken_with(from, to, keep_stem_files) {
         return Err(UndoError::NameTaken(to.to_path_buf()));
     }
-    crate::recovery::rename_clip(from, to, false)?;
+    crate::recovery::rename_clip(from, to, false, keep_stem_files)?;
     Ok(())
 }
 
@@ -42,7 +47,8 @@ where
             if !self.path_after.exists() {
                 return Err(UndoError::FileNotFound(self.path_after.clone()));
             }
-            rename_with_sidecars(&self.path_after, &self.path_before)?;
+            let keep = crate::subtitles::stem_is_shared(&self.path_before);
+            rename_with_sidecars(&self.path_after, &self.path_before, keep)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_before, &self.snapshot_before);
@@ -57,7 +63,8 @@ where
             if !self.path_before.exists() {
                 return Err(UndoError::FileNotFound(self.path_before.clone()));
             }
-            rename_with_sidecars(&self.path_before, &self.path_after)?;
+            let keep = crate::subtitles::stem_is_shared(&self.path_before);
+            rename_with_sidecars(&self.path_before, &self.path_after, keep)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_after, &self.snapshot_after);

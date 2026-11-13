@@ -331,6 +331,20 @@ impl FileTagger {
 /// insensitive, case-preserving filesystem it is the same file being renamed, not another one,
 /// and a rename that only fixes case (`clip.MOV` → `clip.mov`) must still go through.
 pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
+    target_name_taken_with(
+        old_path,
+        new_path,
+        crate::subtitles::stem_is_shared(old_path),
+    )
+}
+
+/// [`target_name_taken`] where the caller decided whether the files named without the extension
+/// stay where they are (`keep_stem_files`): an undo decides by where they go back to (#417).
+pub(crate) fn target_name_taken_with(
+    old_path: &Path,
+    new_path: &Path,
+    keep_stem_files: bool,
+) -> bool {
     let same_file_other_case = old_path
         .file_name()
         .zip(new_path.file_name())
@@ -342,7 +356,6 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     // when this clip has one to move there: one standing there alone belongs to another video of
     // that name (`Food.A001.srt` of `Food.A001.mov` does not stop `A001.mp4` taking the tag),
     // and none move while another video shares this clip's name (#417).
-    let stem_shared = crate::subtitles::stem_is_shared(old_path);
     let stem_named = |path: &Path| {
         let mut names = vec![
             crate::subtitles::transcript_path(path),
@@ -351,7 +364,7 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
         names.extend(crate::subtitles::subtitle_candidates(path));
         names
     };
-    let stem_taken = !stem_shared
+    let stem_taken = !keep_stem_files
         && stem_named(old_path)
             .iter()
             .zip(stem_named(new_path).iter())
@@ -370,9 +383,23 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
 /// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
 /// guards.
 pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
+    rename_sidecars_with(
+        old_path,
+        new_path,
+        crate::subtitles::stem_is_shared(old_path),
+    );
+}
+
+/// [`rename_sidecars`] where the caller decided whether the files named without the extension
+/// (subtitles, CAPT, transcript) stay where they are, as for [`target_name_taken_with`].
+pub(crate) fn rename_sidecars_with(old_path: &Path, new_path: &Path, keep_stem_files: bool) {
     super::production_file_tagger::rename_screenshots(old_path, new_path);
     crate::comment::rename_comment_file(old_path, new_path);
-    crate::subtitles::rename_subtitle_file(old_path, new_path);
+    if keep_stem_files {
+        log::info!("not moving the subtitles of {old_path:?}: another video has the same name");
+    } else {
+        crate::subtitles::move_subtitle_files(old_path, new_path);
+    }
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.
@@ -467,6 +494,36 @@ mod tests {
             .path(&tagged_mp4)
             .exists());
         assert!(crate::subtitles::capt_path(&tagged_mp4).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #417: an undo moves the shared subtitles back exactly when the rename moved them. Tag both
+    /// clips of one name (the files follow the second), then undo the second: they go back to it,
+    /// not stay with the first.
+    #[test]
+    fn undoing_the_rename_that_moved_shared_subtitles_moves_them_back() {
+        let dir = crate::test_support::fresh_dir("shared-stem-undo");
+        let (mov, mp4) = (dir.join("A001.mov"), dir.join("A001.mp4"));
+        std::fs::write(&mov, b"mov").expect("mov");
+        std::fs::write(&mp4, b"mp4").expect("mp4");
+        let srt = crate::subtitles::SubtitleFormat::Srt.path(&mp4);
+        std::fs::write(&srt, "1").expect("srt");
+        let rename = |from: &Path, to: &Path, keep: bool| {
+            assert!(!target_name_taken_with(from, to, keep));
+            std::fs::rename(from, to).expect("rename");
+            rename_sidecars_with(from, to, keep);
+        };
+        let (tagged_mov, tagged_mp4) = (dir.join("Food.A001.mov"), dir.join("Food.A001.mp4"));
+        // The saves: decided by the name each clip leaves.
+        rename(&mov, &tagged_mov, crate::subtitles::stem_is_shared(&mov));
+        rename(&mp4, &tagged_mp4, crate::subtitles::stem_is_shared(&mp4));
+        assert!(crate::subtitles::SubtitleFormat::Srt
+            .path(&tagged_mp4)
+            .exists());
+
+        // The undo of the second: decided by the name it goes back to (as `NavigateFileCommand`).
+        rename(&tagged_mp4, &mp4, crate::subtitles::stem_is_shared(&mp4));
+        assert!(srt.exists(), "A001.mp4 has its subtitles back");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

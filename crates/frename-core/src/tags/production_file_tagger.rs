@@ -177,9 +177,12 @@ impl ProductionFileTagger {
             // The video first: when it cannot be renamed (Premiere holds it), its comment and
             // subtitle files must stay with it rather than wait under the new name.
             // Its sidecars follow; a crash in between is finished at the next start (#377).
-            if let Err(e) =
-                crate::recovery::rename_clip(path, &new_path, writes_text_file && saved.comment)
-            {
+            if let Err(e) = crate::recovery::rename_clip(
+                path,
+                &new_path,
+                writes_text_file && saved.comment,
+                crate::subtitles::stem_is_shared(path),
+            ) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
                     path,
