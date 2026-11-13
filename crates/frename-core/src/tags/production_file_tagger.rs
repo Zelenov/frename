@@ -605,7 +605,9 @@ mod tests {
         let saved_path = tagger.save_with(&wanted, &path, ADOBE);
         let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
         assert_eq!(saved.comment(), "Вода в кадре");
-        assert!(crate::recovery::saved_what_was_wanted(&wanted, &saved));
+        assert!(crate::recovery::saved_what_was_wanted(
+            &wanted, &saved, true
+        ));
 
         // At an end it goes with the trim, as the file reads it back.
         let mut trailing = saved.clone();
@@ -613,7 +615,9 @@ mod tests {
         let saved_path = tagger.save_with(&trailing, &saved_path, ADOBE);
         let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
         assert_eq!(saved.comment(), "Вода");
-        assert!(crate::recovery::saved_what_was_wanted(&trailing, &saved));
+        assert!(crate::recovery::saved_what_was_wanted(
+            &trailing, &saved, true
+        ));
     }
 
     /// #416: a clip whose name leaves no room for `<name>.comment.txt` (122 Cyrillic letters are
@@ -680,7 +684,8 @@ mod tests {
                 let saved_path = tagger.save_with(&wanted, &path, storage);
                 let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
                 assert!(saved.comment().contains("вторая строка"), "{name}: written");
-                // As the app decides it after a save.
+                // As `recovery::points_in_comment` decides it after a save, for the storage this
+                // test passes in (the helper reads the setting).
                 let points_in_comment = storage.in_out == InOutStorage::Comment
                     || crate::recovery::points_kept_in_text(&saved_path);
                 assert!(
@@ -695,7 +700,7 @@ mod tests {
                 );
                 // The journal agrees, edge points kept in the video included (#448).
                 assert!(
-                    crate::recovery::saved_what_was_wanted_in(&wanted, &saved, points_in_comment),
+                    crate::recovery::saved_what_was_wanted(&wanted, &saved, points_in_comment),
                     "{name} {start}-{end}: the journal counts it as saved"
                 );
             }
