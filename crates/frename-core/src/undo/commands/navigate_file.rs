@@ -28,8 +28,7 @@ fn rename_with_sidecars(from: &Path, to: &Path) -> Result<(), UndoError> {
     if target_name_taken(from, to) {
         return Err(UndoError::NameTaken(to.to_path_buf()));
     }
-    std::fs::rename(from, to)?;
-    crate::tags::rename_sidecars(from, to);
+    crate::recovery::rename_clip(from, to, false)?;
     Ok(())
 }
 
