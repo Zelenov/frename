@@ -169,12 +169,17 @@ impl ProductionFileTagger {
 
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);
+        // A pending snapshot does not know an XMP comment, so it has no text file to write.
+        let writes_text_file =
+            !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo);
 
         if new_path != path {
             // The video first: when it cannot be renamed (Premiere holds it), its comment and
             // subtitle files must stay with it rather than wait under the new name.
             // Its sidecars follow; a crash in between is finished at the next start (#377).
-            if let Err(e) = crate::recovery::rename_clip(path, &new_path) {
+            if let Err(e) =
+                crate::recovery::rename_clip(path, &new_path, writes_text_file && saved.comment)
+            {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
                     path,
@@ -185,9 +190,8 @@ impl ProductionFileTagger {
             }
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
-        // A pending snapshot does not know an XMP comment, so it has no text file to write.
         // In/out points the video did not take are the text's in/out line.
-        if !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo) {
+        if writes_text_file {
             let text = metadata::stored_comment(snapshot, saved.in_out);
             metadata::save_comment_text_file(&new_path, &text, saved.comment);
         }

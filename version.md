@@ -1,6 +1,6 @@
 # 0.205
 ## Fixed
-- If frename crashes or is closed by force right after renaming a clip, the next start moves the clip's comment, subtitles and screenshots to the new name, and finds your unsaved changes on that clip instead of calling it gone.
+- If frename crashes or is closed by force while it renames a clip, the next start moves the clip's comment, subtitles and screenshots to the new name.
 
 # 0.204
 ## Added
