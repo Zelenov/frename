@@ -160,7 +160,7 @@ impl ProductionFileTagger {
         // alike). See `target_name_taken` for what "taken" excludes (a same-file case change).
         // Whether the files named without the extension stay where they are (#417): decided once,
         // for the check and the rename alike.
-        let keep_stem_files = crate::subtitles::keeps_stem_files(path);
+        let keep_stem_files = new_path != path && crate::subtitles::keeps_stem_files(path);
         if new_path != path
             && super::file_tagger::target_name_taken_with(path, &new_path, keep_stem_files)
         {

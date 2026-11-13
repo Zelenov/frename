@@ -60,10 +60,10 @@ pub use search::{
     CommentFragment,
 };
 pub use subtitles::{
-    capt_path, cue_length, existing_subtitle_path, keeps_stem_files, open_subtitles,
-    set_cue_length, subtitle_bytes, subtitle_candidates, subtitle_cues, subtitle_path,
-    transcript_path, CueLength, SubtitleCue, SubtitleFile, SubtitleFormat, SubtitleSize,
-    SubtitleView, Subtitles, DEFAULT_SUBTITLE_LANGUAGES,
+    capt_path, cue_length, existing_subtitle_path, keeps_stem_files, moves_stem_files,
+    open_subtitles, set_cue_length, subtitle_bytes, subtitle_candidates, subtitle_cues,
+    subtitle_path, transcript_path, CueLength, SubtitleCue, SubtitleFile, SubtitleFormat,
+    SubtitleSize, SubtitleView, Subtitles, DEFAULT_SUBTITLE_LANGUAGES,
 };
 pub use tags::{
     has_forbidden_file_name_char, install_file_tagger, is_allowed_tag_name, set_space_after_tags,

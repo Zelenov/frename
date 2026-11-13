@@ -445,7 +445,7 @@ mod tests {
             path_after: dir_path.join("a.mp4"), // same path (no rename)
             snapshot_before: snap_before.clone(),
             snapshot_after: snap_after.clone(),
-            stem_files_stay: false,
+            stem_files_moved: false,
         }));
 
         {
@@ -481,7 +481,7 @@ mod tests {
             path_after: dir_path.join("a.mp4"),
             snapshot_before: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
             snapshot_after: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
-            stem_files_stay: false,
+            stem_files_moved: false,
         }));
 
         {
@@ -1100,7 +1100,7 @@ mod tests {
             path_after: dir_path.join("a.mp4"),
             snapshot_before: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
             snapshot_after: FileSnapshot::new(vec![], "a", "mp4", "a.mp4"),
-            stem_files_stay: false,
+            stem_files_moved: false,
         }));
 
         {
@@ -1346,7 +1346,7 @@ mod tests {
             path_after: PathBuf::from("/x/a.mp4"),
             snapshot_before: FileSnapshot::default(),
             snapshot_after: FileSnapshot::default(),
-            stem_files_stay: false,
+            stem_files_moved: false,
         }));
         assert!(!history.undo_edits_open_video());
         assert!(history.undo_switches_file());
@@ -1557,7 +1557,7 @@ mod tests {
             path_after: dir_path.join(after),
             snapshot_before: snap.clone(),
             snapshot_after: snap,
-            stem_files_stay: false,
+            stem_files_moved: false,
         };
         (dir_path, directory, cmd, id)
     }
@@ -1589,15 +1589,16 @@ mod tests {
 
         // The two saves, each deciding as `apply_file_updated` does before it saves.
         let save = |from: &std::path::Path, to: &std::path::Path| {
-            let stay = crate::keeps_stem_files(from);
-            crate::recovery::rename_clip(from, to, false, stay).expect("rename");
-            stay
+            let moved = crate::moves_stem_files(from);
+            let keep = crate::keeps_stem_files(from);
+            crate::recovery::rename_clip(from, to, false, keep).expect("rename");
+            moved
         };
-        let mov_stays = save(&mov, &food_mov);
-        assert!(mov_stays && files_at("A001"), "the .mp4 keeps them");
-        let mp4_stays = save(&mp4, &food_mp4);
+        let mov_moved = save(&mov, &food_mov);
+        assert!(!mov_moved && files_at("A001"), "the .mp4 keeps them");
+        let mp4_moved = save(&mp4, &food_mp4);
         assert!(
-            !mp4_stays && files_at("Food.A001"),
+            mp4_moved && files_at("Food.A001"),
             "they follow the second clip"
         );
 
@@ -1608,19 +1609,19 @@ mod tests {
             Directory::with_files(&dir_path, vec![mov_file, mp4_file], FakeAppStorage::new());
         let snap = FileSnapshot::new(vec![], "A001", "mov", "A001.mov");
         let command =
-            |id, before: &std::path::Path, after: &std::path::Path, stay| NavigateFileCommand {
+            |id, before: &std::path::Path, after: &std::path::Path, moved| NavigateFileCommand {
                 file_id: id,
                 to_file_id: id,
                 path_before: before.to_path_buf(),
                 path_after: after.to_path_buf(),
                 snapshot_before: snap.clone(),
                 snapshot_after: snap.clone(),
-                stem_files_stay: stay,
+                stem_files_moved: moved,
             };
         let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
         let mut history = History::new(50);
-        history.push(Box::new(command(mov_id, &mov, &food_mov, mov_stays)));
-        history.push(Box::new(command(mp4_id, &mp4, &food_mp4, mp4_stays)));
+        history.push(Box::new(command(mov_id, &mov, &food_mov, mov_moved)));
+        history.push(Box::new(command(mp4_id, &mp4, &food_mp4, mp4_moved)));
         let mut ctx = UndoContext {
             directory: &mut directory,
             tag_list: &mut tag_list,
@@ -1637,6 +1638,54 @@ mod tests {
         assert!(food_mov.exists() && files_at("A001"), "still with the .mp4");
         history.redo(&mut ctx).expect("redo the .mp4");
         assert!(food_mp4.exists() && files_at("Food.A001"));
+    }
+
+    /// #417: a save that moved nothing (the clip had no subtitles yet) records so. Subtitles made
+    /// afterwards for the other video of that name are not taken by a redo.
+    #[test]
+    fn a_redo_never_takes_subtitles_made_since_for_the_other_clip_of_a_name() {
+        let dir_path = crate::test_support::fresh_dir("redo-shared-stem");
+        let (mov, mp4, food_mp4) = (
+            dir_path.join("A001.mov"),
+            dir_path.join("A001.mp4"),
+            dir_path.join("Food.A001.mp4"),
+        );
+        write(&mov, "mov");
+        write(&mp4, "mp4");
+        let moved = crate::moves_stem_files(&mp4);
+        assert!(!moved, "no subtitles yet");
+        crate::recovery::rename_clip(&mp4, &food_mp4, false, crate::keeps_stem_files(&mp4))
+            .expect("rename");
+        // Subtitles made for the .mov, which has the old name to itself now.
+        write(&dir_path.join("A001.srt"), "1");
+        write(&dir_path.join("A001.soniox.json"), "{}");
+
+        let file = File::from_path(food_mp4.clone(), SystemTime::UNIX_EPOCH);
+        let id = file.id();
+        let mut directory = Directory::with_files(&dir_path, vec![file], FakeAppStorage::new());
+        let snap = FileSnapshot::new(vec![], "A001", "mp4", "A001.mp4");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(NavigateFileCommand {
+            file_id: id,
+            to_file_id: id,
+            path_before: mp4.clone(),
+            path_after: food_mp4.clone(),
+            snapshot_before: snap.clone(),
+            snapshot_after: snap,
+            stem_files_moved: moved,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("undo");
+        history.redo(&mut ctx).expect("redo");
+        assert!(food_mp4.exists());
+        assert!(
+            dir_path.join("A001.srt").exists() && dir_path.join("A001.soniox.json").exists(),
+            "the .mov keeps the subtitles made for it"
+        );
     }
 
     #[test]

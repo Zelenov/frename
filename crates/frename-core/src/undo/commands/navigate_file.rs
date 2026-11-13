@@ -19,10 +19,12 @@ pub struct NavigateFileCommand {
     pub path_after: PathBuf,
     pub snapshot_before: FileSnapshot,
     pub snapshot_after: FileSnapshot,
-    /// The save left the files named without the extension (subtitles, CAPT, transcript) where
-    /// they were, because another video shared the clip's name ([`crate::keeps_stem_files`],
-    /// taken before the save). Undo and redo replay exactly that (#417).
-    pub stem_files_stay: bool,
+    /// The save moved the clip's files named without the extension (subtitles, CAPT,
+    /// transcript): it had some and no other video shared its name ([`crate::moves_stem_files`],
+    /// taken before the save). Undo and redo move them back and forth again. When it did not,
+    /// they decide as a save would at that moment, so files made since are never taken from the
+    /// video that shares the name (#417).
+    pub stem_files_moved: bool,
 }
 
 /// Rename `from` to `to` with the comment, subtitle and transcript files that travel with it.
@@ -48,7 +50,8 @@ where
             if !self.path_after.exists() {
                 return Err(UndoError::FileNotFound(self.path_after.clone()));
             }
-            rename_with_sidecars(&self.path_after, &self.path_before, self.stem_files_stay)?;
+            let keep = !self.stem_files_moved && crate::keeps_stem_files(&self.path_after);
+            rename_with_sidecars(&self.path_after, &self.path_before, keep)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_before, &self.snapshot_before);
@@ -63,7 +66,8 @@ where
             if !self.path_before.exists() {
                 return Err(UndoError::FileNotFound(self.path_before.clone()));
             }
-            rename_with_sidecars(&self.path_before, &self.path_after, self.stem_files_stay)?;
+            let keep = !self.stem_files_moved && crate::keeps_stem_files(&self.path_before);
+            rename_with_sidecars(&self.path_before, &self.path_after, keep)?;
         }
         ctx.directory
             .rename_file(self.file_id, &self.path_after, &self.snapshot_after);

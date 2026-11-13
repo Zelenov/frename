@@ -341,7 +341,12 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
 }
 
 /// [`target_name_taken`] where the caller decided whether the files named without the extension
-/// stay where they are (`keep_stem_files`): an undo decides by where they go back to (#417).
+/// stay where they are (`keep_stem_files`; an undo replays what its save did, #417).
+///
+/// A file named without the extension at the new name counts only when this clip moves its own
+/// file of that kind onto it. So a clip may take a name next to another video's subtitles of
+/// another kind (its `.capt` beside their `.srt`), and both are then shown for both: nothing is
+/// overwritten, which is all this guard is for.
 pub(crate) fn target_name_taken_with(
     old_path: &Path,
     new_path: &Path,
