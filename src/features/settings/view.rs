@@ -738,9 +738,12 @@ fn commented_tag<'a>(enabled: bool, tag: &'a str, focus: Option<&Control>) -> El
     // A name can be cleaned and still never be a tag (an In/Out point, #432): the core turns
     // tagging off for it, and the reason shows under the field, not only in the tooltip.
     let cleaned = frename_core::clean_commented_tag(tag).filter(|_| enabled);
-    let problem = cleaned
-        .as_deref()
-        .is_some_and(|tag| frename_core::tag_name_problem(tag).is_some());
+    let problem = cleaned.as_deref().is_some_and(|tag| {
+        matches!(
+            frename_core::tag_name_problem(tag),
+            Some(frename_core::TagNameProblem::InOutPoint)
+        )
+    });
     let help = match cleaned {
         Some(tag) if !problem => fl!("settings-commented-tag-hint", tag = tag),
         _ => fl!("settings-commented-tag-off"),
