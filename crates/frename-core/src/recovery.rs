@@ -502,22 +502,44 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
 /// clip's name took (#425): the comment text file, or the video when the comment lives inside
 /// it, is read-only or locked by another program, so the clip still reads back with what it had
 /// before. Broader than [`comment_not_saved`] (a comment that reads back empty, #416), which the
-/// caller checks first; the comment is compared as [`saved_what_was_wanted`] compares it, with
-/// an `In/Out:` line left out (it reads back as the points). A snapshot whose comment was not
-/// read stays out.
-pub fn comment_or_points_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+/// caller checks first. A snapshot whose comment was not read stays out.
+///
+/// The comment is compared without an `In/Out:` line (it reads back as the points), and without
+/// what a save may tidy: line endings, spaces at line ends, runs of blank lines.
+/// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line; only
+/// then are they compared. Points kept in the video read back other than set even when saved
+/// (an in point at 0 s, an out point at the clip's end), and a video that refuses them puts them
+/// in the comment file instead.
+pub fn comment_or_points_not_saved(
+    wanted: &FileSnapshot,
+    saved: &FileSnapshot,
+    points_in_comment: bool,
+) -> bool {
     if wanted.comment_loading() || saved.comment_loading() {
         return false;
     }
-    let text = |s: &str| s.replace("\r\n", "\n").trim().to_string();
     let (wanted_text, line) = crate::metadata::split_in_out_line(wanted.comment());
     // Points typed as an `In/Out:` line in the comment are read back as the points: which of
     // them a save keeps is not this check's question, so the points count only without one.
     let typed_points = line.start.is_some() || line.end.is_some();
-    text(&wanted_text) != text(saved.comment())
-        || (!typed_points
+    tidy_comment(&wanted_text) != tidy_comment(saved.comment())
+        || (points_in_comment
+            && !typed_points
             && (!same_point(wanted.segment_start(), saved.segment_start())
                 || !same_point(wanted.segment_end(), saved.segment_end())))
+}
+
+/// `comment` as a save may leave it: `\n` line endings, no spaces at line ends, a single blank
+/// line where there were more, nothing around the whole.
+fn tidy_comment(comment: &str) -> String {
+    let mut lines: Vec<&str> = Vec::new();
+    for line in comment.lines().map(str::trim_end) {
+        if line.is_empty() && lines.last().is_some_and(|last| last.is_empty()) {
+            continue;
+        }
+        lines.push(line);
+    }
+    lines.join("\n").trim().to_string()
 }
 
 /// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
@@ -1327,8 +1349,9 @@ mod tests {
     }
 
     /// #425: a comment or in/out points that read back other than wanted (the old ones a
-    /// read-only `.comment.txt` kept) are told; the same comment, line endings aside, or a comment
-    /// whose `In/Out:` line read back as the points, is not.
+    /// read-only `.comment.txt` kept) are told; what a save tidies (line endings, spaces at line
+    /// ends, extra blank lines), a comment whose `In/Out:` line read back as the points, points
+    /// kept in the video, and a comment not read yet are not.
     #[test]
     fn a_comment_or_points_read_back_other_than_wanted_are_told() {
         let with = |comment: &str| {
@@ -1338,26 +1361,53 @@ mod tests {
         };
         assert!(comment_or_points_not_saved(
             &with("New note"),
-            &with("Old note")
+            &with("Old note"),
+            true
+        ));
+        assert!(comment_or_points_not_saved(
+            &with("New note"),
+            &with("Old note"),
+            false
         ));
         assert!(!comment_or_points_not_saved(
-            &with("A note\r\nline two"),
-            &with("A note\nline two\n")
+            &with("A note  \r\n\r\n\r\nAI: A walk.\r\n"),
+            &with("A note\n\nAI: A walk."),
+            true
         ));
         let mut points = with("A note");
         points.set_segment_start(Some(1.0));
         points.set_segment_end(Some(4.0));
-        assert!(comment_or_points_not_saved(&points, &with("A note")));
-        assert!(!comment_or_points_not_saved(&points, &points.clone()));
+        assert!(comment_or_points_not_saved(&points, &with("A note"), true));
+        assert!(!comment_or_points_not_saved(&points, &points.clone(), true));
+        assert!(
+            !comment_or_points_not_saved(&points, &with("A note"), false),
+            "points kept in the video may read back other than set"
+        );
         let mut read_back = with("A note");
         read_back.set_segment_start(Some(0.05));
         assert!(!comment_or_points_not_saved(
             &with("A note\nIn/Out: 00:00:00.050 – end"),
-            &read_back
+            &read_back,
+            true
         ));
+        let mut typed_and_set = with("A note\nIn/Out: 00:00:00.050 – end");
+        typed_and_set.set_segment_start(Some(2.0));
+        assert!(
+            !comment_or_points_not_saved(&typed_and_set, &read_back, true),
+            "typed points are the save's to choose"
+        );
         let mut loading = with("New note");
         loading.set_comment_loading(true);
-        assert!(!comment_or_points_not_saved(&loading, &with("Old note")));
+        assert!(!comment_or_points_not_saved(
+            &loading,
+            &with("Old note"),
+            true
+        ));
+        assert!(!comment_or_points_not_saved(
+            &with("Old note"),
+            &loading,
+            true
+        ));
     }
 
     #[test]

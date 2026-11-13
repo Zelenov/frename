@@ -1,6 +1,6 @@
 # 0.215
 ## Fixed
-- A changed comment or in/out points that could not be written, because the comment file or the video is read-only or open in another program, are no longer lost without a word. A note names the clip and says why.
+- When a changed comment or in/out points cannot be written, because the comment file or the video is read-only or open in another program, a note now names the clip and says why.
 
 # 0.213
 ## Fixed

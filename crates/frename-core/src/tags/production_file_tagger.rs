@@ -620,33 +620,94 @@ mod tests {
     }
 
     /// #425: a save that took reads back as wanted, so no "not saved" note shows: a comment with
-    /// in/out points, kept in the text file or in the video, with or without new tags.
+    /// a marker line, an AI block after extra blank lines and in/out points, kept in the text
+    /// file or in the video, with points inside the clip and at its edges (0 s and its end,
+    /// which the video reads back as no point).
     #[cfg(unix)]
     #[test]
     fn a_comment_and_points_that_were_saved_are_not_told_as_lost() {
         let tagger = ProductionFileTagger;
+        let points = [(0.05, 0.15), (0.0, 0.15), (0.05, 0.2)];
         for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
-            let path = clip_named(&format!("saved-comment-{name}"), "clip.mov");
-            let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
-            let mut marker = crate::Marker::new(5_000);
-            marker.name = "Lion".to_string();
-            wanted.set_comment(crate::markers_into_comment(
-                "Вода в кадре\r\nвторая строка",
-                &[marker],
-            ));
-            wanted.set_segment_start(Some(0.05));
-            wanted.set_segment_end(Some(0.15));
-            let saved_path = tagger.save_with(&wanted, &path, storage);
-            let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
-            assert!(saved.comment().contains("вторая строка"), "{name}: written");
-            assert!(saved.segment_end().is_some(), "{name}: points written");
-            assert!(
-                !crate::recovery::comment_or_points_not_saved(&wanted, &saved),
-                "{name}: {:?} / {:?}",
-                saved.comment(),
-                (saved.segment_start(), saved.segment_end())
-            );
+            for (i, (start, end)) in points.into_iter().enumerate() {
+                let path = clip_named(&format!("saved-comment-{name}-{i}"), "clip.mov");
+                let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+                let mut marker = crate::Marker::new(5_000);
+                marker.name = "Lion".to_string();
+                wanted.set_comment(crate::markers_into_comment(
+                    "Вода в кадре  \r\nвторая строка\r\n\r\n\r\nAI: A walk.",
+                    &[marker],
+                ));
+                wanted.set_segment_start(Some(start));
+                wanted.set_segment_end(Some(end));
+                let saved_path = tagger.save_with(&wanted, &path, storage);
+                let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
+                assert!(saved.comment().contains("вторая строка"), "{name}: written");
+                let points_in_comment = storage.in_out == InOutStorage::Comment;
+                assert!(
+                    !crate::recovery::comment_or_points_not_saved(
+                        &wanted,
+                        &saved,
+                        points_in_comment
+                    ),
+                    "{name} {start}-{end}: {:?} / {:?}",
+                    saved.comment(),
+                    (saved.segment_start(), saved.segment_end())
+                );
+            }
         }
+    }
+
+    /// #425: a read-only `.comment.txt` keeps its old comment and in/out points through a save,
+    /// and that is told (not as #416's lost comment). Skipped where read-only files are
+    /// writable anyway (running as root).
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_comment_file_is_told_as_not_saved() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("read-only-comment", "clip.mov");
+        let mut old = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        old.set_comment("Old note".to_string());
+        old.set_segment_start(Some(0.05));
+        old.set_segment_end(Some(0.1));
+        let path = tagger.save_with(&old, &path, TEXT);
+        let comment_file = crate::comment::comment_path(&path);
+        let mut permissions = std::fs::metadata(&comment_file)
+            .expect("written")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&comment_file, permissions.clone()).expect("read-only");
+        if std::fs::OpenOptions::new()
+            .write(true)
+            .open(&comment_file)
+            .is_ok()
+        {
+            eprintln!("read-only files are writable here (root?): nothing to check");
+            return;
+        }
+
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_comment("New note".to_string());
+        wanted.set_segment_start(Some(0.1));
+        wanted.set_segment_end(Some(0.15));
+        let saved_path = tagger.save_with(&wanted, &path, TEXT);
+        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        let _ = std::fs::set_permissions(&comment_file, permissions);
+
+        assert_eq!(saved.comment(), "Old note");
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted, &saved, true
+        ));
+        assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+        let mut points_only = saved.clone();
+        points_only.set_segment_start(Some(0.1));
+        points_only.set_segment_end(Some(0.15));
+        assert!(
+            crate::recovery::comment_or_points_not_saved(&points_only, &saved, true),
+            "points kept in the comment file that did not change are told too"
+        );
     }
 
     /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a
