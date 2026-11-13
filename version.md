@@ -1,6 +1,7 @@
 # 0.218
 ## Fixed
-- A comment that was saved with only its spacing or invisible characters tidied no longer brings a "kept aside" note at the next start, and a comment of only invisible characters no longer says it could not be written.
+- A comment whose save only tidied its spacing or invisible characters no longer brings a note at the next start that your unsaved work was not applied.
+- A comment of only invisible characters, which is saved empty, no longer brings a note that it was not saved.
 
 # 0.216
 ## Fixed
