@@ -655,6 +655,12 @@ fn rename_clip_in(
         remove_intent(intent.as_deref());
         return Err(e);
     }
+    // The comment is in the video now and its text file goes: deleted before the sidecars move,
+    // so a crash can never leave it under the new name, where it would win over the video's
+    // newer comment (#415). The save deletes it there anyway.
+    if comment_in_video {
+        crate::comment::remove_comment_file(from);
+    }
     crate::tags::rename_sidecars(from, to);
     remove_intent(intent.as_deref());
     Ok(())
@@ -1226,6 +1232,24 @@ mod tests {
             // A case-sensitive file system with both: two clips, not a rename.
             assert!(!case_change_done(&old, &new));
         }
+    }
+
+    /// #415: with the comment in the video, an old comment text file never reaches the new name,
+    /// even when the run stops right after the sidecars moved (before the save deletes it).
+    #[test]
+    fn a_comment_file_the_save_replaced_never_follows_the_clip() {
+        let dir = temp_dir("rename-comment-in-video");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "Old note").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+
+        rename_clip_in(&journal, &from, &to, true).expect("rename");
+
+        assert!(!crate::comment::comment_path(&to).exists());
+        assert!(!crate::comment::comment_path(&from).exists());
+        assert!(dir.join("pick.clip.srt").exists(), "the subtitles follow");
     }
 
     /// A whole rename moves the video and its sidecars and leaves no intent behind; a failed
