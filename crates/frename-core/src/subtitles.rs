@@ -494,6 +494,21 @@ pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
     })
 }
 
+/// Whether the files of `video_path` named without its extension (subtitles, CAPT, transcript)
+/// stay where they are when it is renamed: it has some, and another video shares the name
+/// ([`stem_is_shared`]). The folder is listed only for a clip that has such files.
+pub(crate) fn keeps_stem_files(video_path: &Path) -> bool {
+    stem_files(video_path).iter().any(|p| p.is_file()) && stem_is_shared(video_path)
+}
+
+/// The files of `video_path` named without its extension: its subtitles (the CAPT file among
+/// them) and its transcript.
+pub(crate) fn stem_files(video_path: &Path) -> Vec<PathBuf> {
+    let mut files = subtitle_candidates(video_path);
+    files.push(transcript_path(video_path));
+    files
+}
+
 /// Whether two names without extension name the same files: on Windows and macOS `A001` and
 /// `a001` do (`A001.srt` is `a001.srt` there), on Linux they do not.
 fn same_stem(a: &str, b: &str) -> bool {
@@ -510,7 +525,7 @@ fn same_stem(a: &str, b: &str) -> bool {
 /// they are named after ([`stem_is_shared`]): moving them would take them from that video.
 #[cfg(test)]
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
-    if stem_is_shared(old_video_path) {
+    if keeps_stem_files(old_video_path) {
         log::info!(
             "subtitles: not moving the subtitles of {}: another video has the same name",
             old_video_path.display()

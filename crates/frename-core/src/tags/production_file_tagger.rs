@@ -181,7 +181,7 @@ impl ProductionFileTagger {
                 path,
                 &new_path,
                 writes_text_file && saved.comment,
-                crate::subtitles::stem_is_shared(path),
+                crate::subtitles::keeps_stem_files(path),
             ) {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",

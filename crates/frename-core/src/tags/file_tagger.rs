@@ -334,7 +334,7 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     target_name_taken_with(
         old_path,
         new_path,
-        crate::subtitles::stem_is_shared(old_path),
+        crate::subtitles::keeps_stem_files(old_path),
     )
 }
 
@@ -356,18 +356,10 @@ pub(crate) fn target_name_taken_with(
     // when this clip has one to move there: one standing there alone belongs to another video of
     // that name (`Food.A001.srt` of `Food.A001.mov` does not stop `A001.mp4` taking the tag),
     // and none move while another video shares this clip's name (#417).
-    let stem_named = |path: &Path| {
-        let mut names = vec![
-            crate::subtitles::transcript_path(path),
-            crate::subtitles::capt_path(path),
-        ];
-        names.extend(crate::subtitles::subtitle_candidates(path));
-        names
-    };
     let stem_taken = !keep_stem_files
-        && stem_named(old_path)
+        && crate::subtitles::stem_files(old_path)
             .iter()
-            .zip(stem_named(new_path).iter())
+            .zip(crate::subtitles::stem_files(new_path).iter())
             .any(|(old, new)| old.is_file() && new.exists());
     new_path.exists()
         || crate::comment::comment_path(new_path).exists()
@@ -386,7 +378,7 @@ pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
     rename_sidecars_with(
         old_path,
         new_path,
-        crate::subtitles::stem_is_shared(old_path),
+        crate::subtitles::keeps_stem_files(old_path),
     );
 }
 
@@ -447,9 +439,10 @@ mod tests {
         let dir = crate::test_support::fresh_dir("capt-taken");
         let (old_path, new_path) = (dir.join("goat.mov"), dir.join("tag.goat.mov"));
         std::fs::write(&old_path, b"clip").expect("clip");
-        std::fs::write(crate::subtitles::capt_path(&old_path), "mine").expect("own capt");
-        assert!(!target_name_taken(&old_path, &new_path));
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
+        // Another clip's CAPT file alone: this clip has none to move over it (#417).
+        assert!(!target_name_taken(&old_path, &new_path));
+        std::fs::write(crate::subtitles::capt_path(&old_path), "mine").expect("own capt");
         // The clip's own CAPT file would have to move over it.
         assert!(target_name_taken(&old_path, &new_path));
         let _ = std::fs::remove_dir_all(&dir);
