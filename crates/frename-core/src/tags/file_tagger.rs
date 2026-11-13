@@ -338,15 +338,27 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     if same_file_other_case {
         return false;
     }
-    [
-        new_path.to_path_buf(),
-        crate::comment::comment_path(new_path),
-        crate::subtitles::transcript_path(new_path),
-        crate::subtitles::capt_path(new_path),
-    ]
-    .iter()
-    .chain(crate::subtitles::subtitle_candidates(new_path).iter())
-    .any(|p| p.exists())
+    // The files named without the extension (subtitles, CAPT, transcript) block the new name only
+    // when this clip has one to move there: one standing there alone belongs to another video of
+    // that name (`Food.A001.srt` of `Food.A001.mov` does not stop `A001.mp4` taking the tag),
+    // and none move while another video shares this clip's name (#417).
+    let stem_shared = crate::subtitles::stem_is_shared(old_path);
+    let stem_named = |path: &Path| {
+        let mut names = vec![
+            crate::subtitles::transcript_path(path),
+            crate::subtitles::capt_path(path),
+        ];
+        names.extend(crate::subtitles::subtitle_candidates(path));
+        names
+    };
+    let stem_taken = !stem_shared
+        && stem_named(old_path)
+            .iter()
+            .zip(stem_named(new_path).iter())
+            .any(|(old, new)| old.is_file() && new.exists());
+    new_path.exists()
+        || crate::comment::comment_path(new_path).exists()
+        || stem_taken
         || super::production_file_tagger::screenshot_positions(old_path)
             .into_iter()
             .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
@@ -407,9 +419,54 @@ mod tests {
     fn an_existing_capt_file_makes_the_new_name_taken() {
         let dir = crate::test_support::fresh_dir("capt-taken");
         let (old_path, new_path) = (dir.join("goat.mov"), dir.join("tag.goat.mov"));
+        std::fs::write(&old_path, b"clip").expect("clip");
+        std::fs::write(crate::subtitles::capt_path(&old_path), "mine").expect("own capt");
         assert!(!target_name_taken(&old_path, &new_path));
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
+        // The clip's own CAPT file would have to move over it.
         assert!(target_name_taken(&old_path, &new_path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #417: a camera original and its proxy (`A001.mov`, `A001.mp4`) share the files named
+    /// without the extension. Tagging one leaves them with the other, and the other can then take
+    /// the same tag: the subtitles of `Food.A001.mov`, if it had any, are not this clip's to move.
+    #[test]
+    fn two_clips_of_one_name_keep_their_shared_subtitles_and_can_take_the_same_tags() {
+        let dir = crate::test_support::fresh_dir("shared-stem");
+        let (mov, mp4) = (dir.join("A001.mov"), dir.join("A001.mp4"));
+        std::fs::write(&mov, b"mov").expect("mov");
+        std::fs::write(&mp4, b"mp4").expect("mp4");
+        let srt = crate::subtitles::SubtitleFormat::Srt.path(&mp4);
+        std::fs::write(&srt, "1").expect("srt");
+        std::fs::write(crate::subtitles::capt_path(&mp4), "capt").expect("capt");
+        std::fs::write(crate::subtitles::transcript_path(&mp4), "{}").expect("transcript");
+
+        let tagged_mov = dir.join("Food.A001.mov");
+        assert!(!target_name_taken(&mov, &tagged_mov));
+        std::fs::rename(&mov, &tagged_mov).expect("rename");
+        rename_sidecars(&mov, &tagged_mov);
+        assert!(srt.exists(), "the .mp4 keeps its subtitles");
+        assert!(crate::subtitles::capt_path(&mp4).exists());
+        assert!(crate::subtitles::transcript_path(&mp4).exists());
+
+        // Alone with its name now, the .mp4 takes the same tag and its subtitles follow it.
+        let tagged_mp4 = dir.join("Food.A001.mp4");
+        std::fs::write(crate::subtitles::SubtitleFormat::Srt.path(&tagged_mov), "1")
+            .expect("the .mov's own subtitles, made later");
+        assert!(
+            target_name_taken(&mp4, &tagged_mp4),
+            "its own .srt would land on them"
+        );
+        std::fs::remove_file(crate::subtitles::SubtitleFormat::Srt.path(&tagged_mov))
+            .expect("remove");
+        assert!(!target_name_taken(&mp4, &tagged_mp4));
+        std::fs::rename(&mp4, &tagged_mp4).expect("rename");
+        rename_sidecars(&mp4, &tagged_mp4);
+        assert!(crate::subtitles::SubtitleFormat::Srt
+            .path(&tagged_mp4)
+            .exists());
+        assert!(crate::subtitles::capt_path(&tagged_mp4).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

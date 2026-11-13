@@ -1,3 +1,7 @@
+# 0.209
+## Fixed
+- Two clips with the same name and different extensions (`A001.mov` and `A001.mp4`, a camera original and its proxy) no longer lose their shared subtitles, CAPT file or transcript when one of them is tagged, and the other can then take the same tags.
+
 # 0.207
 ## Fixed
 - With the comment kept in the video, a crash while frename renames a clip can no longer bring back an older comment from a leftover `.comment.txt` file.

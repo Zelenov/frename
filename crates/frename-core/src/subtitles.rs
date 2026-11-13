@@ -465,10 +465,44 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
     std::fs::metadata(path).map_or(0, |m| m.len() as usize)
 }
 
+/// Whether another video in the folder of `video_path` has the same name without its extension
+/// (`A001.mov` next to `A001.mp4`, a camera original and its proxy). The subtitles, CAPT file and
+/// transcript are named without the extension (`A001.srt`), so they belong to both and to neither
+/// alone (#417).
+pub(crate) fn stem_is_shared(video_path: &Path) -> bool {
+    let (Some(stem), Some(name)) = (video_path.file_stem(), video_path.file_name()) else {
+        return false;
+    };
+    let folder = match video_path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return false;
+    };
+    entries.filter_map(Result::ok).any(|entry| {
+        let other = entry.path();
+        entry.file_name() != name
+            && other.file_stem() == Some(stem)
+            && other
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| crate::file_kind::FileKind::from_extension(e).is_media())
+    })
+}
+
 /// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
 /// video is renamed, so they keep matching. Does nothing for a file that is not there; never
-/// overwrites an existing one.
+/// overwrites an existing one. Leaves them where they are when another video shares the name
+/// they are named after ([`stem_is_shared`]): moving them would take them from that video.
 pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
+    if stem_is_shared(old_video_path) {
+        log::info!(
+            "subtitles: not moving the subtitles of {}: another video has the same name",
+            old_video_path.display()
+        );
+        return;
+    }
     for (old, new) in subtitle_candidates(old_video_path)
         .iter()
         .zip(subtitle_candidates(new_video_path).iter())
