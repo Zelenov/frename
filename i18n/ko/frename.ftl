@@ -798,6 +798,7 @@ folder-frame-not-saved = 프레임을 저장하지 못했습니다: 파일 이�
 folder-frame-not-taken = 프레임을 가져오지 못했습니다: 아직 화면이 없습니다. 잠시 후 다시 시도하세요.
 folder-not-saved = 저장하지 못했습니다: 같은 이름의 파일이 이미 있거나, 읽기 전용이거나 사용 중입니다
 folder-comment-not-saved = { $name }의 코멘트가 저장되지 않았습니다: .comment.txt 파일을 쓸 수 없습니다(파일 이름이 너무 길거나 폴더가 읽기 전용입니다). 이름이 길면 줄인 뒤 코멘트를 다시 작성하세요.
+folder-comment-or-points-not-saved = { $name }의 새 코멘트나 인/아웃 포인트가 저장되지 않았습니다: 이를 저장하는 파일을 쓸 수 없습니다(파일이나 폴더가 읽기 전용이거나, 다른 프로그램에서 열려 있습니다). 이를 해결한 뒤 다시 변경하세요.
 markers-deleted-notice = 마커를 삭제했습니다
 markers-not-saved-notice = 마커를 저장하지 못했습니다: 파일이 읽기 전용이거나 사용 중입니다
 markers-comment-not-saved-notice = 마커를 저장하지 못했습니다: 코멘트 파일이 읽기 전용이거나 사용 중입니다

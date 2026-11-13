@@ -836,6 +836,7 @@ folder-frame-not-saved = Frame not saved: the file name is too long, or the fold
 folder-frame-not-taken = Frame not taken: no picture yet. Try again in a moment.
 folder-not-saved = Not saved: a file with that name already exists, or it is read-only or in use
 folder-comment-not-saved = The comment on { $name } was not saved: its .comment.txt file could not be written (the file name is too long, or the folder is read-only). Shorten the name if it is long, then write the comment again.
+folder-comment-or-points-not-saved = The new comment or in/out points of { $name } were not saved: the file that holds them could not be written (it or its folder is read-only, or it is open in another program). Fix that, then make the change again.
 markers-deleted-notice = Marker deleted
 markers-not-saved-notice = Markers not saved: the file is read-only or in use
 markers-comment-not-saved-notice = Markers not saved: the comment file is read-only or in use
