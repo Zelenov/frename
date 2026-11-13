@@ -1,3 +1,8 @@
+# 0.218
+## Fixed
+- A comment whose save only tidied its spacing or invisible characters no longer brings a note at the next start that your unsaved work was not applied.
+- A comment of only invisible characters, which is saved empty, no longer brings a note that it was not saved.
+
 # 0.217
 ## Fixed
 - A marker whose name or comment holds an invisible NUL character (it can come with a paste) no longer stops every marker of the clip from being saved: the character becomes a space.

@@ -487,15 +487,17 @@ fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
 /// close to the 255-character limit for `<name>.comment.txt`, or the folder refuses it. A
 /// snapshot whose comment was not read stays out, and so does a comment of only an `In/Out:`
 /// line (it reads back as the in/out points). Narrower than [`saved_what_was_wanted`], which
-/// keeps the journal entry for any difference: this one only says when to tell the editor.
+/// keeps the journal entry for any difference a save would not have tidied: this one only says
+/// when to tell the editor.
 pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
     // An `In/Out:` line is read back as the in/out points, not as comment text: a comment of
     // only that line is saved when it reads back empty.
     let (text, _) = crate::metadata::split_in_out_line(wanted.comment());
+    // Tidied as a save leaves it: a comment of only control characters is stored empty (#440).
     !wanted.comment_loading()
         && !saved.comment_loading()
-        && !text.trim().is_empty()
-        && saved.comment().trim().is_empty()
+        && !tidy_comment(&text).is_empty()
+        && tidy_comment(saved.comment()).is_empty()
 }
 
 /// Whether a save left the comment or the in/out points other than `wanted` asked, though the
@@ -505,7 +507,7 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
 /// caller checks first. A snapshot whose comment was not read stays out.
 ///
 /// The comment is compared without an `In/Out:` line (it reads back as the points), and without
-/// what a save may tidy: line endings, spaces at line ends, runs of blank lines.
+/// what a save may tidy ([`tidy_comment`]).
 /// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line (the
 /// setting, or [`points_kept_in_text`] for a clip whose video does not take them); only then
 /// are they compared. Points kept in the video read back other than set even when saved (an in
@@ -573,19 +575,14 @@ fn tidy_comment(comment: &str) -> String {
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.
 pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
-    // A NUL is stored as a space in the video (#441): that is the comment saved.
-    let text = |s: &str| {
-        s.replace("\r\n", "\n")
-            .replace('\0', " ")
-            .trim()
-            .to_string()
-    };
+    // Compared as a save leaves it ([`tidy_comment`]), like the #425 note (#440). An edit of only
+    // spacing or invisible characters therefore counts as saved, even when the write failed.
     wanted.tags() == saved.tags()
         && wanted.name_without_extension() == saved.name_without_extension()
         && wanted.extension().eq_ignore_ascii_case(saved.extension())
         && (wanted.comment_loading()
             || saved.comment_loading()
-            || text(wanted.comment()) == text(saved.comment()))
+            || tidy_comment(wanted.comment()) == tidy_comment(saved.comment()))
         && same_point(wanted.segment_start(), saved.segment_start())
         && same_point(wanted.segment_end(), saved.segment_end())
 }
@@ -1356,6 +1353,26 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// #440: the journal and the #425 note agree on what was saved: tidied spacing and control
+    /// characters are the comment saved, and a comment of only control characters that reads back
+    /// empty is not lost.
+    #[test]
+    fn a_tidied_comment_is_saved_for_the_journal_and_not_lost() {
+        let with = |comment: &str| {
+            let mut snapshot = FileSnapshot::parse("clip.mp4");
+            snapshot.set_comment(comment.to_string());
+            snapshot
+        };
+        let wanted = with("Note  \r\n\r\n\r\nAI: ctl\u{b}x");
+        let saved = with("Note\n\nAI: ctl x");
+        assert!(saved_what_was_wanted(&wanted, &saved));
+        assert!(!comment_or_points_not_saved(&wanted, &saved, false));
+        assert!(!comment_not_saved(&with("\0 \u{1}"), &with("")));
+        assert!(saved_what_was_wanted(&with("\0 \u{1}"), &with("")));
+        assert!(comment_not_saved(&with("Note"), &with("")));
+        assert!(!saved_what_was_wanted(&with("Note"), &with("Other")));
     }
 
     /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.
