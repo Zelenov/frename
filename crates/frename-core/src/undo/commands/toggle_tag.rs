@@ -23,7 +23,7 @@ where
             .ok_or(UndoError::TagNotFound(self.tag_id))?
             .is_checked();
         if current != self.was_checked {
-            ctx.tag_list.toggle_by_id(self.tag_id);
+            ctx.tag_list.restore_toggle_by_id(self.tag_id);
         }
         Ok(())
     }
@@ -35,7 +35,7 @@ where
             .ok_or(UndoError::TagNotFound(self.tag_id))?
             .is_checked();
         if current == self.was_checked {
-            ctx.tag_list.toggle_by_id(self.tag_id);
+            ctx.tag_list.restore_toggle_by_id(self.tag_id);
         }
         Ok(())
     }

@@ -2827,9 +2827,8 @@ impl FolderWorkspace {
         ])
     }
 
-    /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     /// The note for a stored tag that could not be checked: its name cannot be in a file name
-    /// (#421), from before such names were refused.
+    /// (#421), from before such names were refused. It says what to do, so it stays long.
     fn tag_not_usable(&self, id: frename_core::TagId) -> Task<Message> {
         let name = self
             .file_workspace
@@ -2837,9 +2836,10 @@ impl FolderWorkspace {
             .get_tag(id)
             .map(|t| t.tag().to_string())
             .unwrap_or_default();
-        Self::notice(&fl!("tag-not-usable", tag = name))
+        Self::long_notice(fl!("tag-not-usable", tag = name))
     }
 
+    /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     fn toggle_selected_tag(&mut self) -> Task<Message> {
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
         let filter = self.file_workspace.tag_list().filter_query();
@@ -2858,19 +2858,21 @@ impl FolderWorkspace {
         let selected_id = self.tag_panel.selected_tag_id();
         let selected_visible = selected_id.filter(|id| filtered.contains(id));
         let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
+        let mut notice = Task::none();
         if let Some(id) = id_to_toggle {
             let was_checked = self
                 .file_workspace
                 .tag_list()
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
-            if !self.file_workspace.toggle_tag_by_id(id) {
-                return self.tag_not_usable(id);
+            if self.file_workspace.toggle_tag_by_id(id) {
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
+            } else {
+                notice = self.tag_not_usable(id);
             }
-            self.history.push(Box::new(ToggleTagCommand {
-                tag_id: id,
-                was_checked,
-            }));
             if selected_visible.is_none() {
                 self.tag_panel.set_selected(Some(id));
             }
@@ -2879,8 +2881,11 @@ impl FolderWorkspace {
         // Space would go to its text. Let go of them (typing a letter takes them back).
         // Only the search bar: the rename field, the comment box and the marker fields
         // are typed in on purpose.
-        iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)))
-            .map(|()| Message::Noop)
+        let unfocus = iced::advanced::widget::operate(unfocus_only(iced::widget::Id::from(
+            SEARCH_BAR_INPUT_ID,
+        )))
+        .map(|()| Message::Noop);
+        Task::batch([notice, unfocus])
     }
 
     fn handle_tag_panel(&mut self, msg: tag_panel::Message) -> Task<Message> {

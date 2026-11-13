@@ -371,16 +371,23 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// one stored before such names were refused (#421) would break the clip's name. Returns
     /// whether the tag changed.
     pub fn toggle_by_id(&mut self, id: TagId) -> bool {
+        let refused = self
+            .tags_by_id
+            .get(&id)
+            .is_some_and(|tag| !tag.is_checked() && !is_allowed_tag_name(tag.tag()));
+        if refused {
+            log::warn!("TagList: not checking a tag a file name cannot hold");
+            return false;
+        }
+        self.restore_toggle_by_id(id)
+    }
+
+    /// [`Self::toggle_by_id`] without its refusal, for undo and redo: they put back a state the
+    /// clip had (a tag its file name already held, #421), never a new one.
+    pub fn restore_toggle_by_id(&mut self, id: TagId) -> bool {
         let Some(tag) = self.tags_by_id.get_mut(&id) else {
             return false;
         };
-        if !tag.is_checked() && !is_allowed_tag_name(tag.tag()) {
-            log::warn!(
-                "TagList: not checking {:?}: a file name cannot hold it",
-                tag.tag()
-            );
-            return false;
-        }
         tag.toggle();
         self.update_is_selected_match_display_order();
         true
