@@ -157,9 +157,16 @@ fn action<'a>(tag: &'a Tag, cursor: bool) -> Element<'a, Message> {
     }
 }
 
-/// The first cell while the search names no tag and cannot be one: why, nothing to press.
-pub fn not_allowed<'a>() -> Element<'a, Message> {
-    let body = container(text::secondary(fl!("folder-rename-error-bad-character")))
+/// The first cell while the search names no tag and cannot be one (`name`): why, nothing to
+/// press.
+pub fn not_allowed<'a>(name: &str) -> Element<'a, Message> {
+    let why = if frename_core::has_forbidden_file_name_char(name) {
+        fl!("folder-rename-error-bad-character")
+    } else {
+        // Allowed in a file name, but it separates the tags there (#420).
+        fl!("tag-grid-dot-not-allowed")
+    };
+    let body = container(text::secondary(why))
         .padding(CHIP_PADDING)
         .height(CHIP_HEIGHT)
         .center_y(CHIP_HEIGHT);

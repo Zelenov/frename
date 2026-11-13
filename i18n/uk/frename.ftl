@@ -810,6 +810,7 @@ tag-grid-unstar = Зняти зірочку
 tag-grid-save = Додати до тегів папки
 tag-grid-delete = Видалити «{ $tag }» з тегів папки
 tag-grid-create = Створити «{ $tag }»
+tag-grid-dot-not-allowed = У тезі не можна: «.» розділяє теги в імені файлу
 tag-grid-no-file = Відкрийте кліп, щоб додати теги
 tag-grid-no-tags = Тегів ще немає
 tag-grid-no-tags-hint = Введіть назву й натисніть Enter, щоб створити перший.

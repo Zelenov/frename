@@ -704,6 +704,7 @@ tag-grid-unstar = 즐겨찾기 해제
 tag-grid-save = 폴더 태그에 추가
 tag-grid-delete = 폴더 태그에서 “{ $tag }” 삭제
 tag-grid-create = “{ $tag }” 만들기
+tag-grid-dot-not-allowed = 태그에 쓸 수 없습니다: “.”은 파일 이름에서 태그를 구분합니다
 tag-grid-no-file = 클립을 열어 태그를 다세요
 tag-grid-no-tags = 아직 태그가 없습니다
 tag-grid-no-tags-hint = 이름을 입력하고 Enter를 누르면 첫 태그가 만들어집니다.

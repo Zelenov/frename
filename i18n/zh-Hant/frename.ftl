@@ -704,6 +704,7 @@ tag-grid-unstar = 取消星號
 tag-grid-save = 加入資料夾的標籤
 tag-grid-delete = 從資料夾的標籤中刪除「{ $tag }」
 tag-grid-create = 建立「{ $tag }」
+tag-grid-dot-not-allowed = 標籤中不能使用：「.」在檔名中用來分開標籤
 tag-grid-no-file = 開啟片段即可加標籤
 tag-grid-no-tags = 尚無標籤
 tag-grid-no-tags-hint = 輸入名稱並按 Enter 建立第一個標籤。
