@@ -765,6 +765,10 @@ impl FolderWorkspace {
                 // Said either way: a frame that could not be written is not "saved" (#424).
                 match frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg) {
                     Ok(()) => Self::notice(&fl!("folder-frame-saved")),
+                    // The player had no frame to give (#430).
+                    Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                        Self::notice(&fl!("folder-frame-not-taken"))
+                    }
                     Err(_) => Self::notice(&fl!("folder-frame-not-saved")),
                 }
             }

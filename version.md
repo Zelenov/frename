@@ -2,6 +2,10 @@
 ## Fixed
 - An old tag whose name a file name cannot hold ("AC/DC", "v1.2") can no longer be put on a clip, where it was lost or broke the name on save. A note says to delete it and make one with another name.
 
+# 0.212
+## Fixed
+- Taking a frame before the clip shows a picture no longer leaves an empty `.jpg` next to it and says "Frame saved": it says no frame was taken.
+
 # 0.211
 ## Fixed
 - A tag named like an old in or out point (`in_00_00_07`) can no longer be created: the clip lost it on the next save. The tag search says why instead of offering to create it.
