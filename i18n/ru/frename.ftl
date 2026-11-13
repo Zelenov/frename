@@ -814,6 +814,7 @@ tag-grid-save = Добавить в теги папки
 tag-grid-delete = Удалить «{ $tag }» из тегов папки
 tag-grid-create = Создать «{ $tag }»
 tag-grid-dot-not-allowed = В теге нельзя: «.»
+tag-grid-in-out-not-allowed = Нельзя как тег: точка входа/выхода
 tag-grid-no-file = Откройте клип, чтобы ставить теги
 tag-grid-no-tags = Тегов пока нет
 tag-grid-no-tags-hint = Наберите название и нажмите Enter, чтобы создать первый.
