@@ -873,6 +873,7 @@ folder-frame-not-saved = Bild nicht gespeichert: Der Dateiname ist zu lang oder 
 folder-frame-not-taken = Kein Bild aufgenommen: Es ist noch kein Bild da. Versuche es gleich noch einmal.
 folder-not-saved = Nicht gespeichert: Eine Datei mit diesem Namen existiert schon, oder sie ist schreibgeschützt oder in Gebrauch
 folder-comment-not-saved = Der Kommentar zu { $name } wurde nicht gespeichert: Seine .comment.txt-Datei ließ sich nicht schreiben (der Dateiname ist zu lang oder der Ordner schreibgeschützt). Kürze einen langen Namen und schreibe den Kommentar erneut.
+folder-comment-not-changed = Der neue Kommentar oder die In/Out-Punkte zu { $name } wurden nicht gespeichert: Die Datei, die sie enthält, ließ sich nicht schreiben (sie ist schreibgeschützt oder in einem anderen Programm geöffnet). Mach sie beschreibbar und nimm die Änderung erneut vor.
 markers-deleted-notice = Marker gelöscht
 markers-not-saved-notice = Marker nicht gespeichert: Die Datei ist schreibgeschützt oder in Gebrauch
 markers-comment-not-saved-notice = Marker nicht gespeichert: Die Kommentardatei ist schreibgeschützt oder in Gebrauch

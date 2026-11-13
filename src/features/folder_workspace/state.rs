@@ -2237,6 +2237,11 @@ impl FolderWorkspace {
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
         let comment_lost =
             !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
+        // The comment file (or the video holding the comment) is read-only or locked: the clip
+        // reads back with its old comment or in/out points (#425).
+        let comment_unchanged = !refused
+            && !comment_lost
+            && frename_core::recovery::comment_or_points_not_saved(&snapshot, &snapshot_after_save);
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
             if self.marker_reading_clip() {
@@ -2250,6 +2255,12 @@ impl FolderWorkspace {
             // added tags is what made it long).
             Self::long_notice(fl!(
                 "folder-comment-not-saved",
+                name = short_file_name(&new_path)
+            ))
+        } else if comment_unchanged {
+            // Like the note above, shown over the next clip and kept in the journal.
+            Self::long_notice(fl!(
+                "folder-comment-not-changed",
                 name = short_file_name(&new_path)
             ))
         } else {
@@ -2285,7 +2296,7 @@ impl FolderWorkspace {
                 let notice =
                     self.keep_unsaved_markers(id, wanted, &marker_actions::markers_not_saved());
                 // The note that the comment was lost covers the marker lines it held.
-                if !refused && !comment_lost {
+                if !refused && !comment_lost && !comment_unchanged {
                     markers_notice = notice;
                 }
             }

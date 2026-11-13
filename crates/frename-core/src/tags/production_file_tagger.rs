@@ -619,6 +619,36 @@ mod tests {
         assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
     }
 
+    /// #425: a save that took reads back as wanted, so no "not saved" note shows: a comment with
+    /// in/out points, kept in the text file or in the video, with or without new tags.
+    #[cfg(unix)]
+    #[test]
+    fn a_comment_and_points_that_were_saved_are_not_told_as_lost() {
+        let tagger = ProductionFileTagger;
+        for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
+            let path = clip_named(&format!("saved-comment-{name}"), "clip.mov");
+            let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+            let mut marker = crate::Marker::new(5_000);
+            marker.name = "Lion".to_string();
+            wanted.set_comment(crate::markers_into_comment(
+                "Вода в кадре\r\nвторая строка",
+                &[marker],
+            ));
+            wanted.set_segment_start(Some(0.05));
+            wanted.set_segment_end(Some(0.15));
+            let saved_path = tagger.save_with(&wanted, &path, storage);
+            let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
+            assert!(saved.comment().contains("вторая строка"), "{name}: written");
+            assert!(saved.segment_end().is_some(), "{name}: points written");
+            assert!(
+                !crate::recovery::comment_or_points_not_saved(&wanted, &saved),
+                "{name}: {:?} / {:?}",
+                saved.comment(),
+                (saved.segment_start(), saved.segment_end())
+            );
+        }
+    }
+
     /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a
     /// 248-byte name; the frame's would be 270, over the 255-byte limit of ext4 and APFS) says it
     /// was not written; a short name's is written.

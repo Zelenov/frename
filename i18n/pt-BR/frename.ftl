@@ -891,6 +891,7 @@ folder-frame-not-saved = Quadro não salvo: o nome do arquivo é longo demais ou
 folder-frame-not-taken = Quadro não capturado: ainda não há imagem. Tente de novo em um instante.
 folder-not-saved = Não salvo: já existe um arquivo com esse nome, ou ele é somente leitura ou está em uso
 folder-comment-not-saved = O comentário de { $name } não foi salvo: não foi possível gravar o arquivo .comment.txt (nome de arquivo longo demais ou pasta somente leitura). Encurte o nome se for longo e escreva o comentário de novo.
+folder-comment-not-changed = O novo comentário ou os pontos de entrada/saída de { $name } não foram salvos: não foi possível gravar o arquivo que os guarda (é somente leitura ou está aberto em outro programa). Torne-o gravável e faça a alteração de novo.
 markers-deleted-notice = Marcador excluído
 markers-not-saved-notice = Marcadores não salvos: o arquivo é somente leitura ou está em uso
 markers-comment-not-saved-notice = Marcadores não salvos: o arquivo de comentário é somente leitura ou está em uso

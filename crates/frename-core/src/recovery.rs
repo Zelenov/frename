@@ -498,6 +498,28 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
         && saved.comment().trim().is_empty()
 }
 
+/// Whether a save left the comment or the in/out points other than `wanted` asked, though the
+/// clip's name took (#425): the comment text file, or the video when the comment lives inside
+/// it, is read-only or locked by another program, so the clip still reads back with what it had
+/// before. Broader than [`comment_not_saved`] (a comment that reads back empty, #416), which the
+/// caller checks first; the comment is compared as [`saved_what_was_wanted`] compares it, with
+/// an `In/Out:` line left out (it reads back as the points). A snapshot whose comment was not
+/// read stays out.
+pub fn comment_or_points_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    if wanted.comment_loading() || saved.comment_loading() {
+        return false;
+    }
+    let text = |s: &str| s.replace("\r\n", "\n").trim().to_string();
+    let (wanted_text, line) = crate::metadata::split_in_out_line(wanted.comment());
+    // Points typed as an `In/Out:` line in the comment are read back as the points: which of
+    // them a save keeps is not this check's question, so the points count only without one.
+    let typed_points = line.start.is_some() || line.end.is_some();
+    text(&wanted_text) != text(saved.comment())
+        || (!typed_points
+            && (!same_point(wanted.segment_start(), saved.segment_start())
+                || !same_point(wanted.segment_end(), saved.segment_end())))
+}
+
 /// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.
@@ -1302,6 +1324,40 @@ mod tests {
         loading.set_comment_loading(true);
         assert!(!comment_not_saved(&loading, &empty));
         assert!(!comment_not_saved(&with("A note"), &loading));
+    }
+
+    /// #425: a comment or in/out points that read back other than wanted (the old ones a
+    /// read-only `.comment.txt` kept) are told; the same comment, line endings aside, or a comment
+    /// whose `In/Out:` line read back as the points, is not.
+    #[test]
+    fn a_comment_or_points_read_back_other_than_wanted_are_told() {
+        let with = |comment: &str| {
+            let mut snapshot = FileSnapshot::parse("clip.mp4");
+            snapshot.set_comment(comment.to_string());
+            snapshot
+        };
+        assert!(comment_or_points_not_saved(
+            &with("New note"),
+            &with("Old note")
+        ));
+        assert!(!comment_or_points_not_saved(
+            &with("A note\r\nline two"),
+            &with("A note\nline two\n")
+        ));
+        let mut points = with("A note");
+        points.set_segment_start(Some(1.0));
+        points.set_segment_end(Some(4.0));
+        assert!(comment_or_points_not_saved(&points, &with("A note")));
+        assert!(!comment_or_points_not_saved(&points, &points.clone()));
+        let mut read_back = with("A note");
+        read_back.set_segment_start(Some(0.05));
+        assert!(!comment_or_points_not_saved(
+            &with("A note\nIn/Out: 00:00:00.050 – end"),
+            &read_back
+        ));
+        let mut loading = with("New note");
+        loading.set_comment_loading(true);
+        assert!(!comment_or_points_not_saved(&loading, &with("Old note")));
     }
 
     #[test]
