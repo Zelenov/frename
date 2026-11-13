@@ -594,6 +594,19 @@ mod tests {
         assert_eq!(intents.count(), 0);
     }
 
+    /// #441: a NUL in a comment kept in the video no longer cuts the comment there: it reads back
+    /// as a space, like the other control characters.
+    #[test]
+    fn a_nul_in_a_comment_in_the_video_is_kept_as_a_space() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("nul-comment", "clip.mov");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        wanted.set_comment("Вода\0в кадре".to_string());
+        let saved_path = tagger.save_with(&wanted, &path, ADOBE);
+        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
+        assert_eq!(saved.comment(), "Вода в кадре");
+    }
+
     /// #416: a clip whose name leaves no room for `<name>.comment.txt` (122 Cyrillic letters are
     /// 248 bytes with `.mov`; the comment file would be 260, over the 255-byte limit of ext4 and
     /// APFS) cannot keep a comment in a text file. The save cannot say so itself; the clip read

@@ -1,3 +1,7 @@
+# 0.216
+## Fixed
+- A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save: the character becomes a space.
+
 # 0.214
 ## Fixed
 - Settings now says when the tag for videos with a comment is named like an In/Out point (`in_00_00_07`), which can never be a tag. Such a name turns that tag off instead of silently never appearing.
