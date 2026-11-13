@@ -706,6 +706,7 @@ tag-grid-delete = 從資料夾的標籤中刪除「{ $tag }」
 tag-grid-create = 建立「{ $tag }」
 tag-grid-dot-not-allowed = 標籤中不能使用：「.」
 tag-grid-in-out-not-allowed = 不能用作標籤：入點/出點
+tag-not-usable = 標籤「{ $tag }」不能用在檔名中。請刪除它並新增一個標籤。
 tag-grid-no-file = 開啟片段即可加標籤
 tag-grid-no-tags = 尚無標籤
 tag-grid-no-tags-hint = 輸入名稱並按 Enter 建立第一個標籤。

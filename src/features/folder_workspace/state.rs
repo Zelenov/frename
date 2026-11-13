@@ -919,9 +919,9 @@ impl FolderWorkspace {
             .iter()
             .filter_map(|name| tag_list.tag_id_by_name(name))
         {
-            let addable = tag_list
-                .get_tag(id)
-                .is_some_and(|tag| tag.is_stored() && !tag.is_checked());
+            let addable = tag_list.get_tag(id).is_some_and(|tag| {
+                tag.is_stored() && !tag.is_checked() && frename_core::is_allowed_tag_name(tag.tag())
+            });
             if addable && !ids.contains(&id) {
                 ids.push(id);
             }
@@ -2828,6 +2828,18 @@ impl FolderWorkspace {
     }
 
     /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
+    /// The note for a stored tag that could not be checked: its name cannot be in a file name
+    /// (#421), from before such names were refused.
+    fn tag_not_usable(&self, id: frename_core::TagId) -> Task<Message> {
+        let name = self
+            .file_workspace
+            .tag_list()
+            .get_tag(id)
+            .map(|t| t.tag().to_string())
+            .unwrap_or_default();
+        Self::notice(&fl!("tag-not-usable", tag = name))
+    }
+
     fn toggle_selected_tag(&mut self) -> Task<Message> {
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
         let filter = self.file_workspace.tag_list().filter_query();
@@ -2852,7 +2864,9 @@ impl FolderWorkspace {
                 .tag_list()
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
+            if !self.file_workspace.toggle_tag_by_id(id) {
+                return self.tag_not_usable(id);
+            }
             self.history.push(Box::new(ToggleTagCommand {
                 tag_id: id,
                 was_checked,
@@ -2925,8 +2939,10 @@ impl FolderWorkspace {
                     .tag_list()
                     .get_tag(id)
                     .is_some_and(|t| t.is_checked());
-                self.file_workspace.toggle_tag_by_id(id);
                 self.tag_panel.set_selected(Some(id));
+                if !self.file_workspace.toggle_tag_by_id(id) {
+                    return self.tag_not_usable(id);
+                }
                 self.history.push(Box::new(ToggleTagCommand {
                     tag_id: id,
                     was_checked,
@@ -3166,17 +3182,21 @@ impl FolderWorkspace {
         };
         self.file_name_panel
             .update(msg, self.file_workspace.tag_list());
+        let mut notice = Task::none();
         if let Some(id) = self.file_name_panel.take_dropped_dragged_tag_id() {
             let was_checked = self
                 .file_workspace
                 .tag_list()
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
-            self.file_workspace.toggle_tag_by_id(id);
-            self.history.push(Box::new(ToggleTagCommand {
-                tag_id: id,
-                was_checked,
-            }));
+            if self.file_workspace.toggle_tag_by_id(id) {
+                self.history.push(Box::new(ToggleTagCommand {
+                    tag_id: id,
+                    was_checked,
+                }));
+            } else {
+                notice = self.tag_not_usable(id);
+            }
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
             self.file_workspace.reorder_tag_to_index(did, idx);
@@ -3191,7 +3211,7 @@ impl FolderWorkspace {
                 }));
             }
         }
-        Task::none()
+        notice
     }
 
     /// The comment box lost the keys (or the file is about to change): what was typed in it

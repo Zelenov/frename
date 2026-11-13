@@ -804,6 +804,7 @@ tag-grid-delete = Obriši „{ $tag }“ iz tegova fascikle
 tag-grid-create = Napravi „{ $tag }“
 tag-grid-dot-not-allowed = Nije dozvoljeno u tegu: «.»
 tag-grid-in-out-not-allowed = Nije dozvoljen teg: ulaz/izlaz
+tag-not-usable = Teg «{ $tag }» ne može da bude u nazivu datoteke. Obrišite ga i napravite novi.
 tag-grid-no-file = Otvorite klip da biste ga označili tegom
 tag-grid-no-tags = Još nema tegova
 tag-grid-no-tags-hint = Unesite naziv i pritisnite Enter da napravite prvi.

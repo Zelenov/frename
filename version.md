@@ -1,3 +1,7 @@
+# 0.213
+## Fixed
+- A tag saved before frename refused names a file name cannot hold ("AC/DC", "v1.2", `in_00_00_07`) can no longer be put on a clip: a note says to delete it and make a new one. Before, it moved the clip into a folder, split into two tags, or was lost on save.
+
 # 0.211
 ## Fixed
 - A tag named like an old in or out point (`in_00_00_07`) can no longer be created: the clip lost it on the next save. The tag search says why instead of offering to create it.

@@ -366,11 +366,24 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     }
 
     /// Toggle the tag with the given id. No-op if id not found.
-    pub fn toggle_by_id(&mut self, id: TagId) {
-        if let Some(tag) = self.tags_by_id.get_mut(&id) {
-            tag.toggle();
+    ///
+    /// A tag whose name a file name cannot hold as that tag ([`tag_name_problem`]) is not checked:
+    /// one stored before such names were refused (#421) would break the clip's name. Returns
+    /// whether the tag changed.
+    pub fn toggle_by_id(&mut self, id: TagId) -> bool {
+        let Some(tag) = self.tags_by_id.get_mut(&id) else {
+            return false;
+        };
+        if !tag.is_checked() && !is_allowed_tag_name(tag.tag()) {
+            log::warn!(
+                "TagList: not checking {:?}: a file name cannot hold it",
+                tag.tag()
+            );
+            return false;
         }
+        tag.toggle();
         self.update_is_selected_match_display_order();
+        true
     }
 
     /// Check or uncheck the tag named `name` (case-insensitive), as a click in the tag panel
@@ -383,7 +396,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .find(|t| t.tag().eq_ignore_ascii_case(name))
             .map(|t| (t.id(), t.is_checked()));
         match existing {
-            Some((id, is_checked)) if is_checked != checked => self.toggle_by_id(id),
+            Some((id, is_checked)) if is_checked != checked => {
+                self.toggle_by_id(id);
+            }
             Some(_) => {}
             // Saved right away, like a tag created in the search bar: an unsaved tag is listed
             // first, and this one belongs last.
@@ -1207,6 +1222,27 @@ mod tests {
         assert!(is_allowed_tag_name("Rock & Roll"));
         assert!(is_allowed_tag_name("Кадр 2"));
         assert!(list.create_new_tag("Rock & Roll").is_some());
+    }
+
+    /// #421: a tag stored before #418/#420/#428 with a name a file name cannot hold as that tag
+    /// is never checked; unchecking still works.
+    #[test]
+    fn a_stored_tag_a_file_name_cannot_hold_is_not_checked() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "AC/DC", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "v1.2", 2, false), 1)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "pick", 3, false), 2);
+        let mut list = TagList::new(store, FileSnapshot::new(vec![], "file", "mp4", "file.mp4"));
+        for name in ["AC/DC", "v1.2"] {
+            let id = list.tag_id_by_name(name).expect(name);
+            assert!(!list.toggle_by_id(id), "{name}");
+            assert!(!list.get_tag(id).unwrap().is_checked(), "{name}");
+            list.set_checked_by_name(name, true);
+            assert!(!list.get_tag(id).unwrap().is_checked(), "{name}");
+        }
+        let pick = list.tag_id_by_name("pick").expect("pick");
+        assert!(list.toggle_by_id(pick));
+        assert!(list.toggle_by_id(pick), "unchecked again");
     }
 
     #[test]

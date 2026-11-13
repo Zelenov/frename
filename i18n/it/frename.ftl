@@ -803,6 +803,7 @@ tag-grid-delete = Eliminare «{ $tag }» dai tag della cartella
 tag-grid-create = Creare «{ $tag }»
 tag-grid-dot-not-allowed = Non consentito in un tag: «.»
 tag-grid-in-out-not-allowed = Tag non consentito: attacco/stacco
+tag-not-usable = Il tag «{ $tag }» non può stare in un nome di file. Eliminarlo e crearne uno nuovo.
 tag-grid-no-file = Aprire una clip per aggiungerle dei tag
 tag-grid-no-tags = Ancora nessun tag
 tag-grid-no-tags-hint = Digitare un nome e premere Invio per creare il primo.
