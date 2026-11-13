@@ -575,6 +575,16 @@ fn tidy_comment(comment: &str) -> String {
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out.
 pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    saved_what_was_wanted_in(wanted, saved, true)
+}
+
+/// [`saved_what_was_wanted`], with the in/out points compared only when `points_in_comment`
+/// says they are kept as the comment's `In/Out:` line (see [`comment_or_points_not_saved`]).
+pub fn saved_what_was_wanted_in(
+    wanted: &FileSnapshot,
+    saved: &FileSnapshot,
+    points_in_comment: bool,
+) -> bool {
     // Compared as a save leaves it ([`tidy_comment`]), like the #425 note (#440). An edit of only
     // spacing or invisible characters therefore counts as saved, even when the write failed.
     wanted.tags() == saved.tags()
@@ -583,8 +593,12 @@ pub fn saved_what_was_wanted(wanted: &FileSnapshot, saved: &FileSnapshot) -> boo
         && (wanted.comment_loading()
             || saved.comment_loading()
             || tidy_comment(wanted.comment()) == tidy_comment(saved.comment()))
-        && same_point(wanted.segment_start(), saved.segment_start())
-        && same_point(wanted.segment_end(), saved.segment_end())
+        // Points kept in the video read back other than set even when saved (an in point at 0 s,
+        // an out point at the clip's end), so only points kept as an `In/Out:` line are compared,
+        // as the #425 note does (#448).
+        && (!points_in_comment
+            || (same_point(wanted.segment_start(), saved.segment_start())
+                && same_point(wanted.segment_end(), saved.segment_end())))
 }
 
 /// Save the entry's state to its clip, the way leaving the clip would (keep the marker handling
@@ -631,7 +645,9 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
     }
     let wanted = snapshot.clone();
     let (new_path, saved) = snapshot.save_and_reparse(path);
-    if !saved_what_was_wanted(&wanted, &saved) {
+    let points_in_comment = crate::metadata_storage().in_out == crate::InOutStorage::Comment
+        || points_kept_in_text(&new_path);
+    if !saved_what_was_wanted_in(&wanted, &saved, points_in_comment) {
         return None;
     }
     // The markers are in the comment now: the video's own go, so the two never disagree. Only
@@ -1373,6 +1389,23 @@ mod tests {
         assert!(saved_what_was_wanted(&with("\0 \u{1}"), &with("")));
         assert!(comment_not_saved(&with("Note"), &with("")));
         assert!(!saved_what_was_wanted(&with("Note"), &with("Other")));
+    }
+
+    /// #448: points kept in the video are not compared for the journal (an in point at 0 s reads
+    /// back as none), points kept in the comment are.
+    #[test]
+    fn edge_points_kept_in_the_video_are_saved_for_the_journal() {
+        let mut wanted = FileSnapshot::parse("clip.mp4");
+        wanted.set_segment_start(Some(0.0));
+        wanted.set_segment_end(Some(5.0));
+        let mut read_back = FileSnapshot::parse("clip.mp4");
+        read_back.set_segment_end(Some(5.0));
+        assert!(saved_what_was_wanted_in(&wanted, &read_back, false));
+        assert!(!saved_what_was_wanted_in(&wanted, &read_back, true));
+        assert!(
+            !saved_what_was_wanted(&wanted, &read_back),
+            "the strict check is kept"
+        );
     }
 
     /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.

@@ -2239,13 +2239,15 @@ impl FolderWorkspace {
             !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
         // The comment file (or the video holding the comment) is read-only or locked: the clip
         // reads back with its old comment or in/out points (#425).
+        let points_in_comment = frename_core::metadata_storage().in_out
+            == frename_core::InOutStorage::Comment
+            || frename_core::recovery::points_kept_in_text(&new_path);
         let comment_or_points_lost = !refused
             && !comment_lost
             && frename_core::recovery::comment_or_points_not_saved(
                 &snapshot,
                 &snapshot_after_save,
-                frename_core::metadata_storage().in_out == frename_core::InOutStorage::Comment
-                    || frename_core::recovery::points_kept_in_text(&new_path),
+                points_in_comment,
             );
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
@@ -2314,7 +2316,11 @@ impl FolderWorkspace {
         // point that is not on disk keep it.
         if !refused
             && !self.unsaved_markers.contains_key(&id)
-            && frename_core::recovery::saved_what_was_wanted(&snapshot, &snapshot_after_save)
+            && frename_core::recovery::saved_what_was_wanted_in(
+                &snapshot,
+                &snapshot_after_save,
+                points_in_comment,
+            )
         {
             self.journal_saved(id, &path_before, &new_path, &saved_state);
         }
