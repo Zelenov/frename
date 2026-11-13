@@ -169,11 +169,17 @@ impl ProductionFileTagger {
 
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);
+        // A pending snapshot does not know an XMP comment, so it has no text file to write.
+        let writes_text_file =
+            !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo);
 
         if new_path != path {
             // The video first: when it cannot be renamed (Premiere holds it), its comment and
             // subtitle files must stay with it rather than wait under the new name.
-            if let Err(e) = std::fs::rename(path, &new_path) {
+            // Its sidecars follow; a crash in between is finished at the next start (#377).
+            if let Err(e) =
+                crate::recovery::rename_clip(path, &new_path, writes_text_file && saved.comment)
+            {
                 log::error!(
                     "ProductionFileTagger: rename {:?} → {:?} failed: {}",
                     path,
@@ -182,12 +188,10 @@ impl ProductionFileTagger {
                 );
                 return path.to_path_buf();
             }
-            super::file_tagger::rename_sidecars(path, &new_path);
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
-        // A pending snapshot does not know an XMP comment, so it has no text file to write.
         // In/out points the video did not take are the text's in/out line.
-        if !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo) {
+        if writes_text_file {
             let text = metadata::stored_comment(snapshot, saved.in_out);
             metadata::save_comment_text_file(&new_path, &text, saved.comment);
         }
@@ -549,6 +553,8 @@ mod tests {
     fn a_save_that_renames_moves_the_same_sidecars_as_undo_does() {
         let tagger = ProductionFileTagger;
         let path = clip_named("rename-sidecars", "goat.mov");
+        let journal = path.with_file_name("recovery");
+        crate::recovery::use_dir_on_this_thread(journal.clone());
         crate::comment::save_comment(&path, "note");
         let mut old_sidecars = crate::subtitles::subtitle_candidates(&path);
         old_sidecars.push(crate::subtitles::transcript_path(&path));
@@ -579,6 +585,9 @@ mod tests {
             assert!(!p.exists(), "{p:?} should have left the old name");
         }
         assert!(bak.exists());
+        // The rename went through the journaled one (#377), which left no intent behind.
+        let intents = std::fs::read_dir(journal.join("renames")).expect("journaled");
+        assert_eq!(intents.count(), 0);
     }
 
     #[test]

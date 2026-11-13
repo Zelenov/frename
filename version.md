@@ -1,6 +1,10 @@
-# 0.205
+# 0.206
 ## Fixed
 - A tag can no longer hold a character a file name cannot (`\ / : * ? " < > |`): typing one in the tag search says so instead of offering to create it. Before, a tag like "AC/DC" moved the clip into a folder `AC` or made every save fail.
+
+# 0.205
+## Fixed
+- If frename crashes or is closed by force while it renames a clip, the next start moves the clip's comment, subtitles and screenshots to the new name.
 
 # 0.204
 ## Added
