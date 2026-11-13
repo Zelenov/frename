@@ -506,10 +506,10 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
 ///
 /// The comment is compared without an `In/Out:` line (it reads back as the points), and without
 /// what a save may tidy: line endings, spaces at line ends, runs of blank lines.
-/// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line; only
-/// then are they compared. Points kept in the video read back other than set even when saved
-/// (an in point at 0 s, an out point at the clip's end), and a video that refuses them puts them
-/// in the comment file instead.
+/// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line (the
+/// setting, or [`points_in_comment_file`] for a clip whose video does not take them); only then
+/// are they compared. Points kept in the video read back other than set even when saved (an in
+/// point at 0 s, an out point at the clip's end).
 pub fn comment_or_points_not_saved(
     wanted: &FileSnapshot,
     saved: &FileSnapshot,
@@ -529,9 +529,28 @@ pub fn comment_or_points_not_saved(
                 || !same_point(wanted.segment_end(), saved.segment_end())))
 }
 
-/// `comment` as a save may leave it: `\n` line endings, no spaces at line ends, a single blank
-/// line where there were more, nothing around the whole.
+/// Whether the clip at `path` keeps its in/out points in its `.comment.txt`, as an `In/Out:`
+/// line: a format whose video does not take them, or a video that refused them, keeps them
+/// there whatever the setting says.
+pub fn points_in_comment_file(path: &Path) -> bool {
+    let (_, line) = crate::metadata::split_in_out_line(&crate::comment::load_comment(path));
+    line.start.is_some() || line.end.is_some()
+}
+
+/// `comment` as a save may leave it: `\n` line endings, control characters as the spaces the
+/// video stores them as, no spaces at line ends, a single blank line where there were more,
+/// nothing around the whole.
 fn tidy_comment(comment: &str) -> String {
+    let comment: String = comment
+        .chars()
+        .map(|c| {
+            if c.is_control() && !matches!(c, '\n' | '\r' | '\t') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
     let mut lines: Vec<&str> = Vec::new();
     for line in comment.lines().map(str::trim_end) {
         if line.is_empty() && lines.last().is_some_and(|last| last.is_empty()) {
@@ -1374,6 +1393,10 @@ mod tests {
             &with("A note\n\nAI: A walk."),
             true
         ));
+        assert!(
+            !comment_or_points_not_saved(&with("ctl\u{b}x\u{c}y"), &with("ctl x y"), false),
+            "the video stores control characters as spaces"
+        );
         let mut points = with("A note");
         points.set_segment_start(Some(1.0));
         points.set_segment_end(Some(4.0));

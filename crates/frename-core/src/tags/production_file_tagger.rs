@@ -708,6 +708,44 @@ mod tests {
             crate::recovery::comment_or_points_not_saved(&points_only, &saved, true),
             "points kept in the comment file that did not change are told too"
         );
+
+        // With the default storage, a video that refuses the XMP (read-only here) has its
+        // comment and points kept in the comment file; a read-only one keeps the old points,
+        // and that is told too.
+        let path = clip_named("read-only-comment-video", "clip.mov");
+        let video_permissions = std::fs::metadata(&path).expect("clip").permissions();
+        let mut read_only = video_permissions.clone();
+        read_only.set_readonly(true);
+        std::fs::set_permissions(&path, read_only).expect("read-only video");
+        let mut old = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        old.set_comment("Note".to_string());
+        old.set_segment_start(Some(0.05));
+        old.set_segment_end(Some(0.1));
+        let path = tagger.save_with(&old, &path, ADOBE);
+        assert!(
+            crate::recovery::points_in_comment_file(&path),
+            "kept in the text"
+        );
+        let comment_file = crate::comment::comment_path(&path);
+        let mut permissions = std::fs::metadata(&comment_file)
+            .expect("written")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&comment_file, permissions.clone()).expect("read-only");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        wanted.set_segment_start(Some(0.1));
+        wanted.set_segment_end(Some(0.15));
+        let saved_path = tagger.save_with(&wanted, &path, ADOBE);
+        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        let _ = std::fs::set_permissions(&comment_file, permissions);
+        let _ = std::fs::set_permissions(&saved_path, video_permissions);
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            crate::recovery::points_in_comment_file(&saved_path)
+        ));
     }
 
     /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a
