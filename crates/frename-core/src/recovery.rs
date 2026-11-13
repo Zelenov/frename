@@ -426,12 +426,11 @@ fn restore_all_in(dir: &Path) -> Vec<Restored> {
             });
             continue;
         };
-        // The entry was made on the old name. The save that renamed the clip may have written
-        // its metadata into it first, so the clip is the entry's when it is the one renamed.
+        // The entry was made on the old name. Its own size and time stay: when the save that
+        // renamed the clip had written newer edits into it, the clip changed since the entry
+        // and the entry is kept aside, as after a crash without a rename.
         if let Some(rename) = renamed.iter().find(|r| r.from == entry.path) {
             entry.path = rename.to.clone();
-            entry.size = rename.size;
-            entry.modified_ms = rename.modified_ms;
         }
         reports.push(restore_one(dir, &file, &entry));
     }
@@ -657,22 +656,13 @@ fn remove_intent(file: Option<&Path>) {
     }
 }
 
-/// A rename an earlier run finished on the video only.
-struct FinishedRename {
-    from: PathBuf,
-    to: PathBuf,
-    /// The video's size and modification time, as the intent recorded them.
-    size: u64,
-    modified_ms: u64,
-}
-
 /// Finish the clip renames an earlier run started and did not end: when the video is under its
 /// new name, is the video that was renamed, and the old name is gone, the sidecars still under
 /// the old name are moved after it (never over a file). An intent whose rename never happened
 /// (the old name is still there) or whose new name now holds another file is forgotten; one
-/// whose folder cannot be reached (neither name exists: a drive not mounted yet) is kept for a
-/// later start.
-fn finish_renames_in(journal: &Path) -> Vec<FinishedRename> {
+/// whose folder cannot be reached (a drive not mounted yet) is kept for a later start.
+/// Returns the renames it finished.
+fn finish_renames_in(journal: &Path) -> Vec<RenameIntent> {
     let dir = renames_dir(journal);
     let Ok(read) = std::fs::read_dir(&dir) else {
         return Vec::new();
@@ -695,33 +685,53 @@ fn finish_renames_in(journal: &Path) -> Vec<FinishedRename> {
             let _ = std::fs::remove_file(&file);
             continue;
         };
-        let RenameIntent {
-            from,
-            to,
-            size,
-            modified_ms,
-            ..
-        } = intent;
-        if !from.exists() && !to.exists() {
-            log::info!("recovery: {to:?} cannot be reached; its rename waits for a later start");
+        if !intent.to.parent().is_some_and(Path::is_dir) {
+            log::info!(
+                "recovery: the folder of {:?} cannot be reached; its rename waits",
+                intent.to
+            );
             continue;
         }
-        // The old name still there: the rename did not happen (or only changed the case of the
-        // name, on a file system where the sidecars are found in any case). Another file under
-        // the new name: not the renamed video, whose sidecars must not go to it.
-        if !from.exists() && fingerprint(&to) == Some((size, modified_ms)) {
-            crate::tags::rename_sidecars(&from, &to);
-            log::info!("recovery: finished the rename {from:?} → {to:?}");
-            finished.push(FinishedRename {
-                from,
-                to,
-                size,
-                modified_ms,
-            });
+        // Another file under the new name is not the renamed video: its sidecars stay.
+        let renamed = (!intent.from.exists() || case_change_done(&intent.from, &intent.to))
+            && fingerprint(&intent.to) == Some((intent.size, intent.modified_ms));
+        if renamed {
+            crate::tags::rename_sidecars(&intent.from, &intent.to);
+            log::info!(
+                "recovery: finished the rename {:?} → {:?}",
+                intent.from,
+                intent.to
+            );
+            finished.push(intent);
         }
         let _ = std::fs::remove_file(&file);
     }
     finished
+}
+
+/// Whether a rename that only changes the case of the name (`Clip.MOV` → `Clip.mov`) happened on
+/// a file system where both spellings are one file (Windows, macOS): the folder lists the new
+/// spelling and not the old one.
+fn case_change_done(from: &Path, to: &Path) -> bool {
+    let (Some(old), Some(new)) = (from.file_name(), to.file_name()) else {
+        return false;
+    };
+    if old == new
+        || from.parent() != to.parent()
+        || !old
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&new.to_string_lossy())
+    {
+        return false;
+    }
+    let Some(Ok(entries)) = to.parent().map(std::fs::read_dir) else {
+        return false;
+    };
+    let names: Vec<_> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.file_name())
+        .collect();
+    names.iter().any(|n| n == new) && !names.iter().any(|n| n == old)
 }
 
 #[cfg(test)]
@@ -1018,9 +1028,10 @@ mod tests {
     }
 
     /// With the comment kept in the video, the save writes it there before the rename, so the
-    /// clip grew since the entry was made: it is still the entry's clip, and gets the edits.
+    /// clip changed since the entry was made: the save may hold newer edits than the entry, so
+    /// the entry is kept aside (as after a crash without a rename), never applied over them.
     #[test]
-    fn an_entry_finds_its_clip_after_the_save_wrote_into_it() {
+    fn an_entry_older_than_what_the_cut_save_wrote_is_kept_aside() {
         let dir = temp_dir("rename-cut-xmp");
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.mov");
         let from = dir.join("clip.mov");
@@ -1044,37 +1055,52 @@ mod tests {
 
         let reports = restore_all_in(&journal);
         assert!(
-            matches!(reports.as_slice(), [Restored::Applied { .. }]),
+            matches!(
+                reports.as_slice(),
+                [Restored::Kept {
+                    why: KeptWhy::ClipChanged,
+                    ..
+                }]
+            ),
             "{reports:?}"
         );
     }
 
-    /// Neither name there: the clip's drive is not mounted yet. The intent waits for a start
-    /// that can reach it.
+    /// The clip's folder cannot be reached (a drive not mounted yet): the intent waits for a
+    /// start that can reach it. A folder that is there but holds neither name drops it.
     #[test]
     fn a_rename_on_a_drive_not_mounted_waits() {
-        let dir = temp_dir("rename-unmounted");
+        let root = temp_dir("rename-unmounted");
+        let dir = root.join("drive");
+        std::fs::create_dir_all(&dir).expect("drive");
         let from = clip(&dir);
         let to = dir.join("pick.clip.mp4");
-        let journal = dir.join("recovery");
+        let journal = root.join("recovery");
         std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
         assert!(write_intent(&journal, &from, &to).is_some());
-        // "Unmount" it: the video is moved away and comes back later.
-        let away = temp_dir("rename-unmounted-away").join("clip.mp4");
-        std::fs::rename(&from, &away).expect("away");
+        std::fs::rename(&from, &to).expect("rename");
+        // "Unmount" it.
+        let away = root.join("away");
+        std::fs::rename(&dir, &away).expect("unmount");
 
         restore_all_in(&journal);
-        assert_eq!(
+        let intents = || {
             std::fs::read_dir(renames_dir(&journal))
                 .expect("dir")
-                .count(),
-            1,
-            "the intent is kept"
-        );
+                .count()
+        };
+        assert_eq!(intents(), 1, "the intent is kept");
 
-        std::fs::rename(&away, &to).expect("back, renamed");
+        std::fs::rename(&away, &dir).expect("mount");
         restore_all_in(&journal);
         assert!(crate::comment::comment_path(&to).exists(), "finished later");
+        assert_eq!(intents(), 0);
+
+        // The clip deleted after the crash: nothing to wait for.
+        assert!(write_intent(&journal, &to, &dir.join("x.mp4")).is_some());
+        std::fs::remove_file(&to).expect("delete");
+        restore_all_in(&journal);
+        assert_eq!(intents(), 0);
     }
 
     /// Another file under the new name (the renamed clip went on to another name meanwhile and
@@ -1100,6 +1126,23 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// A rename that only changes the case is done when the folder lists the new spelling and not
+    /// the old one; on Windows and macOS the old spelling still "exists" as the same file.
+    #[test]
+    fn a_case_change_is_done_when_the_folder_lists_only_the_new_spelling() {
+        let dir = temp_dir("rename-case");
+        let (old, new) = (dir.join("Clip.MOV"), dir.join("Clip.mov"));
+        std::fs::write(&new, b"video").expect("clip");
+        assert!(case_change_done(&old, &new));
+        assert!(!case_change_done(&dir.join("Other.MOV"), &new));
+        if std::fs::write(&old, b"another").is_ok()
+            && std::fs::read_dir(&dir).expect("dir").count() == 2
+        {
+            // A case-sensitive file system with both: two clips, not a rename.
+            assert!(!case_change_done(&old, &new));
+        }
     }
 
     /// A whole rename moves the video and its sidecars and leaves no intent behind; a failed

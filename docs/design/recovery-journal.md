@@ -69,7 +69,7 @@ What a crash, a kill or a full disk in the middle of each write leaves behind:
 
 | Write | How | Torn write possible? |
 |---|---|---|
-| Rename of the clip and its sidecars | `std::fs::rename` within one folder | Each rename is whole, but the clip is renamed first and its sidecars after it: finished at the next start since #377: a rename intent (`recovery/renames/`, not flushed, so crash and kill, not power cut) is written before the clip moves and finished before the journal is restored. |
+| Rename of the clip and its sidecars | `std::fs::rename` within one folder | Each rename is whole; the clip goes first and its sidecars after it. Since #377 a rename intent (`recovery/renames/`) is written before the clip moves, and the next start moves any sidecar left under the old name before it restores the journal. The intent is not flushed to disk, so this covers a crash or a kill, not a power cut. A journal entry made on the old name is restored on the new one, or kept aside when the save had already written into the clip. |
 | Folder tag file `.frename` | scratch `.frename.tmp`, renamed over | No (already so). |
 | `clip.mp4.comment.txt` | was `std::fs::write` (truncate, then write) | **Was yes:** a crash after the truncate left the comment empty or cut off. Now `write_atomically`: a scratch file `.frename-<hash>.tmp` next to it, renamed over. A read-only file is refused, as before. |
 | Marker text files (`clip.markers.txt`, Export… to any `.txt`) | was `std::fs::write` | **Was yes**, same fix. |

@@ -78,7 +78,8 @@ pub fn remove_comment_file(file_path: &Path) {
 }
 
 /// Rename the comment file when its parent file is renamed.
-/// If no comment file exists, does nothing.
+/// If no comment file exists, does nothing. Never overwrites another clip's comment (a change
+/// of case only is allowed).
 pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
     let old_comment = comment_path(old_file_path);
     let new_comment = comment_path(new_file_path);
