@@ -2245,7 +2245,7 @@ impl FolderWorkspace {
                 &snapshot,
                 &snapshot_after_save,
                 frename_core::metadata_storage().in_out == frename_core::InOutStorage::Comment
-                    || frename_core::recovery::points_in_comment_file(&new_path),
+                    || frename_core::recovery::points_kept_in_text(&new_path),
             );
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.

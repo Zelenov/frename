@@ -682,6 +682,11 @@ mod tests {
             .open(&comment_file)
             .is_ok()
         {
+            // CI runs as a normal user: there, a writable read-only file is a broken setup.
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "read-only files are writable in CI"
+            );
             eprintln!("read-only files are writable here (root?): nothing to check");
             return;
         }
@@ -723,7 +728,7 @@ mod tests {
         old.set_segment_end(Some(0.1));
         let path = tagger.save_with(&old, &path, ADOBE);
         assert!(
-            crate::recovery::points_in_comment_file(&path),
+            crate::recovery::points_kept_in_text(&path),
             "kept in the text"
         );
         let comment_file = crate::comment::comment_path(&path);
@@ -744,8 +749,46 @@ mod tests {
         assert!(crate::recovery::comment_or_points_not_saved(
             &wanted,
             &saved,
-            crate::recovery::points_in_comment_file(&saved_path)
+            crate::recovery::points_kept_in_text(&saved_path)
         ));
+
+        // The same, with a comment file that has no points yet: the read-only video cannot take
+        // the new ones and the comment file cannot either, and that is told too.
+        let path = clip_named("read-only-comment-no-points", "clip.mov");
+        let mut old = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        old.set_comment("Note".to_string());
+        let path = tagger.save_with(&old, &path, TEXT);
+        let comment_file = crate::comment::comment_path(&path);
+        let video_permissions = std::fs::metadata(&path).expect("clip").permissions();
+        let mut permissions = std::fs::metadata(&comment_file)
+            .expect("written")
+            .permissions();
+        for (file, mut read_only) in [
+            (&path, video_permissions.clone()),
+            (&comment_file, permissions.clone()),
+        ] {
+            read_only.set_readonly(true);
+            std::fs::set_permissions(file, read_only).expect("read-only");
+        }
+        assert!(
+            crate::recovery::points_kept_in_text(&path),
+            "the video cannot take them"
+        );
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        wanted.set_segment_start(Some(0.05));
+        wanted.set_segment_end(Some(0.15));
+        let saved_path = tagger.save_with(&wanted, &path, ADOBE);
+        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
+        let told = crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            crate::recovery::points_kept_in_text(&saved_path),
+        );
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        let _ = std::fs::set_permissions(&comment_file, permissions);
+        let _ = std::fs::set_permissions(&saved_path, video_permissions);
+        assert!(told, "points only, into a read-only video and comment file");
     }
 
     /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a

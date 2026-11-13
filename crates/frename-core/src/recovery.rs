@@ -507,7 +507,7 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
 /// The comment is compared without an `In/Out:` line (it reads back as the points), and without
 /// what a save may tidy: line endings, spaces at line ends, runs of blank lines.
 /// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line (the
-/// setting, or [`points_in_comment_file`] for a clip whose video does not take them); only then
+/// setting, or [`points_kept_in_text`] for a clip whose video does not take them); only then
 /// are they compared. Points kept in the video read back other than set even when saved (an in
 /// point at 0 s, an out point at the clip's end).
 pub fn comment_or_points_not_saved(
@@ -519,22 +519,30 @@ pub fn comment_or_points_not_saved(
         return false;
     }
     let (wanted_text, line) = crate::metadata::split_in_out_line(wanted.comment());
-    // Points typed as an `In/Out:` line in the comment are read back as the points: which of
-    // them a save keeps is not this check's question, so the points count only without one.
+    let same_points = |start: Option<f32>, end: Option<f32>| {
+        same_point(start, saved.segment_start()) && same_point(end, saved.segment_end())
+    };
+    // Points typed as an `In/Out:` line in the comment are read back as the points: either the
+    // ones set or the typed ones may be what a save keeps, and either counts as saved.
     let typed_points = line.start.is_some() || line.end.is_some();
+    let set_points = wanted.segment_start().is_some() || wanted.segment_end().is_some();
+    let points_kept = if typed_points {
+        same_points(line.start, line.end)
+            || (set_points && same_points(wanted.segment_start(), wanted.segment_end()))
+    } else {
+        same_points(wanted.segment_start(), wanted.segment_end())
+    };
     tidy_comment(&wanted_text) != tidy_comment(saved.comment())
-        || (points_in_comment
-            && !typed_points
-            && (!same_point(wanted.segment_start(), saved.segment_start())
-                || !same_point(wanted.segment_end(), saved.segment_end())))
+        || (points_in_comment && !points_kept)
 }
 
-/// Whether the clip at `path` keeps its in/out points in its `.comment.txt`, as an `In/Out:`
-/// line: a format whose video does not take them, or a video that refused them, keeps them
-/// there whatever the setting says.
-pub fn points_in_comment_file(path: &Path) -> bool {
-    let (_, line) = crate::metadata::split_in_out_line(&crate::comment::load_comment(path));
-    line.start.is_some() || line.end.is_some()
+/// Whether the clip at `path` keeps its in/out points as an `In/Out:` line, whatever the setting
+/// says: its `.comment.txt` holds one, or the video cannot take them (a format without XMP, a
+/// read-only or locked file), so a save puts them in the comment.
+pub fn points_kept_in_text(path: &Path) -> bool {
+    let path = FileTagger::disk_path(path);
+    let (_, line) = crate::metadata::split_in_out_line(&crate::comment::load_comment(&path));
+    line.start.is_some() || line.end.is_some() || !crate::metadata::video_takes_points(&path)
 }
 
 /// `comment` as a save may leave it: `\n` line endings, control characters as the spaces the
@@ -1418,6 +1426,14 @@ mod tests {
         assert!(
             !comment_or_points_not_saved(&typed_and_set, &read_back, true),
             "typed points are the save's to choose"
+        );
+        assert!(
+            comment_or_points_not_saved(
+                &with("Note\nIn/Out: 00:00:01.000 – end"),
+                &with("Note"),
+                true
+            ),
+            "a typed line the read-only file did not take"
         );
         let mut loading = with("New note");
         loading.set_comment_loading(true);
