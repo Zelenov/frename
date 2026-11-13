@@ -27,7 +27,7 @@ fn name_in_out_re() -> &'static Regex {
 
 /// Whether a dot-part of a name is an in or out point as older versions wrote it
 /// (`in_00_01_05`, `out_00_02_10`, a valid time).
-fn is_name_in_out_part(part: &str) -> bool {
+pub(crate) fn is_name_in_out_part(part: &str) -> bool {
     let Some(caps) = name_in_out_re().captures(part) else {
         return false;
     };

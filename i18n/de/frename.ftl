@@ -779,6 +779,7 @@ tag-grid-save = Zu den Tags des Ordners hinzufügen
 tag-grid-delete = „{ $tag }“ aus den Tags des Ordners löschen
 tag-grid-create = „{ $tag }“ erstellen
 tag-grid-dot-not-allowed = In einem Tag nicht erlaubt: „.“
+tag-grid-in-out-not-allowed = Als Tag nicht erlaubt: In/Out-Punkt
 tag-grid-no-file = Öffne einen Clip, um ihn zu taggen
 tag-grid-no-tags = Noch keine Tags
 tag-grid-no-tags-hint = Tippe einen Namen und drücke Enter, um den ersten zu erstellen.

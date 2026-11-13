@@ -741,6 +741,7 @@ tag-grid-save = Add to the folder's tags
 tag-grid-delete = Delete “{ $tag }” from the folder's tags
 tag-grid-create = Create “{ $tag }”
 tag-grid-dot-not-allowed = Not allowed in a tag: “.”
+tag-grid-in-out-not-allowed = Not allowed as a tag: an In/Out point
 tag-grid-no-file = Open a clip to tag it
 tag-grid-no-tags = No tags yet
 tag-grid-no-tags-hint = Type a name and press Enter to create the first one.

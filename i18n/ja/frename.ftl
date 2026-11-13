@@ -705,6 +705,7 @@ tag-grid-save = フォルダーのタグに追加
 tag-grid-delete = 「{ $tag }」をフォルダーのタグから削除
 tag-grid-create = 「{ $tag }」を作成
 tag-grid-dot-not-allowed = タグには使えません: 「.」
+tag-grid-in-out-not-allowed = タグには使えません: イン/アウト点
 tag-grid-no-file = クリップを開いてタグを付けます
 tag-grid-no-tags = タグはまだありません
 tag-grid-no-tags-hint = 名前を入力して Enter キーを押すと、最初のタグを作成します。

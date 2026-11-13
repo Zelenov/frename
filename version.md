@@ -1,3 +1,7 @@
+# 0.211
+## Fixed
+- A tag named like an old in or out point (`in_00_00_07`) can no longer be created: the clip lost it on the next save. The tag search says why instead of offering to create it.
+
 # 0.209
 ## Fixed
 - A tag can no longer contain a dot: it separates the tags in a file name, so a tag like "v1.2" came back as two tags, "v1" and "2". Typing a name with a dot in the tag search says so instead of offering to create it.
