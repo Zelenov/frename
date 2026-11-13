@@ -554,6 +554,23 @@ pub fn points_in_comment(path: &Path) -> bool {
     crate::metadata_storage().in_out == crate::InOutStorage::Comment || points_kept_in_text(path)
 }
 
+/// [`points_in_comment`] for a save that wanted `wanted` and read back `saved`, looked up only
+/// when their points differ: when they are the same, the answer changes nothing, and the clip's
+/// files are not opened again on every save (#442).
+pub fn points_in_comment_after_save(
+    wanted: &FileSnapshot,
+    saved: &FileSnapshot,
+    path: &Path,
+) -> bool {
+    // Points typed as an `In/Out:` line are compared against the read-back too.
+    let (_, typed) = crate::metadata::split_in_out_line(wanted.comment());
+    let same = typed.start.is_none()
+        && typed.end.is_none()
+        && same_point(wanted.segment_start(), saved.segment_start())
+        && same_point(wanted.segment_end(), saved.segment_end());
+    !same && points_in_comment(path)
+}
+
 /// `comment` as a save may leave it: `\n` line endings, control characters as the spaces the
 /// video stores them as, no spaces at line ends, a single blank line where there were more,
 /// nothing around the whole.
@@ -648,7 +665,11 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
     }
     let wanted = snapshot.clone();
     let (new_path, saved) = snapshot.save_and_reparse(path);
-    if !saved_what_was_wanted(&wanted, &saved, points_in_comment(&new_path)) {
+    if !saved_what_was_wanted(
+        &wanted,
+        &saved,
+        points_in_comment_after_save(&wanted, &saved, &new_path),
+    ) {
         return None;
     }
     // The markers are in the comment now: the video's own go, so the two never disagree. Only
@@ -1403,6 +1424,39 @@ mod tests {
         read_back.set_segment_end(Some(5.0));
         assert!(saved_what_was_wanted(&wanted, &read_back, false));
         assert!(!saved_what_was_wanted(&wanted, &read_back, true));
+    }
+
+    /// #442: the clip's files are looked at only when the points read back other than wanted;
+    /// with the same points the answer is false, and it changes nothing.
+    #[test]
+    fn points_are_looked_up_only_when_they_differ() {
+        let mut wanted = FileSnapshot::parse("clip.mp4");
+        wanted.set_segment_start(Some(1.0));
+        // A path that does not exist: looking it up would say the video cannot take the points.
+        let missing = Path::new("/nonexistent/frename-442/clip.mp4");
+        assert!(!points_in_comment_after_save(
+            &wanted,
+            &wanted.clone(),
+            missing
+        ));
+        let saved = FileSnapshot::parse("clip.mp4");
+        assert!(points_in_comment_after_save(&wanted, &saved, missing));
+        assert!(!comment_or_points_not_saved(
+            &wanted,
+            &wanted.clone(),
+            points_in_comment_after_save(&wanted, &wanted.clone(), missing)
+        ));
+        // A typed line that a read-only file did not take is still looked up, and told.
+        let mut typed = FileSnapshot::parse("clip.mp4");
+        typed.set_comment("Note\nIn/Out: 00:00:01.000 – end".to_string());
+        let mut old = FileSnapshot::parse("clip.mp4");
+        old.set_comment("Note".to_string());
+        assert!(points_in_comment_after_save(&typed, &old, missing));
+        assert!(comment_or_points_not_saved(
+            &typed,
+            &old,
+            points_in_comment_after_save(&typed, &old, missing)
+        ));
     }
 
     /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.

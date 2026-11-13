@@ -1,3 +1,8 @@
+# 0.220
+## Fixed
+- Leaving a clip no longer opens its video a second time to check how its in/out points were saved, unless they read back differently; an online-only clip is no longer downloaded for that check.
+- The note about a comment or in/out points that could not be saved reads better in French, Spanish, Russian, Ukrainian and Japanese.
+
 # 0.219
 ## Fixed
 - An in point at the very start of a clip, or an out point at its very end, no longer brings a note at the next start that your unsaved work was not applied.

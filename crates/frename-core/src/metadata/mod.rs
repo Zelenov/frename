@@ -452,7 +452,9 @@ pub(crate) fn cannot_hold_markers(path: &Path) -> MarkersError {
 /// file opens for writing. When not, a save keeps them in the comment instead (see
 /// [`save_to_xmp`]).
 pub(crate) fn video_takes_points(path: &Path) -> bool {
-    std::fs::OpenOptions::new().write(true).open(path).is_ok() && xmp::can_hold_xmp(path)
+    // A cloud placeholder is left unopened: opening it for writing may download it (#442).
+    xmp::is_cloud_placeholder(path)
+        || (xmp::can_hold_xmp(path) && std::fs::OpenOptions::new().write(true).open(path).is_ok())
 }
 
 /// Length of the clip in milliseconds, when the file's header tells it.

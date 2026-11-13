@@ -2239,7 +2239,11 @@ impl FolderWorkspace {
             !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
         // The comment file (or the video holding the comment) is read-only or locked: the clip
         // reads back with its old comment or in/out points (#425).
-        let points_in_comment = frename_core::recovery::points_in_comment(&new_path);
+        let points_in_comment = frename_core::recovery::points_in_comment_after_save(
+            &snapshot,
+            &snapshot_after_save,
+            &new_path,
+        );
         let comment_or_points_lost = !refused
             && !comment_lost
             && frename_core::recovery::comment_or_points_not_saved(
