@@ -62,6 +62,7 @@ settings-commented-tag = Tag videos with a comment
 settings-commented-tag-name = Tag
 settings-commented-tag-hint = Checked when you write a comment on a video, e.g. { $tag }.IMG_0424.MOV, and unchecked when you clear it (AI descriptions do not count). Otherwise it is yours to change.
 settings-commented-tag-off = Videos with a comment get no tag.
+settings-commented-tag-in-out = Not allowed as a tag: an In/Out point. Videos with a comment get no tag.
 settings-in-out = In/out points
 settings-in-out-in-video = Inside the video file
 settings-in-out-in-video-hint = A subclip marker in Premiere Pro

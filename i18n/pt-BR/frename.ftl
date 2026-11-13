@@ -109,6 +109,7 @@ settings-commented-tag = Adicionar uma tag aos vídeos com comentário
 settings-commented-tag-name = Tag
 settings-commented-tag-hint = É adicionada ao escrever um comentário em um vídeo, p. ex. { $tag }.IMG_0424.MOV, e removida ao apagá-lo (as descrições com IA não contam). No mais, pode ser alterada livremente.
 settings-commented-tag-off = Os vídeos com comentário não recebem tag.
+settings-commented-tag-in-out = Tag não permitida: ponto de entrada/saída. Os vídeos com comentário não recebem tag.
 settings-in-out = Pontos de entrada/saída
 settings-in-out-in-video = Dentro do arquivo de vídeo
 settings-in-out-in-video-hint = Um marcador de subclipe no Premiere Pro

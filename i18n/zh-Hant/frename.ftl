@@ -62,6 +62,7 @@ settings-commented-tag = 為有註解的影片加標籤
 settings-commented-tag-name = 標籤
 settings-commented-tag-hint = 在影片上寫下註解時會勾選，例如 { $tag }.IMG_0424.MOV；清除註解時取消勾選（AI 描述不算）。其餘時候可自行更改。
 settings-commented-tag-off = 有註解的影片不加標籤。
+settings-commented-tag-in-out = 不能用作標籤：入點/出點。有註解的影片不加標籤。
 settings-in-out = 入點／出點
 settings-in-out-in-video = 寫在影片檔內
 settings-in-out-in-video-hint = Premiere Pro 中的子片段標記

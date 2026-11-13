@@ -735,31 +735,46 @@ fn old_settings_import(import: &OldSettingsImport, focused: bool) -> Element<'_,
 /// altogether; the name is kept for when it is turned back on. `focus` is where keyboard focus
 /// is in the window.
 fn commented_tag<'a>(enabled: bool, tag: &'a str, focus: Option<&Control>) -> Element<'a, Message> {
-    let help = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
-        Some(tag) => fl!("settings-commented-tag-hint", tag = tag),
-        None => fl!("settings-commented-tag-off"),
+    // A name can be cleaned and still never be a tag (an In/Out point, #432): the core turns
+    // tagging off for it, and the reason shows under the field, not only in the tooltip.
+    let cleaned = frename_core::clean_commented_tag(tag).filter(|_| enabled);
+    let problem = cleaned.as_deref().is_some_and(|tag| {
+        matches!(
+            frename_core::tag_name_problem(tag),
+            Some(frename_core::TagNameProblem::InOutPoint)
+        )
+    });
+    let help = match cleaned {
+        Some(tag) if !problem => fl!("settings-commented-tag-hint", tag = tag),
+        _ => fl!("settings-commented-tag-off"),
     };
-    column![
+    let field = layout::indented(
+        row![
+            text::body(fl!("settings-commented-tag-name")),
+            form::text_field(frename_core::DEFAULT_COMMENTED_TAG, tag)
+                .id(focus::COMMENTED_TAG_FIELD)
+                .on_input_maybe(enabled.then_some(Message::SetCommentedTag))
+                .width(FIELD_WIDTH_S),
+            layout::info(help),
+        ]
+        .spacing(SPACE_S)
+        .align_y(Alignment::Center),
+    );
+    let mut items = column![
         ring(
             form::checkbox(fl!("settings-commented-tag"), enabled)
                 .on_toggle(Message::SetCommentedTagEnabled),
             focus == Some(&Control::CommentedTagEnabled),
         ),
-        layout::indented(
-            row![
-                text::body(fl!("settings-commented-tag-name")),
-                form::text_field(frename_core::DEFAULT_COMMENTED_TAG, tag)
-                    .id(focus::COMMENTED_TAG_FIELD)
-                    .on_input_maybe(enabled.then_some(Message::SetCommentedTag))
-                    .width(FIELD_WIDTH_S),
-                layout::info(help),
-            ]
-            .spacing(SPACE_S)
-            .align_y(Alignment::Center),
-        ),
+        field,
     ]
-    .spacing(SPACE_S)
-    .into()
+    .spacing(SPACE_S);
+    if problem {
+        items = items.push(layout::indented(text::error(fl!(
+            "settings-commented-tag-in-out"
+        ))));
+    }
+    items.into()
 }
 
 /// Shown after a storage change: the setting only decides where things are saved from now

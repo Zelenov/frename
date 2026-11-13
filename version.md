@@ -1,3 +1,7 @@
+# 0.214
+## Fixed
+- Settings now says when the tag for videos with a comment is named like an In/Out point (`in_00_00_07`), which can never be a tag. Such a name turns that tag off instead of silently never appearing.
+
 # 0.213
 ## Fixed
 - An old tag whose name a file name cannot hold ("AC/DC", "v1.2") can no longer be put on a clip, where it was lost or broke the name on save. A note says to delete it and make one with another name.

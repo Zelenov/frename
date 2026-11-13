@@ -248,10 +248,11 @@ pub const DEFAULT_COMMENTED_TAG: &str = "Commented";
 static COMMENTED_TAG: RwLock<Cow<'static, str>> = RwLock::new(Cow::Borrowed(DEFAULT_COMMENTED_TAG));
 
 /// Choose the tag for commented videos; see [`DEFAULT_COMMENTED_TAG`]. Characters a tag
-/// cannot hold are dropped; an empty tag turns the feature off. Videos keep the old tag
-/// until they are saved, and the old one is not removed.
+/// cannot hold are dropped; an empty tag, or one that can never be a tag (an In/Out point,
+/// see [`crate::tag_name_problem`]), turns the feature off. Videos keep the old tag until they
+/// are saved, and the old one is not removed.
 pub fn set_commented_tag(tag: &str) {
-    let tag = clean_commented_tag(tag).map_or(Cow::Borrowed(""), Cow::Owned);
+    let tag = usable_commented_tag(tag).map_or(Cow::Borrowed(""), Cow::Owned);
     if let Ok(mut current) = COMMENTED_TAG.write() {
         *current = tag;
     }
@@ -277,6 +278,13 @@ pub fn clean_commented_tag(tag: &str) -> Option<String> {
         .collect();
     let cleaned = cleaned.trim();
     (!cleaned.is_empty()).then(|| cleaned.to_string())
+}
+
+/// The tag [`set_commented_tag`] uses for `tag`: [cleaned](clean_commented_tag), and `None`
+/// when what is left can never be a tag (an In/Out point, see [`crate::tag_name_problem`]),
+/// which would never appear on a clip (#432).
+pub(crate) fn usable_commented_tag(tag: &str) -> Option<String> {
+    clean_commented_tag(tag).filter(|tag| crate::is_allowed_tag_name(tag))
 }
 
 /// The commented tag to follow comments with now: [`commented_tag`] while comments are stored
@@ -988,6 +996,23 @@ mod tests {
             Some("Commented".to_string())
         );
         assert_eq!(clean_commented_tag(" . "), None);
+    }
+
+    /// #432: a name that reads as an In/Out point can never be a tag, so it turns tagging off
+    /// instead of looking valid and never appearing.
+    #[test]
+    fn a_commented_tag_named_like_an_in_out_point_is_not_used() {
+        assert_eq!(usable_commented_tag("in_00_00_07"), None);
+        assert_eq!(usable_commented_tag(" out_01_02_03 "), None);
+        assert_eq!(
+            usable_commented_tag("in.00_00_07"),
+            Some("in00_00_07".to_string())
+        );
+        assert_eq!(
+            usable_commented_tag(" Com.ment:ed "),
+            Some("Commented".to_string())
+        );
+        assert_eq!(usable_commented_tag(" . "), None);
     }
 
     #[test]
