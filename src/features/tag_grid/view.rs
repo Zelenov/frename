@@ -133,7 +133,7 @@ where
         if frename_core::is_allowed_tag_name(filter) {
             cell::create(filter)
         } else {
-            cell::not_allowed()
+            cell::not_allowed(filter)
         }
     });
     column![]
