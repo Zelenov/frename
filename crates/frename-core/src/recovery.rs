@@ -485,11 +485,15 @@ fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
 /// Whether a save lost the comment: `wanted` had one, and the clip read back after the save has
 /// none. That is a comment text file that could not be written (#416): the clip's name is too
 /// close to the 255-character limit for `<name>.comment.txt`, or the folder refuses it. A
-/// snapshot whose comment was not read stays out.
+/// snapshot whose comment was not read stays out, and so does a comment of only an `In/Out:`
+/// line (it reads back as the in/out points).
 pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    // An `In/Out:` line is read back as the in/out points, not as comment text: a comment of
+    // only that line is saved when it reads back empty.
+    let (text, _) = crate::metadata::split_in_out_line(wanted.comment());
     !wanted.comment_loading()
         && !saved.comment_loading()
-        && !wanted.comment().trim().is_empty()
+        && !text.trim().is_empty()
         && saved.comment().trim().is_empty()
 }
 
@@ -1250,6 +1254,29 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// #416: only a comment the editor wrote that reads back empty is lost; one still loading,
+    /// only whitespace, or only an `In/Out:` line (read back as the points) is not.
+    #[test]
+    fn a_lost_comment_is_one_that_had_text_and_reads_back_empty() {
+        let with = |comment: &str| {
+            let mut snapshot = FileSnapshot::parse("clip.mp4");
+            snapshot.set_comment(comment.to_string());
+            snapshot
+        };
+        let empty = with("");
+        assert!(comment_not_saved(&with("A note"), &empty));
+        assert!(!comment_not_saved(&with("A note"), &with("A note")));
+        assert!(!comment_not_saved(&with("  \n "), &empty));
+        assert!(!comment_not_saved(
+            &with("In/Out: 00:00:00.050 – end"),
+            &empty
+        ));
+        let mut loading = with("A note");
+        loading.set_comment_loading(true);
+        assert!(!comment_not_saved(&loading, &empty));
+        assert!(!comment_not_saved(&with("A note"), &loading));
     }
 
     #[test]

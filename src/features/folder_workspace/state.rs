@@ -2236,11 +2236,12 @@ impl FolderWorkspace {
                 Self::notice(&fl!("folder-not-saved"))
             }
         } else if frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save) {
-            // Its text file could not be written (#416); the journal keeps a copy. A comment
-            // that is gone must be read, not glanced at: the long note.
-            Task::done(Message::MediaViewer(media_viewer::Message::Video(
-                media_viewer_video::Message::ShowLongNotice(fl!("folder-comment-not-saved")),
-            )))
+            // Its text file could not be written (#416); the journal keeps a copy. It shows over
+            // the next clip, so it names this one.
+            Self::long_notice(fl!(
+                "folder-comment-not-saved",
+                name = short_file_name(&path_before)
+            ))
         } else {
             Task::none()
         };
@@ -3716,6 +3717,23 @@ impl FolderWorkspace {
     pub fn folder_width(&self) -> f32 {
         self.folder_width
     }
+}
+
+/// The file name of `path` for a note, at most 40 characters: a longer one keeps its start
+/// and its end around "…" (#416: the names that lose a comment are the longest).
+fn short_file_name(path: &std::path::Path) -> String {
+    const MAX: usize = 40;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let chars: Vec<char> = name.chars().collect();
+    if chars.len() <= MAX {
+        return name;
+    }
+    let head: String = chars[..MAX / 2].iter().collect();
+    let tail: String = chars[chars.len() - (MAX / 2 - 1)..].iter().collect();
+    format!("{head}…{tail}")
 }
 
 /// Why `typed` cannot replace `current` as a file name in `folder`, if it cannot. A rename
@@ -6067,6 +6085,19 @@ mod tests {
             ),
             Ok(()),
             "case-only rename"
+        );
+    }
+
+    /// #416: a note names a long clip by its start and end.
+    #[test]
+    fn a_long_file_name_is_shortened_in_the_middle_for_a_note() {
+        let long = format!("{}.webm", "я".repeat(122));
+        let short = super::short_file_name(std::path::Path::new(&long));
+        assert_eq!(short.chars().count(), 40);
+        assert!(short.starts_with("яяя") && short.ends_with("я.webm") && short.contains('…'));
+        assert_eq!(
+            super::short_file_name(std::path::Path::new("/a/clip.mov")),
+            "clip.mov"
         );
     }
 

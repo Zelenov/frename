@@ -652,6 +652,13 @@ impl FolderWorkspace {
         Task::done(Self::notice_message(text))
     }
 
+    /// Show a note that must be read, not glanced at, over the video's picture: it stays long.
+    pub(super) fn long_notice(text: String) -> Task<Message> {
+        Task::done(Message::MediaViewer(media_viewer::Message::Video(
+            video::Message::ShowLongNotice(text),
+        )))
+    }
+
     /// The message that shows a short note over the video's picture, for a task's outcome.
     pub(super) fn notice_message(text: &str) -> Message {
         Message::MediaViewer(media_viewer::Message::Video(video::Message::ShowNotice(
