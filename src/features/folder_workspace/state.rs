@@ -762,8 +762,11 @@ impl FolderWorkspace {
                 let Some(file_path) = self.open_clip_path() else {
                     return Task::none();
                 };
-                frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg);
-                Self::notice(&fl!("folder-frame-saved"))
+                // Said either way: a frame that could not be written is not "saved" (#424).
+                match frename_core::FileTagger::save_screenshot(&file_path, position_ms, &jpeg) {
+                    Ok(()) => Self::notice(&fl!("folder-frame-saved")),
+                    Err(_) => Self::notice(&fl!("folder-frame-not-saved")),
+                }
             }
             Message::CopyTimecode | Message::PasteTimecode
                 if !self.media_viewer.is_previewable() =>

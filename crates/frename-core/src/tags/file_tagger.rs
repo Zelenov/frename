@@ -311,9 +311,14 @@ impl FileTagger {
         backend().rotate_video(path, quarter_turns)
     }
 
-    /// Save a screenshot image for the given file and position.
-    pub fn save_screenshot(file_path: &Path, position_ms: u64, image_data: &[u8]) {
-        backend().save_screenshot(file_path, position_ms, image_data);
+    /// Save a screenshot image for the given file and position. An error says it was not
+    /// written (#424).
+    pub fn save_screenshot(
+        file_path: &Path,
+        position_ms: u64,
+        image_data: &[u8],
+    ) -> std::io::Result<()> {
+        backend().save_screenshot(file_path, position_ms, image_data)
     }
 
     /// Load the raw image bytes for a screenshot by position.

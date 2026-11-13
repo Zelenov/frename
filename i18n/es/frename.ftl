@@ -887,6 +887,7 @@ recovery-comment = comentario
 recovery-in-out = puntos de entrada/salida
 recovery-edits = ediciones
 folder-frame-saved = Fotograma guardado
+folder-frame-not-saved = Fotograma no guardado: el nombre de archivo es demasiado largo o la carpeta es de solo lectura
 folder-not-saved = No guardado: ya existe un archivo con ese nombre, o es de solo lectura o está en uso
 folder-comment-not-saved = El comentario de { $name } no se guardó: no se pudo escribir su archivo .comment.txt (el nombre de archivo es demasiado largo o la carpeta es de solo lectura). Acortar el nombre si es largo y volver a escribir el comentario.
 markers-deleted-notice = Marcador eliminado
