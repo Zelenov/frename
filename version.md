@@ -2,6 +2,10 @@
 ## Fixed
 - A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save, with a note wrongly blaming the file name: the character becomes a space.
 
+# 0.215
+## Fixed
+- When a changed comment or in/out points cannot be written, because the comment file or the video is read-only or open in another program, a note now names the clip and says why.
+
 # 0.214
 ## Fixed
 - Settings now says when the tag for videos with a comment is named like an In/Out point (`in_00_00_07`), which can never be a tag. Such a name turns that tag off instead of silently never appearing.

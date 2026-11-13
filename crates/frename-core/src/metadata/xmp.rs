@@ -183,6 +183,21 @@ pub(super) fn clip_length_ms(path: &Path) -> Option<u64> {
     length
 }
 
+/// Whether the toolkit has a handler for the file's format (it can hold XMP at all). A cloud
+/// placeholder is left unopened and counts as able.
+pub(super) fn can_hold_xmp(path: &Path) -> bool {
+    if is_cloud_placeholder(path) {
+        return true;
+    }
+    match open(path, OpenFileOptions::default().for_read()) {
+        Ok(mut file) => {
+            file.close();
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 /// Bring the file's clip markers in line with `markers`; see [`super::markers_xmp::apply_markers`]
 /// for what `known` means. Does not touch the file when nothing differs, and keeps its times.
 pub(super) fn write_markers(

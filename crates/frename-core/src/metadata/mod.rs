@@ -448,6 +448,13 @@ pub(crate) fn cannot_hold_markers(path: &Path) -> MarkersError {
     }
 }
 
+/// Whether a save can put in/out points into the video at `path`: its format holds XMP and the
+/// file opens for writing. When not, a save keeps them in the comment instead (see
+/// [`save_to_xmp`]).
+pub(crate) fn video_takes_points(path: &Path) -> bool {
+    std::fs::OpenOptions::new().write(true).open(path).is_ok() && xmp::can_hold_xmp(path)
+}
+
 /// Length of the clip in milliseconds, when the file's header tells it.
 pub(crate) fn clip_length_ms(path: &Path) -> Option<u64> {
     xmp::clip_length_ms(path)
