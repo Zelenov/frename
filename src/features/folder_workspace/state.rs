@@ -2228,6 +2228,8 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
+        let comment_lost =
+            !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
             if self.marker_reading_clip() {
@@ -2235,7 +2237,7 @@ impl FolderWorkspace {
             } else {
                 Self::notice(&fl!("folder-not-saved"))
             }
-        } else if frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save) {
+        } else if comment_lost {
             // Its text file could not be written (#416); the journal keeps a copy. It shows over
             // the next clip, so it names this one.
             Self::long_notice(fl!(
@@ -2274,7 +2276,8 @@ impl FolderWorkspace {
                 // only records that this one was said.
                 let notice =
                     self.keep_unsaved_markers(id, wanted, &marker_actions::markers_not_saved());
-                if !refused {
+                // The note that the comment was lost covers the marker lines it held.
+                if !refused && !comment_lost {
                     markers_notice = notice;
                 }
             }

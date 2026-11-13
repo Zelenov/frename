@@ -1,6 +1,6 @@
 # 0.208
 ## Fixed
-- A comment that cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder) now says so, naming the clip, instead of disappearing.
+- When a comment cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder), frename now says so instead of losing it silently.
 
 # 0.206
 ## Fixed

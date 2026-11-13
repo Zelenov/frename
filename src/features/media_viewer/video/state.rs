@@ -96,6 +96,9 @@ struct Notice {
     /// It says where the clip continued (#161): a click on it starts the clip over, and it goes
     /// with that clip, unlike other notes, which outlive an unload (#84).
     starts_over: bool,
+    /// It must be read, not glanced at (`ShowLongNotice`): a note that only says where the clip
+    /// continued does not replace it (#416).
+    long: bool,
 }
 
 /// What a clip being loaded continues from once it is open (#161).
@@ -1182,22 +1185,34 @@ impl VideoPlayerState {
 
     /// Show `text` over the picture for `duration`; a newer note replaces it.
     fn show_notice(&mut self, text: String, duration: Duration) -> Task<Message> {
-        self.show(text, duration, false)
+        let long = duration >= LONG_NOTICE_DURATION;
+        self.show(text, duration, false, long)
     }
 
     /// Show the note that says where the clip continued: it starts the clip over when clicked
     /// and goes with the clip.
     fn show_resume_note(&mut self, text: String) -> Task<Message> {
-        self.show(text, RESUME_NOTICE_DURATION, true)
+        // A note that must be read (a comment that was not saved, what a crash left) stays.
+        if self.notice.as_ref().is_some_and(|notice| notice.long) {
+            return Task::none();
+        }
+        self.show(text, RESUME_NOTICE_DURATION, true, false)
     }
 
-    fn show(&mut self, text: String, duration: Duration, starts_over: bool) -> Task<Message> {
+    fn show(
+        &mut self,
+        text: String,
+        duration: Duration,
+        starts_over: bool,
+        long: bool,
+    ) -> Task<Message> {
         self.notice_count += 1;
         let number = self.notice_count;
         self.notice = Some(Notice {
             text,
             number,
             starts_over,
+            long,
         });
         Task::future(async move {
             tokio::time::sleep(duration).await;
@@ -2048,6 +2063,23 @@ mod tests {
         player.more_open()
     }
 
+    /// #416: the note that a comment was not saved shows over the next clip; that clip saying
+    /// where it continued does not replace it, while a short note gives way as before.
+    #[test]
+    fn a_long_note_is_not_replaced_by_where_the_clip_continued() {
+        let mut player = VideoPlayerState::default();
+        let _ = player.update(Message::ShowLongNotice(
+            "The comment was not saved".to_string(),
+        ));
+        player.pretend_resume_note();
+        assert_eq!(player.notice(), Some("The comment was not saved"));
+
+        let mut player = VideoPlayerState::default();
+        let _ = player.update(Message::ShowNotice("Copied".to_string()));
+        player.pretend_resume_note();
+        assert_eq!(player.notice(), Some("Resumed at 00:40"));
+    }
+
     #[test]
     fn a_frame_step_is_slow_after_300_ms_of_waiting() {
         let since = Instant::now();
@@ -2695,6 +2727,7 @@ mod tests {
             text: text.to_string(),
             number: 1,
             starts_over,
+            long: false,
         })
     }
 
