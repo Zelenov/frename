@@ -1,3 +1,7 @@
+# 0.217
+## Fixed
+- A marker whose name or comment holds an invisible NUL character (it can come with a paste) no longer stops every marker of the clip from being saved: the character becomes a space.
+
 # 0.216
 ## Fixed
 - A comment kept inside the video that holds an invisible NUL character (it can come with a paste) is no longer wiped on save, with a note wrongly blaming the file name: the character becomes a space.

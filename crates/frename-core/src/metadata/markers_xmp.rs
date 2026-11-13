@@ -67,13 +67,14 @@ fn field(meta: &XmpMeta, path: &str, name: &str) -> Option<String> {
 }
 
 fn set_field(meta: &mut XmpMeta, path: &str, name: &str, value: &str) -> Result<(), XmpError> {
-    meta.set_struct_field(
-        XMP_DM,
-        path,
-        XMP_DM,
-        name,
-        &XmpValue::new(value.to_string()),
-    )
+    meta.set_struct_field(XMP_DM, path, XMP_DM, name, &XmpValue::new(xmp_text(value)))
+}
+
+/// `value` as the toolkit can store it: it refuses a NUL, which a pasted marker name or comment
+/// can hold, and every marker of the clip would stay unsaved (#445). A space takes its place,
+/// as in the comment (#441).
+fn xmp_text(value: &str) -> String {
+    value.replace('\0', " ")
 }
 
 /// Set a text field, or remove it when `value` is empty.
@@ -289,11 +290,11 @@ fn update_marker(
         }
         changed = true;
     }
-    if current.name != marker.name {
+    if current.name != xmp_text(&marker.name) {
         set_or_remove(meta, path, "name", &marker.name)?;
         changed = true;
     }
-    if current.comment != marker.comment {
+    if current.comment != xmp_text(&marker.comment) {
         set_or_remove(meta, path, "comment", &marker.comment.replace('\n', "\r"))?;
         changed = true;
     }
