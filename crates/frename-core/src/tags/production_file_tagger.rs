@@ -262,17 +262,21 @@ impl FileTaggerBackend for ProductionFileTagger {
         rotated
     }
 
-    fn save_screenshot(&self, file_path: &Path, position_ms: u64, image_data: &[u8]) {
+    fn save_screenshot(
+        &self,
+        file_path: &Path,
+        position_ms: u64,
+        image_data: &[u8],
+    ) -> std::io::Result<()> {
         let path = screenshot_path(file_path, position_ms);
         log::info!(
             "save_screenshot: writing {} bytes to {:?}",
             image_data.len(),
             path
         );
-        match std::fs::write(&path, image_data) {
-            Ok(()) => log::info!("save_screenshot: ok"),
-            Err(e) => log::error!("save_screenshot: failed {:?}: {}", path, e),
-        }
+        std::fs::write(&path, image_data)
+            .inspect(|()| log::info!("save_screenshot: ok"))
+            .inspect_err(|e| log::error!("save_screenshot: failed {:?}: {}", path, e))
     }
 
     #[allow(dead_code)]
@@ -613,6 +617,20 @@ mod tests {
         let saved_path = tagger.save_with(&wanted, &short, TEXT);
         let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
         assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+    }
+
+    /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a
+    /// 248-byte name; the frame's would be 270, over the 255-byte limit of ext4 and APFS) says it
+    /// was not written; a short name's is written.
+    #[cfg(unix)]
+    #[test]
+    fn a_frame_that_cannot_be_written_says_so() {
+        let tagger = ProductionFileTagger;
+        let long = clip_named("long-name-frame", &format!("{}.mov", "я".repeat(122)));
+        assert!(tagger.save_screenshot(&long, 10_936, b"jpeg").is_err());
+        let short = clip_named("short-name-frame", "clip.mov");
+        assert!(tagger.save_screenshot(&short, 10_936, b"jpeg").is_ok());
+        assert!(screenshot_path(&short, 10_936).exists());
     }
 
     #[test]

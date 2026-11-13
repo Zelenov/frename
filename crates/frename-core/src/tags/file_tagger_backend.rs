@@ -99,7 +99,16 @@ pub trait FileTaggerBackend: Send + Sync {
 
     /// Save a screenshot image for the given file and position.
     /// `image_data` is raw JPEG bytes (e.g. from GStreamer). Pass `&[]` to create an empty placeholder.
-    fn save_screenshot(&self, _file_path: &Path, _position_ms: u64, _image_data: &[u8]) {}
+    /// An error says the file could not be written (#424: a clip's name too long for
+    /// `<name>.snap.HH-MM-SS-mmm.jpg`, a read-only folder).
+    fn save_screenshot(
+        &self,
+        _file_path: &Path,
+        _position_ms: u64,
+        _image_data: &[u8],
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
 
     /// Load the raw image bytes for a screenshot by position.
     #[allow(dead_code)]

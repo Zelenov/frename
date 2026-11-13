@@ -1,3 +1,7 @@
+# 0.210
+## Fixed
+- A frame that cannot be saved next to its clip (a very long file name, or a read-only folder) now says so, instead of saying "Frame saved".
+
 # 0.208
 ## Fixed
 - When a comment cannot be saved to its `.comment.txt` file (a very long file name, or a read-only folder), frename now says so instead of losing it silently.
