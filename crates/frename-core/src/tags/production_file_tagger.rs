@@ -162,7 +162,8 @@ impl ProductionFileTagger {
         // for the check and the rename alike.
         let keep_stem_files = new_path != path && crate::subtitles::keeps_stem_files(path);
         if new_path != path
-            && super::file_tagger::target_name_taken_with(path, &new_path, keep_stem_files)
+            && (super::file_tagger::target_name_taken_with(path, &new_path, keep_stem_files)
+                || super::file_tagger::stem_held_by_another_video(path, &new_path))
         {
             log::error!(
                 "ProductionFileTagger: not saving {:?}: {:?} (or a sidecar) already exists",
@@ -621,6 +622,21 @@ mod tests {
         let saved_path = tagger.save_with(&wanted, &short, TEXT);
         let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
         assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+    }
+
+    /// #417: a save never makes a clip join a name whose subtitles another video holds.
+    #[test]
+    fn a_save_does_not_join_a_name_whose_subtitles_another_video_holds() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("stem-held-save", "Drink.A001.mov");
+        let owner = path.with_file_name("Food.A001.mp4");
+        std::fs::write(&owner, b"mp4").expect("owner");
+        std::fs::write(path.with_file_name("Food.A001.srt"), "1").expect("srt");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_tags(["Food"]);
+        assert_eq!(snapshot.file_name(), "Food.A001.mov");
+
+        assert_eq!(tagger.save_with(&snapshot, &path, TEXT), path, "refused");
     }
 
     #[test]

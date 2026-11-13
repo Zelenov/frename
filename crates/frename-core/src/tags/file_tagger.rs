@@ -344,7 +344,7 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
 /// name: a save must not join it, or they become shared and that video's next rename leaves them
 /// behind with this clip (#417). Files no video holds (left behind) do not count. Only a save
 /// asks: an undo or redo goes back to a state that was.
-fn stem_held_by_another_video(old_path: &Path, new_path: &Path) -> bool {
+pub(crate) fn stem_held_by_another_video(old_path: &Path, new_path: &Path) -> bool {
     crate::subtitles::stem_files(new_path)
         .iter()
         .any(|p| p.exists())
