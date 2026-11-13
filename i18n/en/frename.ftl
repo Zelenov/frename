@@ -831,6 +831,7 @@ recovery-in-out = in/out points
 recovery-edits = edits
 folder-frame-saved = Frame saved
 folder-frame-not-saved = Frame not saved: the file name is too long, or the folder is read-only
+folder-frame-not-taken = Frame not taken: no picture yet. Try again in a moment.
 folder-not-saved = Not saved: a file with that name already exists, or it is read-only or in use
 folder-comment-not-saved = The comment on { $name } was not saved: its .comment.txt file could not be written (the file name is too long, or the folder is read-only). Shorten the name if it is long, then write the comment again.
 markers-deleted-notice = Marker deleted

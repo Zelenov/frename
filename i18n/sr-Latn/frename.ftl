@@ -895,6 +895,7 @@ recovery-in-out = ulazne i izlazne tačke
 recovery-edits = izmene
 folder-frame-saved = Kadar je sačuvan
 folder-frame-not-saved = Kadar nije sačuvan: naziv datoteke je predugačak ili je fascikla samo za čitanje
+folder-frame-not-taken = Kadar nije snimljen: slike još nema. Pokušajte ponovo za trenutak.
 folder-not-saved = Nije sačuvano: datoteka sa tim nazivom već postoji, ili je samo za čitanje ili u upotrebi
 folder-comment-not-saved = Komentar za { $name } nije sačuvan: njegova datoteka .comment.txt nije mogla da se upiše (predugačak naziv datoteke ili fascikla samo za čitanje). Skratite dugačak naziv, pa ponovo napišite komentar.
 markers-deleted-notice = Marker je obrisan

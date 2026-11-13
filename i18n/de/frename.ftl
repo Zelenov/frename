@@ -869,6 +869,7 @@ recovery-in-out = In-/Out-Punkte
 recovery-edits = Änderungen
 folder-frame-saved = Bild gespeichert
 folder-frame-not-saved = Bild nicht gespeichert: Der Dateiname ist zu lang oder der Ordner schreibgeschützt
+folder-frame-not-taken = Kein Bild aufgenommen: Es ist noch kein Bild da. Versuche es gleich noch einmal.
 folder-not-saved = Nicht gespeichert: Eine Datei mit diesem Namen existiert schon, oder sie ist schreibgeschützt oder in Gebrauch
 folder-comment-not-saved = Der Kommentar zu { $name } wurde nicht gespeichert: Seine .comment.txt-Datei ließ sich nicht schreiben (der Dateiname ist zu lang oder der Ordner schreibgeschützt). Kürze einen langen Namen und schreibe den Kommentar erneut.
 markers-deleted-notice = Marker gelöscht
