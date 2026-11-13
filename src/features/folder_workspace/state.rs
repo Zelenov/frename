@@ -4408,6 +4408,71 @@ mod tests {
         );
     }
 
+    /// #421: a tag stored before names were checked, that a file name cannot hold, is not put on
+    /// the clip by a click; the refused click adds no undo step and keeps the redo stack, and the
+    /// AI does not offer it as a chip that would do nothing.
+    #[test]
+    fn a_stored_tag_a_file_name_cannot_hold_is_refused_without_an_undo_step() {
+        use crate::features::file_name_panel as panel;
+        let test_dir = TestDirectory::new(1);
+        std::fs::write(
+            test_dir.path().join(".frename"),
+            "version = 3\n\ntags = [\n  \
+             { id = \"00000000-0000-0000-0000-0000000000a1\", name = \"v1.2\", color = 1 },\n  \
+             { id = \"00000000-0000-0000-0000-0000000000a2\", name = \"pick\", color = 2 },\n]\n",
+        )
+        .unwrap();
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let id = |w: &FolderWorkspace, name: &str| {
+            w.file_workspace()
+                .tag_list()
+                .tag_id_by_name(name)
+                .expect(name)
+        };
+        let checked = |w: &FolderWorkspace, name: &str| {
+            let list = w.file_workspace().tag_list();
+            list.get_tag(id(w, name))
+                .is_some_and(|tag| tag.is_checked())
+        };
+        let (bad, pick) = (id(&workspace, "v1.2"), id(&workspace, "pick"));
+
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let _ = workspace.update(Message::Undo);
+        assert!(!checked(&workspace, "pick") && workspace.history.can_redo());
+
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(bad)));
+        assert!(!checked(&workspace, "v1.2"), "the click is refused");
+        assert!(
+            workspace.history.can_redo(),
+            "a refused click is no undo step"
+        );
+        let _ = workspace.update(Message::Redo);
+        assert!(
+            checked(&workspace, "pick"),
+            "redo still puts the earlier tag back"
+        );
+
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_comment("AI: A walk.\nSuggested tags: v1.2 (90%) · pick (50%)".to_string());
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let offered: Vec<_> = panel::pending_tag_suggestions(workspace.file_workspace().tag_list())
+            .into_iter()
+            .map(|tag| tag.name)
+            .collect();
+        assert_eq!(
+            offered,
+            ["pick"],
+            "the refused tag is not offered as a chip"
+        );
+    }
+
     /// Issue #173: the In/Out the AI suggests is set only when the editor applies it, as one
     /// undo step, and is no longer offered once the points match it.
     #[test]

@@ -1,6 +1,6 @@
 # 0.213
 ## Fixed
-- An old tag whose name cannot be in a file name ("AC/DC", "v1.2") can no longer be put on a clip, where it moved the clip into a folder, split in two or was lost on save. A note says to delete it and make one with another name.
+- An old tag whose name a file name cannot hold ("AC/DC", "v1.2") can no longer be put on a clip, where it was lost or broke the name on save. A note says to delete it and make one with another name.
 
 # 0.211
 ## Fixed
