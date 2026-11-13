@@ -1,3 +1,7 @@
+# 0.214
+## Fixed
+- The Settings tag for videos with a comment can no longer be a name like an In/Out point (`in_00_00_07`), which never appeared on a clip. Settings says why, and videos with a comment get no tag.
+
 # 0.212
 ## Fixed
 - Taking a frame before the clip shows a picture no longer leaves an empty `.jpg` next to it and says "Frame saved": it says no frame was taken.

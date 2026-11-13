@@ -84,6 +84,7 @@ settings-commented-tag = Тег за снимке са коментаром
 settings-commented-tag-name = Тег
 settings-commented-tag-hint = Означава се када напишете коментар уз снимак, нпр. { $tag }.IMG_0424.MOV, а скида када га обришете (AI описи се не рачунају). Иначе га мењате сами.
 settings-commented-tag-off = Снимци са коментаром не добијају тег.
+settings-commented-tag-in-out = Није дозвољен тег: улаз/излаз. Снимци са коментаром не добијају тег.
 settings-in-out = Улазне и излазне тачке
 settings-in-out-in-video = Унутар видео датотеке
 settings-in-out-in-video-hint = Маркер подклипа у програму Premiere Pro

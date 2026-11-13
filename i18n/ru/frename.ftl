@@ -92,6 +92,7 @@ settings-commented-tag = Ставить тег видео с комментар�
 settings-commented-tag-name = Тег
 settings-commented-tag-hint = Тег ставится, когда вы пишете комментарий к видео, например { $tag }.IMG_0424.MOV, и снимается, когда вы его удаляете (описания от AI не считаются). В остальное время его ставите и снимаете вы.
 settings-commented-tag-off = Видео с комментарием не получают тег.
+settings-commented-tag-in-out = Нельзя как тег: точка входа/выхода. Видео с комментарием не получают тег.
 settings-in-out = Точки входа и выхода
 settings-in-out-in-video = Внутри видеофайла
 settings-in-out-in-video-hint = Маркер subclip / «подклип» в Premiere Pro

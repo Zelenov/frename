@@ -62,6 +62,7 @@ settings-commented-tag = コメントのあるビデオにタグを付ける
 settings-commented-tag-name = タグ
 settings-commented-tag-hint = ビデオにコメントを書くとオンになり（例: { $tag }.IMG_0424.MOV）、消すとオフになります（AI の説明は対象外）。それ以外は自由に変更できます。
 settings-commented-tag-off = コメントのあるビデオにタグは付きません。
+settings-commented-tag-in-out = タグには使えません: イン/アウト点。コメントのあるビデオにタグは付きません。
 settings-in-out = イン点／アウト点
 settings-in-out-in-video = ビデオファイルの中
 settings-in-out-in-video-hint = Premiere Pro のサブクリップマーカー

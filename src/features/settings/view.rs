@@ -735,9 +735,16 @@ fn old_settings_import(import: &OldSettingsImport, focused: bool) -> Element<'_,
 /// altogether; the name is kept for when it is turned back on. `focus` is where keyboard focus
 /// is in the window.
 fn commented_tag<'a>(enabled: bool, tag: &'a str, focus: Option<&Control>) -> Element<'a, Message> {
-    let help = match frename_core::clean_commented_tag(tag).filter(|_| enabled) {
-        Some(tag) => fl!("settings-commented-tag-hint", tag = tag),
-        None => fl!("settings-commented-tag-off"),
+    // What is left after cleaning can still never be a tag (an In/Out point, #432): the core
+    // turns tagging off for it, and the help says why.
+    let help = if !enabled {
+        fl!("settings-commented-tag-off")
+    } else if let Some(tag) = frename_core::usable_commented_tag(tag) {
+        fl!("settings-commented-tag-hint", tag = tag)
+    } else if frename_core::clean_commented_tag(tag).is_some() {
+        fl!("settings-commented-tag-in-out")
+    } else {
+        fl!("settings-commented-tag-off")
     };
     column![
         ring(

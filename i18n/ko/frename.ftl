@@ -62,6 +62,7 @@ settings-commented-tag = 코멘트가 있는 비디오에 태그 달기
 settings-commented-tag-name = 태그
 settings-commented-tag-hint = 비디오에 코멘트를 쓰면 켜지고(예: { $tag }.IMG_0424.MOV) 지우면 꺼집니다(AI 설명은 해당 없음). 그 외에는 직접 바꿀 수 있습니다.
 settings-commented-tag-off = 코멘트가 있는 비디오에 태그를 달지 않습니다.
+settings-commented-tag-in-out = 태그로 쓸 수 없음: 인/아웃 포인트. 코멘트가 있는 비디오에 태그를 달지 않습니다.
 settings-in-out = 인/아웃 포인트
 settings-in-out-in-video = 비디오 파일 안
 settings-in-out-in-video-hint = Premiere Pro의 서브클립 마커
