@@ -1,3 +1,7 @@
+# 0.221
+## Fixed
+- In French, a colon or semicolon no longer wraps to the start of a line on its own in a few texts.
+
 # 0.219
 ## Fixed
 - An in point at the very start of a clip, or an out point at its very end, no longer brings a note at the next start that your unsaved work was not applied.
