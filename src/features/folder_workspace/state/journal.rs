@@ -11,7 +11,6 @@ use iced::Task;
 use super::FolderWorkspace;
 use crate::features::file_name_panel::{save_status, SaveStatus};
 use crate::features::folder_workspace::Message;
-use crate::features::media_viewer::{self, video};
 
 impl FolderWorkspace {
     /// The open clip as it is now, as a journal entry.
@@ -217,8 +216,6 @@ impl FolderWorkspace {
             return Task::none();
         }
         let text = std::mem::take(&mut self.startup_notes).join(" ");
-        Task::done(Message::MediaViewer(media_viewer::Message::Video(
-            video::Message::ShowLongNotice(text),
-        )))
+        Self::long_notice(text)
     }
 }
