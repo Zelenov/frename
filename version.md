@@ -2,6 +2,11 @@
 ## Fixed
 - In French, a colon or semicolon no longer wraps to the start of a line on its own in a few texts.
 
+# 0.220
+## Fixed
+- Leaving a clip with in/out points no longer downloads an online-only (cloud) video just to check where its points were saved.
+- The note about a comment or in/out points that could not be saved is worded more naturally in French, Spanish, Russian, Ukrainian and Japanese.
+
 # 0.219
 ## Fixed
 - An in point at the very start of a clip, or an out point at its very end, no longer brings a note at the next start that your unsaved work was not applied.

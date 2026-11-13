@@ -427,7 +427,7 @@ fn set_in_out_range(meta: &mut XmpMeta, range: Option<RangeMs>) -> Result<(), Xm
 /// Whether the file is a cloud-sync placeholder (e.g. Dropbox or OneDrive "online only").
 /// Opening one downloads the whole file, which a folder scan must not do for every video.
 #[cfg(windows)]
-fn is_cloud_placeholder(path: &Path) -> bool {
+pub(super) fn is_cloud_placeholder(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
     const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x0004_0000;
@@ -439,7 +439,7 @@ fn is_cloud_placeholder(path: &Path) -> bool {
 }
 
 #[cfg(not(windows))]
-fn is_cloud_placeholder(_path: &Path) -> bool {
+pub(super) fn is_cloud_placeholder(_path: &Path) -> bool {
     false
 }
 
