@@ -231,12 +231,12 @@ impl FolderWorkspace {
         // Markers the clip showed from its video and the restore left there (the comment could
         // not hold them as they are) are the video's again after the undo: its save leaves
         // them in the video, as after the undo of any marker edit, rather than write them into
-        // the comment as lines.
+        // the comment as lines, where close ones would merge (#195).
         if let Some(held) = before.markers_from_video {
             if frename_core::FileTagger::load_markers(path).as_ref() == Some(&held) {
                 self.known_marker_guids
                     .extend(held.iter().filter_map(|m| m.guid.clone()));
-                self.markers_in_video.insert(id, held);
+                self.restore_held_markers = Some((id, held));
             }
         }
     }

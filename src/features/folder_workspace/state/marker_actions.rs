@@ -62,10 +62,7 @@ impl FolderWorkspace {
         ) else {
             return Task::none();
         };
-        let untouched = self
-            .markers_in_video
-            .get(&id)
-            .is_some_and(|read| read.as_slice() == markers);
+        let untouched = self.markers_untouched_in_video(id, markers);
         let lines: &[Marker] = if untouched { &[] } else { markers };
         match frename_core::write_marker_lines(&path, lines) {
             Ok(true) => {
@@ -82,6 +79,20 @@ impl FolderWorkspace {
                 )
             }
         }
+    }
+
+    /// Whether `markers`, shown for the file `id`, are its video's as they were read: shown from
+    /// the video because the comment held none, or back as before a restore that left them in
+    /// the video (#156). A save leaves them there and writes no lines.
+    pub(super) fn markers_untouched_in_video(&self, id: FileId, markers: &[Marker]) -> bool {
+        self.markers_in_video
+            .get(&id)
+            .or(self
+                .restore_held_markers
+                .as_ref()
+                .filter(|(held_id, _)| *held_id == id)
+                .map(|(_, held)| held))
+            .is_some_and(|read| read.as_slice() == markers)
     }
 
     /// Keep the markers of the file `id` that could not be written: the file is marked in the

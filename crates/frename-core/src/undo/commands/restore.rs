@@ -1,7 +1,8 @@
 //! Undo of a restore after a crash (#156): the restore writes the journaled edits into the clip
 //! at start, before any clip is open, so no edit command of the run that crashed is left to
-//! undo. This one step puts the clip back as it was on disk before the restore (as unsaved
-//! edits, saved like any other when the clip is left), and redo brings the restored edits back.
+//! undo. This one step puts the clip back as it was on disk before the restore, and redo brings
+//! the restored edits back; both are saved at once, like the undo of any tag change (the refresh
+//! after an undo saves the open clip).
 
 use super::super::traits::Undoable;
 use super::super::{UndoContext, UndoError};
@@ -48,7 +49,8 @@ impl RestoreCommand {
     }
 
     /// The clip as it was before the restore.
-    pub fn before(&self) -> &FileSnapshot {
+    #[cfg(test)]
+    fn before(&self) -> &FileSnapshot {
         &self.before
     }
 

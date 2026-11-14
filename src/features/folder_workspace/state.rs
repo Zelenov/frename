@@ -208,6 +208,11 @@ pub struct FolderWorkspace {
     /// The clip restored after a crash and opened first, as it was before the restore: when it
     /// is the first clip to open, its restore becomes an undo step (#156).
     restore_undo: Option<(std::path::PathBuf, frename_core::recovery::Before)>,
+    /// The video's markers of the clip restored at start, which it showed before the restore
+    /// and the restore left in the video (#195). Shown again (the restore undone), they are
+    /// the video's, untouched: a save leaves them there. Unlike `markers_in_video`, they never
+    /// move the clip's markers out of the video.
+    restore_held_markers: Option<(FileId, Vec<Marker>)>,
     /// Files whose markers were shown from the video and then edited into the comment: the
     /// video's own are taken out once a save shows the comment holds them. Kept apart from
     /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
@@ -343,6 +348,7 @@ impl FolderWorkspace {
             journal_saved_while_writing: false,
             startup_notes: Vec::new(),
             restore_undo: None,
+            restore_held_markers: None,
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
@@ -1074,6 +1080,7 @@ impl FolderWorkspace {
         // File ids are renewed by the scan, so markers kept for them cannot be matched again.
         self.unsaved_markers.clear();
         self.markers_in_video.clear();
+        self.restore_held_markers = None;
         self.clear_from_video.clear();
         // Batches for the folder being left must not land in the next one.
         self.comment_load_generation += 1;
@@ -2207,10 +2214,7 @@ impl FolderWorkspace {
         let markers_saved = match (snapshot.markers(), frename_core::marker_storage()) {
             // Shown from the video and not touched: they stay where they are.
             (Some(markers), frename_core::MarkerStorage::Comment)
-                if self
-                    .markers_in_video
-                    .get(&id)
-                    .is_some_and(|read| read.as_slice() == markers) =>
+                if self.markers_untouched_in_video(id, markers) =>
             {
                 self.unsaved_markers.remove(&id);
                 Task::none()
@@ -8974,6 +8978,62 @@ mod tests {
             "no lines that would merge them: {:?}",
             comment_on_disk(&restored)
         );
+    }
+
+    /// The restored clip left without an undo keeps its video's markers that the comment cannot
+    /// hold, as before the restore could be undone: the restore's held markers only count as the
+    /// video's when they are shown again, never to take markers out of the video.
+    #[test]
+    fn leaving_a_restored_clip_keeps_the_markers_the_comment_cannot_hold() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::InVideo,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::InVideo,
+        );
+        drop(marker_workspace(&test_dir, 1));
+        let other = frename_core::Marker {
+            name: "Other".to_string(),
+            ..frename_core::Marker::new(30_000)
+        };
+        let guid = other.guid.clone().expect("a guid");
+        let held = vec![
+            frename_core::Marker::new(1_000),
+            frename_core::Marker::new(1_300),
+            other,
+        ];
+        frename_core::FileTagger::save_markers(&file, &held, &Default::default())
+            .expect("markers in the video");
+        drop(in_video);
+
+        let _storage = video_comment_storage();
+        frename_core::recovery::use_dir_on_this_thread(test_dir.file_path("recovery"));
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        send_marker(&mut workspace, M::Open(guid), 30_000);
+        send_marker(&mut workspace, type_name(" edited"), 30_000);
+        send_marker(&mut workspace, M::Close, 30_000);
+        tick(&mut workspace);
+        drop(workspace);
+        let (restored, before) = restore_the_one_entry();
+        let in_video = |path: &Path| {
+            frename_core::FileTagger::load_markers(path)
+                .unwrap_or_default()
+                .len()
+        };
+        assert_eq!(in_video(&restored), 3, "the restore left them in the video");
+
+        let mut workspace = start_after_restore(&test_dir, &restored, before, &restored);
+        save_open_clip(&mut workspace); // no undo: the clip is just left
+        assert_eq!(in_video(&restored), 3, "still in the video");
     }
 
     /// The step is for the clip the restore opens first: when another clip opens first (the
