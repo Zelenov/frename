@@ -95,8 +95,11 @@ that keeps them safe at once and needs no video unloaded. What it adds is one un
 - The app hands the first restored clip, the one it opens, to the folder workspace. When that
   clip is the first to open, `RestoreCommand` goes into the history: undo puts the open clip's
   state back to `before` (with the name the restore gave as the clip's name on disk, so the save
-  renames it back), redo to the restored state. Both are unsaved edits like any other: the
-  journal holds them a second later and leaving the clip saves them.
+  renames it back), redo to the restored state. Both are saved at once, like any other undo
+  of a tag change (the refresh after an undo saves the open clip).
+- Undo brings back what the clip showed, not where each marker was kept: with markers kept in
+  the comment, markers that were only in the video before the restore come back as comment
+  lines.
 
 Decisions made without the owner:
 - One step for the whole restore, not one per edit: the journal keeps the clip's final state,

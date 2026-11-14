@@ -8873,7 +8873,8 @@ mod tests {
 
     /// #156: the restore writes the journaled edits into the clip at start, so no edit of the
     /// run that crashed is in the history. Its own undo step puts the clip back as it was before
-    /// (unsaved edits, journaled, saved when the clip is left), and redo brings them back.
+    /// (saved by the refresh that follows an undo; here, where tasks do not run, by the save the
+    /// refresh would do), and redo brings the restored edits back.
     #[test]
     fn ctrl_z_after_a_crash_restore_puts_the_clip_back() {
         let test_dir = TestDirectory::new(1);
