@@ -1,3 +1,7 @@
+# 0.225
+## Fixed
+- On Windows and macOS, a clip whose name was changed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its comment. Before, the comment file was not found, the comment box was empty, and the next change to the clip deleted the file.
+
 # 0.224
 ## Fixed
 - A comment file saved by Notepad as "ANSI" (for example Windows-1251) or "Unicode" (UTF-16) is now read, and saved back as UTF-8. Before, the comment showed as empty and was deleted at the next change to the clip.
