@@ -1,6 +1,10 @@
-# 0.228
+# 0.229
 ## Fixed
 - In batch mode, when the file list is narrow, the count of checked files moves to its own line under "All" and "Invert". Before, it was drawn over the first file and the next panel, and "hidden" could be cut off.
+
+# 0.228
+## Fixed
+- In the marker list, the "Describe N markers?" question and its buttons have the same margin as the rest of the list. Before, they sat against the panel's left edge.
 
 # 0.227
 ## Fixed
