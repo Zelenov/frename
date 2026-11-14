@@ -254,7 +254,8 @@ fn batch_header<'a>(
     // fit the list: a narrow list or a long language makes the header taller instead of drawing
     // over the rows and the next panel (#468, as the lock line, #382).
     let one_line = header_fits(width, &fl!("folder-all"), &fl!("folder-invert"), &label);
-    let count_text = text::secondary(label);
+    // A count too long even for its own line wraps there, right-aligned too.
+    let count_text = text::secondary(label).align_x(Alignment::End);
     let tipped: Element<'a, Message> = if hidden == 0 {
         count_text.into()
     } else {
