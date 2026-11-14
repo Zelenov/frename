@@ -36,9 +36,10 @@ pub(crate) fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
         .join(sidecar_name)
 }
 
-/// Positions (ms) of the screenshots saved for the clip at `file_path`: the files named exactly
-/// `<clip file name>.snap.<time>.jpg` next to it. A longer clip name that merely starts with
-/// this one (`foo.mp4.bak.snap.…`) is not matched.
+/// Positions (ms) of the screenshots saved for the clip at `file_path`: the files named
+/// `<clip file name>.snap.<time>.jpg` next to it (in any case on Windows and macOS, see
+/// [`strip_prefix_as_the_file_system`]). A longer clip name that merely starts with this one
+/// (`foo.mp4.bak.snap.…`) is not matched.
 pub(crate) fn screenshot_positions(file_path: &Path) -> Vec<u64> {
     let Some(name) = file_path.file_name().and_then(|n| n.to_str()) else {
         return Vec::new();
@@ -74,7 +75,7 @@ fn strip_prefix_as_the_file_system<'a>(name: &'a str, prefix: &str) -> Option<&'
     if let Some(rest) = name.strip_prefix(prefix) {
         return Some(rest);
     }
-    if !cfg!(any(windows, target_os = "macos")) {
+    if !super::folder_info::FILE_SYSTEM_IGNORES_CASE {
         return None;
     }
     let head = name.get(..prefix.len())?;
@@ -1111,7 +1112,7 @@ mod tests {
             Some("00-00-10-936.jpg")
         );
         let other_case = strip_prefix_as_the_file_system("A001.MOV.snap.00-00-10-936.jpg", prefix);
-        if cfg!(any(windows, target_os = "macos")) {
+        if super::super::folder_info::FILE_SYSTEM_IGNORES_CASE {
             assert_eq!(other_case, Some("00-00-10-936.jpg"));
         } else {
             assert_eq!(other_case, None);

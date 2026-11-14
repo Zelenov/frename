@@ -1,6 +1,6 @@
 # 0.226
 ## Fixed
-- On Windows and macOS, a clip renamed only in case outside frename keeps its screenshots and subtitles. Before, they were not shown for the clip, and a tag change left its screenshots behind under the old name.
+- On Windows and macOS, a clip renamed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its saved frames and subtitles. Before, the file list did not show its subtitles icon or count it in the "have subtitles" filter, and adding a tag left its frames behind under the old name.
 
 # 0.225
 ## Fixed

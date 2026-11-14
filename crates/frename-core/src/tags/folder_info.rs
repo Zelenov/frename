@@ -4,6 +4,12 @@ use std::collections::HashMap;
 
 use super::CachedFile;
 
+/// Whether the file system ignores the case of names: Windows and macOS (by default), where
+/// `A001.mov.comment.txt` opens `A001.MOV.comment.txt`. The one rule for finding a clip's
+/// sidecars in other case ([`FolderInfo::has_entry`], the screenshots' prefix). A
+/// case-sensitive APFS volume or a Windows folder made case-sensitive is not told apart.
+pub(crate) const FILE_SYSTEM_IGNORES_CASE: bool = cfg!(any(windows, target_os = "macos"));
+
 /// The names of every entry in a folder, held sorted so lookups are a binary search.
 ///
 /// Bulk parsing asks this the same two questions per file — "is there a `X.comment.txt`?" and
@@ -87,8 +93,7 @@ impl FolderInfo {
     /// renamed apart from its clip in Explorer (`A001.MOV.comment.txt` next to `A001.mov`) is
     /// still the one a read or a removal of `A001.mov.comment.txt` reaches there.
     pub fn has_entry(&self, name: &str) -> bool {
-        self.contains(name)
-            || (cfg!(any(windows, target_os = "macos")) && self.contains_ignoring_case(name))
+        self.contains(name) || (FILE_SYSTEM_IGNORES_CASE && self.contains_ignoring_case(name))
     }
 
     /// Whether the folder contains an entry with this name in any case.
@@ -165,7 +170,7 @@ mod tests {
         // Case-insensitive file systems only: on Linux `A001.mov.comment.txt` is another file.
         assert_eq!(
             i.has_entry("A001.mov.comment.txt"),
-            cfg!(any(windows, target_os = "macos"))
+            FILE_SYSTEM_IGNORES_CASE
         );
         assert!(i.has_entry("A001.MOV.comment.txt"));
     }
