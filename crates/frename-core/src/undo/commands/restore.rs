@@ -8,7 +8,9 @@ use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
 use crate::FileSnapshot;
 
-/// Records the restore of one clip's journaled edits.
+/// Records the restore of one clip's journaled edits. It is one step for the clip's whole
+/// state, so it follows the rule of a tag change, not of a marker edit (`edits_open_video` is
+/// not set): it waits while a batch job runs, even when the restore changed only markers.
 pub struct RestoreCommand {
     /// The clip as it was on disk before the restore, as the open clip's state.
     before: FileSnapshot,

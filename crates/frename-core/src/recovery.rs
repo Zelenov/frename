@@ -483,24 +483,10 @@ fn restore_one(dir: &Path, file: &Path, entry: &Entry) -> Restored {
 }
 
 /// The clip at `path` as opening it shows it: its name, tags, comment and in/out points, and
-/// its markers, taken out of the comment when they are kept there (or the video's, when the
-/// comment holds none), as the app's file workspace reads them.
+/// its markers as [`FileTagger::markers_as_opened`] gives them.
 pub fn state_on_disk(path: &Path) -> FileSnapshot {
     let mut snapshot = FileTagger::parse(path, &crate::FolderInfo::default());
-    let markers = match crate::marker_storage() {
-        crate::MarkerStorage::Comment => {
-            let (text, markers) = crate::markers_from_comment(snapshot.comment());
-            snapshot.set_comment(text);
-            if markers.is_empty() {
-                FileTagger::load_markers(path)
-                    .filter(|held| !held.is_empty())
-                    .or(Some(markers))
-            } else {
-                Some(markers)
-            }
-        }
-        crate::MarkerStorage::InVideo => FileTagger::load_markers(path),
-    };
+    let (markers, _) = FileTagger::markers_as_opened(&mut snapshot, path);
     snapshot.set_markers(markers);
     snapshot
 }

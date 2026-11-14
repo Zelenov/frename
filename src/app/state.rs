@@ -70,10 +70,6 @@ fn recovery_what(summary: frename_core::recovery::Summary) -> String {
     parts.join(", ")
 }
 
-/// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
-/// running; the messages to show, the first restored clip (to open it, so the message
-/// appears over it) and that clip as it was before its restore (so `Ctrl+Z` can take it back). The restore is synchronous on purpose: it must run before any video is
-/// open (Windows locks a playing clip), and it is a few small file operations.
 /// What [`restore_after_crash`] gives back: the messages, the clip to open first, and that clip
 /// as it was before its restore.
 type RestoredAtStart = (
@@ -82,6 +78,11 @@ type RestoredAtStart = (
     Option<(std::path::PathBuf, frename_core::FileSnapshot)>,
 );
 
+/// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
+/// running; the messages to show, the first restored clip (to open it, so the message appears
+/// over it) and that clip as it was before its restore (so `Ctrl+Z` can take it back). The
+/// restore is synchronous on purpose: it must run before any video is open (Windows locks a
+/// playing clip), and it is a few small file operations.
 fn restore_after_crash(lock: Option<&frename_core::recovery::InstanceLock>) -> RestoredAtStart {
     use frename_core::recovery::{KeptWhy, Restored};
     let mut notes = Vec::new();

@@ -78,31 +78,10 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
                     return;
                 }
                 let mut snapshot = f.snapshot().clone();
-                // Markers kept in the comment come out of it while the file is open: they are
-                // edited as markers, and saving writes them back as lines.
-                self.markers_from_video = None;
-                let markers = match frename_core::marker_storage() {
-                    frename_core::MarkerStorage::Comment => {
-                        let (text, mut markers) =
-                            frename_core::markers_from_comment(snapshot.comment());
-                        snapshot.set_comment(text);
-                        // A comment without marker lines, on a clip whose video holds some:
-                        // they are shown, and move into the comment on the first edit.
-                        if markers.is_empty() {
-                            if let Some(held) =
-                                frename_core::FileTagger::load_markers(f.file_path())
-                                    .filter(|held| !held.is_empty())
-                            {
-                                self.markers_from_video = Some(held.clone());
-                                markers = held;
-                            }
-                        }
-                        Some(markers)
-                    }
-                    frename_core::MarkerStorage::InVideo => {
-                        frename_core::FileTagger::load_markers(f.file_path())
-                    }
-                };
+                // Markers kept in the comment come out of it while the file is open.
+                let (markers, from_video) =
+                    frename_core::FileTagger::markers_as_opened(&mut snapshot, f.file_path());
+                self.markers_from_video = from_video;
                 self.comment_content = text_editor::Content::with_text(snapshot.comment());
                 self.file = Some(f);
                 self.tag_list = TagList::new(self.store.clone(), snapshot);

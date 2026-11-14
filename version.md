@@ -1,6 +1,6 @@
 # 0.227
 ## Added
-- After a crash, `Ctrl+Z` takes back the restore of your unsaved work on the clip frename opens: the clip goes back to how it was before, and `Ctrl+Y` brings the work back. Before, the restored work could only be undone by hand.
+- After a crash, `Ctrl+Z` now undoes the work frename restored on the clip it opens, and `Ctrl+Y` brings it back. Before, you had to undo that work by hand.
 
 # 0.226
 ## Fixed

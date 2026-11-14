@@ -221,20 +221,20 @@ Your unsaved work on the open clip (tags, comment, in/out points, markers) is al
 recovery file, a second after each change. If frename or the computer stops without closing it,
 the next start applies that work, opens that clip and says so. If the clip changed meanwhile, it
 is left alone: the message names the folder (`recovery/kept`, next to the settings) with a
-readable copy of your work to retype from. Undo history is not restored, but the restore itself
-is one undo step: `Ctrl+Z` right after the start puts the clip back as it was before it, and you
-can still redo it.
+readable copy of your work to retype from. Undo history is not restored, but the restore is one
+undo step: `Ctrl+Z` puts the clip back as it was before the restore, and `Ctrl+Y` brings the work
+back.
 
 ## Undo
 
-Undo (`Ctrl+Z`) covers tagging, untagging, adding, deleting, starring and reordering tags,
-pasting, in/out points, adding, deleting, coloring, resizing and naming markers, rotating a clip,
-the comment (what you type before leaving the box is one step), a rename by hand (double-click),
-Sync up, Sync down and the lock, and the rename when you leave a clip. The history is shared by
-the whole folder, so after moving to another clip the first undo goes back to the clip you left
-(a note says so) and the next one undoes its last change. In batch mode only markers and
-rotation are undone. It does not cover batch actions; opening a folder or running a batch
-action clears the undo history.
+Undo (`Ctrl+Z`) covers tagging, untagging, adding, deleting, starring and reordering tags, pasting,
+in/out points, adding, deleting, coloring, resizing and naming markers, rotating a clip, the comment
+(what you type before leaving the box is one step), a rename by hand (double-click), Sync up, Sync
+down and the lock, the rename when you leave a clip, and the restore after a crash. The history is
+shared by the whole folder, so after moving to another clip the first undo goes back to the clip you
+left (a note says so) and the next one undoes its last change. In batch mode only markers and
+rotation are undone. It does not cover batch actions; opening a folder or running a batch action
+clears the undo history.
 
 ---
 
