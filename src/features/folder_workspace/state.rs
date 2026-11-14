@@ -207,7 +207,7 @@ pub struct FolderWorkspace {
     startup_notes: Vec<String>,
     /// The clip restored after a crash and opened first, as it was before the restore: when it
     /// is the first clip to open, its restore becomes an undo step (#156).
-    restore_undo: Option<(std::path::PathBuf, frename_core::FileSnapshot)>,
+    restore_undo: Option<(std::path::PathBuf, frename_core::recovery::Before)>,
     /// Files whose markers were shown from the video and then edited into the comment: the
     /// video's own are taken out once a save shows the comment holds them. Kept apart from
     /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
@@ -8820,12 +8820,19 @@ mod tests {
 
     /// A crash with a marker added at 0:41 on the first clip, then the restore of the next
     /// start: where the clip is now, and how it was before the restore.
-    fn crash_and_restore_a_marker(test_dir: &TestDirectory) -> (PathBuf, FileSnapshot) {
+    fn crash_and_restore_a_marker(
+        test_dir: &TestDirectory,
+    ) -> (PathBuf, frename_core::recovery::Before) {
         use crate::features::markers::Message as M;
         let mut workspace = journal_workspace(test_dir);
         send_marker(&mut workspace, M::Add, 41_000);
         tick(&mut workspace);
         drop(workspace); // the process dies here: no save, no close
+        restore_the_one_entry()
+    }
+
+    /// The next start's restore of the one entry the journal holds.
+    fn restore_the_one_entry() -> (PathBuf, frename_core::recovery::Before) {
         let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
         match frename_core::recovery::restore_all(&lock).as_slice() {
             [frename_core::recovery::Restored::Applied { path, before, .. }] => {
@@ -8835,20 +8842,23 @@ mod tests {
         }
     }
 
-    /// The next start: a workspace that knows the restore of `restored` and opens `open`.
+    /// The next start: a workspace that knows the restore of `restored` and opens `open`. The
+    /// folder is listed as it is on disk; the test file backend does not rename on disk, so a
+    /// restore that renames (a tag) is covered by the `RestoreCommand` tests in the core.
     fn start_after_restore(
         test_dir: &TestDirectory,
         restored: &Path,
-        before: FileSnapshot,
+        before: frename_core::recovery::Before,
         open: &Path,
     ) -> FolderWorkspace {
         let mut workspace = test_workspace();
         workspace.set_restore_undo(restored.to_path_buf(), before);
         // Scanned as the folder is now, comments read, as the start does.
-        let mut clips: Vec<PathBuf> = test_dir
-            .directory()
-            .files_in_order()
-            .map(|file| file.file_path().to_path_buf())
+        let mut clips: Vec<PathBuf> = std::fs::read_dir(test_dir.path())
+            .expect("the folder")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|x| x == "mp4"))
             .collect();
         clips.sort();
         let files = clips
@@ -8881,7 +8891,7 @@ mod tests {
         let _storage = video_comment_storage();
         let (restored, before) = crash_and_restore_a_marker(&test_dir);
         assert!(comment_on_disk(&restored).contains("0:41"), "restored");
-        assert_eq!(before.markers(), Some(&[][..]), "before the restore: none");
+        assert_eq!(before.snapshot.markers(), Some(&[][..]), "before: none");
 
         let mut workspace = start_after_restore(&test_dir, &restored, before, &restored);
         assert_eq!(marker_starts(&workspace), [41_000], "the restored edit");
@@ -8900,6 +8910,70 @@ mod tests {
 
         let _ = workspace.update(Message::Redo);
         assert_eq!(marker_starts(&workspace), [41_000], "redo brings it back");
+    }
+
+    /// Markers kept in the comment, shown from the video because the comment held none, and
+    /// that the comment's lines cannot hold as they are (#195: two unnamed markers 0.3 s apart),
+    /// stay in the video through the restore. Its undo leaves them there, as the undo of a
+    /// marker edit does, instead of writing them into the comment, where they would merge.
+    #[test]
+    fn undoing_a_restore_leaves_markers_the_comment_cannot_hold_in_the_video() {
+        use crate::features::markers::Message as M;
+        let test_dir = TestDirectory::new(1);
+        let file = test_dir.target_file();
+        let in_video = frename_core::use_storage_on_this_thread(
+            frename_core::MetadataStorage {
+                comment: frename_core::CommentStorage::InVideo,
+                in_out: frename_core::InOutStorage::InVideo,
+            },
+            frename_core::MarkerStorage::InVideo,
+        );
+        drop(marker_workspace(&test_dir, 1));
+        let other = frename_core::Marker {
+            name: "Other".to_string(),
+            ..frename_core::Marker::new(30_000)
+        };
+        let guid = other.guid.clone().expect("a guid");
+        let held = vec![
+            frename_core::Marker::new(1_000),
+            frename_core::Marker::new(1_300),
+            other,
+        ];
+        frename_core::FileTagger::save_markers(&file, &held, &Default::default())
+            .expect("markers in the video");
+        drop(in_video);
+
+        let _storage = video_comment_storage();
+        frename_core::recovery::use_dir_on_this_thread(test_dir.file_path("recovery"));
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(file.clone()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(marker_starts(&workspace), [1_000, 1_300, 30_000]);
+        send_marker(&mut workspace, M::Open(guid), 30_000);
+        send_marker(&mut workspace, type_name(" edited"), 30_000);
+        send_marker(&mut workspace, M::Close, 30_000);
+        tick(&mut workspace);
+        drop(workspace); // the process dies before the clip is left
+        let (restored, before) = restore_the_one_entry();
+
+        let mut workspace = start_after_restore(&test_dir, &restored, before, &restored);
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(marker_starts(&workspace), [1_000, 1_300, 30_000]);
+        save_open_clip(&mut workspace);
+        let names: Vec<String> = frename_core::FileTagger::load_markers(&restored)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| m.name)
+            .collect();
+        assert_eq!(names, ["", "", "Other"], "the video's markers as before");
+        assert!(
+            !comment_on_disk(&restored).contains("0:01"),
+            "no lines that would merge them: {:?}",
+            comment_on_disk(&restored)
+        );
     }
 
     /// The step is for the clip the restore opens first: when another clip opens first (the

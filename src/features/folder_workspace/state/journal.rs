@@ -205,19 +205,15 @@ impl FolderWorkspace {
     }
 
     /// The clip at `path` was restored after a crash at start and is the one to open first;
-    /// `before` is how it was on disk before the restore.
-    pub fn set_restore_undo(
-        &mut self,
-        path: std::path::PathBuf,
-        before: frename_core::FileSnapshot,
-    ) {
+    /// `before` is how it was before the restore.
+    pub fn set_restore_undo(&mut self, path: std::path::PathBuf, before: recovery::Before) {
         self.restore_undo = Some((path, before));
     }
 
     /// A clip at `path` just opened. When it is the first clip to open and the one restored at
-    /// start, the restore becomes an undo step: `Ctrl+Z` puts the clip back as it was before it,
-    /// as unsaved edits. Any other first clip drops it: the restore is no longer the last thing
-    /// done to the clip the editor sees.
+    /// start, the restore becomes an undo step: `Ctrl+Z` puts the clip back as it was before it.
+    /// Any other first clip drops it: the restore is no longer the last thing done to the clip
+    /// the editor sees.
     pub(super) fn push_restore_undo(&mut self, path: &Path) {
         let Some((restored, before)) = self.restore_undo.take() else {
             return;
@@ -225,12 +221,23 @@ impl FolderWorkspace {
         if restored != path {
             return;
         }
-        let (_, now) = match self.file_workspace.get_snapshot() {
-            Some(open) => open,
-            None => return,
+        let Some((id, now)) = self.file_workspace.get_snapshot() else {
+            return;
         };
-        if let Some(command) = frename_core::RestoreCommand::new(&before, now) {
-            self.history.push(Box::new(command));
+        let Some(command) = frename_core::RestoreCommand::new(&before.snapshot, now) else {
+            return;
+        };
+        self.history.push(Box::new(command));
+        // Markers the clip showed from its video and the restore left there (the comment could
+        // not hold them as they are) are the video's again after the undo: its save leaves
+        // them in the video, as after the undo of any marker edit, rather than write them into
+        // the comment as lines.
+        if let Some(held) = before.markers_from_video {
+            if frename_core::FileTagger::load_markers(path).as_ref() == Some(&held) {
+                self.known_marker_guids
+                    .extend(held.iter().filter_map(|m| m.guid.clone()));
+                self.markers_in_video.insert(id, held);
+            }
         }
     }
 

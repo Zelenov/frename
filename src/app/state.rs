@@ -75,7 +75,7 @@ fn recovery_what(summary: frename_core::recovery::Summary) -> String {
 type RestoredAtStart = (
     Vec<String>,
     Option<frename_core::FolderAndFile>,
-    Option<(std::path::PathBuf, frename_core::FileSnapshot)>,
+    Option<(std::path::PathBuf, frename_core::recovery::Before)>,
 );
 
 /// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
