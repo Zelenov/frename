@@ -1,3 +1,7 @@
+# 0.228
+## Fixed
+- In the marker list, the "Describe N markers?" question and its buttons have the same margin as the rest of the list. Before, they sat against the panel's left edge.
+
 # 0.227
 ## Fixed
 - Subtitle files saved as "Unicode" (UTF-16) or "ANSI" (for example Windows-1251) by another program now show their text. Before, a UTF-16 file showed no subtitles, and an ANSI file showed "�" instead of each letter outside English (Cyrillic or accented letters).
