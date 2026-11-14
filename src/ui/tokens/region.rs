@@ -110,6 +110,8 @@ pub const SEARCH_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 2.0 * SPACE_TIGHT;
 pub const FILE_ROW_HEIGHT: f32 = 52.0;
 /// The check column in batch mode, and the status column (SRT, lock).
 pub const CHECK_COLUMN: f32 = 28.0;
+/// A checkbox centred in the check column: its inset from the column's left edge.
+pub const CHECK_INSET: f32 = (CHECK_COLUMN - CHECK_SIZE) / 2.0;
 pub const STATUS_COLUMN: f32 = 32.0;
 /// A file name keeps at least this much beside its chips: chips give way first.
 pub const NAME_MIN_WIDTH: f32 = 80.0;

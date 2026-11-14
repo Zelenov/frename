@@ -1765,10 +1765,13 @@ Both buttons, and the lock, are undoable (#139); a press that changes nothing pu
   bottom of the panel (§9.2).
 
 #### 13.6.2 File list in batch mode
-- Header under the search field, 32 px: checkbox "All" (lined up with the row checkboxes), a ghost
-  button "Invert", a flexible space, and "12 checked" in `secondary`; when some checked files are
-  hidden by the search or a filter, "12 checked · 3 hidden" with the tooltip "3 checked files are
-  hidden by the search or a filter; the action runs on them too". Below 260 Invert moves into a
+- Header under the search field, at least 32 px: checkbox "All" (lined up with the row
+  checkboxes), a ghost button "Invert", a flexible space, and "12 checked" in `secondary`; when
+  some checked files are hidden by the search or a filter, "12 checked · 3 hidden" with the
+  tooltip "3 checked files are hidden by the search or a filter; the action runs on them too".
+  When All, Invert and the count do not fit on one line (a narrow list, a long language), the
+  count goes on a line of its own under them, flush right, and the header grows taller instead of
+  drawing over the rows (#468). Below 260 Invert moves into a
   **More** button.
 - **All** and **Invert** act on the listed files only; unchecking All clears every check, hidden
   ones too. Hidden checked files are included in the job: the Run label's count and the plan say
