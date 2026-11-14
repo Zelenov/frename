@@ -97,12 +97,27 @@ fn code_page_encoding(code_page: u32) -> Option<&'static encoding_rs::Encoding> 
 }
 
 /// The country of the system's locale (`ru` for `ru_RU.UTF-8` in `LC_ALL`, `LC_CTYPE` or
-/// `LANG`), lower-case; `None` without one (`C`, `POSIX`, `C.UTF-8`).
+/// `LANG`), lower-case; `None` without one (`C`, `POSIX`, `C.UTF-8`). On Windows these are
+/// usually unset (a Unix convention), so there detection, reached only for a code page without
+/// an encoding (65001), gets no hint.
 fn locale_country() -> Option<String> {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .iter()
         .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))?;
     country_of_locale(&locale)
+}
+
+/// A sentence in the encoding "ANSI" comment files are read in on this system, for tests:
+/// Windows-1251 where detection decides, the system's code page on Windows when it is 1251 or
+/// 1252 (CI's), `None` for another one.
+#[cfg(test)]
+pub(crate) fn ansi_sample() -> Option<(&'static str, &'static encoding_rs::Encoding)> {
+    match ansi_code_page().map(code_page_encoding) {
+        None => Some(("Привет, вода в кадре", encoding_rs::WINDOWS_1251)),
+        Some(Some(e)) if e == encoding_rs::WINDOWS_1251 => Some(("Привет, вода в кадре", e)),
+        Some(Some(e)) if e == encoding_rs::WINDOWS_1252 => Some(("Café crème, à revoir", e)),
+        Some(_) => None,
+    }
 }
 
 /// The country part of a locale name (`uk` → none, `uk_UA.UTF-8` → `ua`).
@@ -213,15 +228,12 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn ansi_comments_are_detected() {
-        let dir = crate::test_support::fresh_dir("comment-ansi");
-        let clip = dir.join("goat.mov");
         for (text, encoding) in [
             ("Привет, вода в кадре", encoding_rs::WINDOWS_1251),
             ("Café crème, à revoir", encoding_rs::WINDOWS_1252),
         ] {
             let (ansi, _, _) = encoding.encode(text);
-            std::fs::write(comment_path(&clip), &*ansi).expect("write");
-            assert_eq!(load_comment(&clip), text);
+            assert_eq!(guess_encoding(&ansi, None), encoding, "{text}");
         }
         for word in ["брак", "фокус", "ок", "нет звука"] {
             let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(word);
@@ -261,18 +273,18 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn a_short_ansi_comment_reads_in_the_system_code_page() {
-        let encoding = ansi_code_page().and_then(code_page_encoding);
-        let word = match encoding {
-            Some(e) if e == encoding_rs::WINDOWS_1251 => "брак",
-            Some(e) if e == encoding_rs::WINDOWS_1252 => "naïve",
-            _ => {
-                eprintln!("system code page {:?}: nothing to check", ansi_code_page());
-                return;
-            }
+        let Some((_, encoding)) = ansi_sample() else {
+            eprintln!("system code page {:?}: nothing to check", ansi_code_page());
+            return;
+        };
+        let word = if encoding == encoding_rs::WINDOWS_1251 {
+            "брак"
+        } else {
+            "naïve"
         };
         let dir = crate::test_support::fresh_dir("comment-acp");
         let clip = dir.join("goat.mov");
-        let (ansi, _, _) = encoding.expect("mapped").encode(word);
+        let (ansi, _, _) = encoding.encode(word);
         std::fs::write(comment_path(&clip), &*ansi).expect("write");
         assert_eq!(load_comment(&clip), word);
     }

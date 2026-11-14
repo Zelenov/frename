@@ -859,12 +859,9 @@ mod tests {
     #[test]
     fn a_tag_change_keeps_an_ansi_comment() {
         let tagger = ProductionFileTagger;
-        // On Windows "ANSI" is the system's code page (CI's is Windows-1252); elsewhere it is
-        // detected.
-        let (text, encoding) = if cfg!(windows) {
-            ("Café crème, à revoir", encoding_rs::WINDOWS_1252)
-        } else {
-            ("Привет, вода в кадре", encoding_rs::WINDOWS_1251)
+        // "ANSI" as this system reads it: its code page on Windows, detected elsewhere.
+        let Some((text, encoding)) = crate::comment::ansi_sample() else {
+            return;
         };
         for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
             let path = clip_named(&format!("ansi-comment-{name}"), "goat.mov");
