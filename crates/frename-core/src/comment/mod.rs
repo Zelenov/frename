@@ -39,12 +39,12 @@ const UTF8_BOM: char = '\u{feff}';
 /// Read as nothing, its text would be gone at the next save, which writes the comment shown.
 pub fn load_comment(file_path: &Path) -> String {
     let bytes = std::fs::read(comment_path(file_path)).unwrap_or_default();
-    decode_comment(&bytes).trim().to_string()
+    decode_text(&bytes).trim().to_string()
 }
 
-/// The text of a comment file's `bytes`: UTF-8 (with or without its byte order mark), UTF-16
-/// with its byte order mark, or else an 8-bit "ANSI" code page.
-fn decode_comment(bytes: &[u8]) -> String {
+/// The text of a text file's `bytes` (a comment file, a subtitle file): UTF-8 (with or without
+/// its byte order mark), UTF-16 with its byte order mark, or else an 8-bit "ANSI" code page.
+pub(crate) fn decode_text(bytes: &[u8]) -> String {
     if let Some((encoding, bom_length)) = encoding_rs::Encoding::for_bom(bytes) {
         let (text, _) = encoding.decode_without_bom_handling(&bytes[bom_length..]);
         return text.into_owned();
