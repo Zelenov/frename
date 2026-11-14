@@ -136,7 +136,7 @@ impl SettingsState {
             Message::Updates(msg) => self.updates.update(msg).map(Message::Updates),
             Message::ImportOldSettings => Task::perform(
                 rfd::AsyncFileDialog::new()
-                    .set_title("Folder of the old frename (with frename.exe and frename.db)")
+                    .set_title(fl!("settings-old-pick-folder"))
                     .pick_folder(),
                 |folder| Message::OldSettingsFolderPicked(folder.map(|f| f.path().to_path_buf())),
             ),

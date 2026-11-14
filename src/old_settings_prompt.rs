@@ -27,14 +27,20 @@ pub fn run(data_dir: &Path) {
         return;
     };
     log::info!("found settings of an older frename in {}", folder.display());
+    // The stored language is not available yet (the database is not open): the question is
+    // in the system's language (#470).
+    crate::i18n::apply("");
+    let question = format!(
+        "{}\n\n{}\n{}\n{}",
+        fl!("settings-old-offer", folder = folder.display().to_string()),
+        fl!("settings-old-offer-yes"),
+        fl!("settings-old-offer-no"),
+        fl!("settings-old-offer-cancel"),
+    );
     let answer = MessageDialog::new()
         .set_level(MessageLevel::Info)
         .set_title("frename")
-        .set_description(format!(
-            "Import your settings and recent folders from {}?\n\n\
-             Yes: import them.\nNo: start fresh.\nCancel: ask again next time.",
-            folder.display()
-        ))
+        .set_description(question)
         .set_buttons(MessageButtons::YesNoCancel)
         .show();
     let ask_again = match answer {
