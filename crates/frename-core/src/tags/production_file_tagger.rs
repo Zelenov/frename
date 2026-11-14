@@ -36,9 +36,10 @@ pub(crate) fn screenshot_path(file_path: &Path, position_ms: u64) -> PathBuf {
         .join(sidecar_name)
 }
 
-/// Positions (ms) of the screenshots saved for the clip at `file_path`: the files named exactly
-/// `<clip file name>.snap.<time>.jpg` next to it. A longer clip name that merely starts with
-/// this one (`foo.mp4.bak.snap.…`) is not matched.
+/// Positions (ms) of the screenshots saved for the clip at `file_path`: the files named
+/// `<clip file name>.snap.<time>.jpg` next to it (in any case on Windows and macOS, see
+/// [`strip_prefix_as_the_file_system`]). A longer clip name that merely starts with this one
+/// (`foo.mp4.bak.snap.…`) is not matched.
 pub(crate) fn screenshot_positions(file_path: &Path) -> Vec<u64> {
     let Some(name) = file_path.file_name().and_then(|n| n.to_str()) else {
         return Vec::new();
@@ -56,9 +57,7 @@ pub(crate) fn screenshot_positions(file_path: &Path) -> Vec<u64> {
         .flatten()
         .filter_map(|entry| {
             let entry_name = entry.file_name();
-            let time = entry_name
-                .to_str()?
-                .strip_prefix(&prefix)?
+            let time = strip_prefix_as_the_file_system(entry_name.to_str()?, &prefix)?
                 .strip_suffix(".jpg")?
                 .to_owned();
             Screenshot::parse_time(&time)
@@ -67,6 +66,20 @@ pub(crate) fn screenshot_positions(file_path: &Path) -> Vec<u64> {
     positions.sort_unstable();
     positions.dedup();
     positions
+}
+
+/// `name` without `prefix`, which is matched in any case where the file system ignores it
+/// (Windows and macOS): a screenshot `A001.MOV.snap.….jpg` belongs to the clip `A001.mov` there,
+/// and opening or renaming it by that name reaches it (#463).
+fn strip_prefix_as_the_file_system<'a>(name: &'a str, prefix: &str) -> Option<&'a str> {
+    if let Some(rest) = name.strip_prefix(prefix) {
+        return Some(rest);
+    }
+    if !super::folder_info::FILE_SYSTEM_IGNORES_CASE {
+        return None;
+    }
+    let head = name.get(..prefix.len())?;
+    (head.to_lowercase() == prefix.to_lowercase()).then(|| &name[prefix.len()..])
 }
 
 /// Move the screenshots of `old_path` to the names of `new_path`, keeping their times. Never
@@ -1087,6 +1100,71 @@ mod tests {
             let saved = tagger.parse_with(&new_path, &FolderInfo::default(), storage);
             assert_eq!(saved.comment(), text, "{name}: kept");
         }
+    }
+
+    /// #463: a screenshot's prefix is matched exactly, and in other case only where the file
+    /// system ignores case.
+    #[test]
+    fn a_screenshot_prefix_matches_in_other_case_where_the_file_system_ignores_it() {
+        let prefix = "A001.mov.snap.";
+        assert_eq!(
+            strip_prefix_as_the_file_system("A001.mov.snap.00-00-10-936.jpg", prefix),
+            Some("00-00-10-936.jpg")
+        );
+        let other_case = strip_prefix_as_the_file_system("A001.MOV.snap.00-00-10-936.jpg", prefix);
+        if super::super::folder_info::FILE_SYSTEM_IGNORES_CASE {
+            assert_eq!(other_case, Some("00-00-10-936.jpg"));
+        } else {
+            assert_eq!(other_case, None);
+        }
+        assert_eq!(
+            strip_prefix_as_the_file_system("B.mov.snap.x.jpg", prefix),
+            None
+        );
+        assert_eq!(strip_prefix_as_the_file_system("A001", prefix), None);
+    }
+
+    /// #463, on Windows and macOS: a clip renamed outside frename only in case keeps its
+    /// screenshots and subtitles: they are found, and a tag change takes them along.
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn sidecars_in_other_case_are_found_and_kept() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("sidecars-other-case", "A001.mov");
+        std::fs::write(
+            path.with_file_name("A001.MOV.snap.00-00-01-000.jpg"),
+            b"jpeg",
+        )
+        .expect("write");
+        std::fs::write(
+            path.with_file_name("A001.SRT"),
+            "1\n00:00:00,000 --> 00:00:01,000\nHi\n",
+        )
+        .expect("write");
+        assert_eq!(screenshot_positions(&path), vec![1_000]);
+        let names: Vec<String> = std::fs::read_dir(path.parent().expect("folder"))
+            .expect("list")
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .collect();
+        let file = crate::File::from_path_with_folder_info(
+            &path,
+            std::time::SystemTime::now(),
+            &FolderInfo::new(names),
+        );
+        assert!(file.has_subtitles(), "subtitles found");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_tags(["pick"]);
+        let new_path = tagger.save_with(&snapshot, &path, TEXT);
+        assert_ne!(new_path, path, "renamed");
+        assert_eq!(
+            screenshot_positions(&new_path),
+            vec![1_000],
+            "screenshot kept"
+        );
+        assert!(
+            crate::subtitles::existing_subtitle_path(&new_path).is_some(),
+            "subtitles kept"
+        );
     }
 
     #[test]
