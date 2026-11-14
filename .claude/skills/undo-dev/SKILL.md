@@ -98,7 +98,8 @@ pub struct NavigateFileCommand {
 **Where to push (binary: `FolderWorkspace::apply_file_updated`):**
 ```rust
 fn apply_file_updated(&mut self, path: PathBuf, snapshot: FileSnapshot, from_index: Option<usize>) -> Task<Message> {
-    let (path_after, snapshot_after) = snapshot.save_and_reparse(&path);
+    let (saved, snapshot_after) = snapshot.save_and_reparse(&path);
+    let path_after = saved.path;
     if let Some(dir) = self.directory.as_mut() {
         dir.update_file(&path_after, &snapshot_after);
         if let (Some(fi), Some(ti)) = (from_index, dir.selected_index()) {

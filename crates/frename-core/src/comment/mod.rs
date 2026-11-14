@@ -144,7 +144,9 @@ fn guess_encoding(bytes: &[u8], country: Option<&str>) -> &'static encoding_rs::
 }
 
 /// Save (or delete) the comment file for a file.
-/// If `comment` is empty/whitespace, removes the comment file (if any).
+/// If `comment` is empty/whitespace, removes the comment file (if any). Saves use
+/// [`try_save_comment`], which says whether the write took.
+#[cfg(test)]
 pub fn save_comment(file_path: &Path, comment: &str) {
     if let Err(e) = try_save_comment(file_path, comment) {
         log::error!(
