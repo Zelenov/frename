@@ -546,14 +546,18 @@ pub(crate) fn save_to_xmp(
 
 /// Bring the `.comment.txt` of the file at `path` in line with a save: removed when the
 /// comment went into XMP (which moves legacy comments into the file), written otherwise.
-pub(crate) fn save_comment_text_file(path: &Path, comment: &str, saved_to_xmp: bool) {
+/// Whether that took: a read-only or locked file keeps what it had.
+pub(crate) fn save_comment_text_file(path: &Path, comment: &str, saved_to_xmp: bool) -> bool {
     // A pending snapshot's comment came from the text file if there is one, and is unknown
     // otherwise; either way there is nothing to change.
-    if saved_to_xmp {
-        crate::comment::remove_comment_file(path);
+    let written = if saved_to_xmp {
+        crate::comment::try_save_comment(path, "")
     } else {
-        crate::comment::save_comment(path, comment);
-    }
+        crate::comment::try_save_comment(path, comment)
+    };
+    written
+        .inspect_err(|e| log::error!("comment: {path:?}: comment file not brought in line: {e}"))
+        .is_ok()
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 # 0.223
 ## Fixed
-- In/out points that could not be saved are now always reported, and kept for the next start. Before, some cases went unreported: an in point past the clip's end with a read-only comment file, or a full disk while the points are kept in the video.
-- A comment file that another program holds open is now reported as such. Before, the note said the file name was too long or the folder was read-only.
+- In/out points that could not be saved now bring the note that they were not saved, and your change is applied again at the next start. Before, some cases said nothing: an in point past the clip's end with a read-only comment file, or a full disk while the points are kept in the video.
+- A comment file that another program holds open now brings the note that it is read-only or open in another program. Before, the note said the file name was too long or the folder was read-only.
 
 # 0.222
 ## Fixed

@@ -100,7 +100,7 @@ Views emit `Element<'_, feature::Message>`; folder_workspace maps them up via `.
 
 4. Message::FileUpdated { path, snapshot }
    → apply_file_updated():
-       (new_path, snapshot_after) = snapshot.save_and_reparse(&path)
+       (saved, snapshot_after) = snapshot.save_and_reparse(&path)   // saved.path: the new path
        directory.update_file(&new_path, &snapshot_after)
 ```
 

@@ -381,21 +381,13 @@ pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.
-/// Returns `(new_path, new_snapshot)`.
 pub trait SaveAndReparse {
-    fn save_and_reparse(&self, path: &Path) -> (PathBuf, FileSnapshot);
-
-    /// [`Self::save_and_reparse`], with what the save did (see [`Saved`]).
-    fn save_and_reparse_reporting(&self, path: &Path) -> (Saved, FileSnapshot);
+    /// What the save did (its path after, see [`Saved`]) and the snapshot read back from there.
+    fn save_and_reparse(&self, path: &Path) -> (Saved, FileSnapshot);
 }
 
 impl SaveAndReparse for FileSnapshot {
-    fn save_and_reparse(&self, path: &Path) -> (PathBuf, FileSnapshot) {
-        let (saved, snapshot) = self.save_and_reparse_reporting(path);
-        (saved.path, snapshot)
-    }
-
-    fn save_and_reparse_reporting(&self, path: &Path) -> (Saved, FileSnapshot) {
+    fn save_and_reparse(&self, path: &Path) -> (Saved, FileSnapshot) {
         let saved = FileTagger::save_reporting(self, path);
         let snapshot = FileTagger::parse(&saved.path, &FolderInfo::default());
         (saved, snapshot)

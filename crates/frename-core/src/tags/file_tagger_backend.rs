@@ -33,13 +33,13 @@ pub trait FileTaggerBackend: Send + Sync {
     /// Returns the new path (which may differ from `path` if the file was renamed).
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf;
 
-    /// [`Self::save`], and what the save did with the in/out points (see [`Saved`]). Backends
-    /// that keep the points nowhere but the snapshot read them back exactly, so comparing them
-    /// costs nothing: by default they count as kept in the comment when the setting says so.
+    /// [`Self::save`], and what the save did with the in/out points (see [`Saved`]). By default
+    /// they are compared: a backend that keeps them nowhere but the snapshot reads them back
+    /// exactly as set.
     fn save_reporting(&self, snapshot: &FileSnapshot, path: &Path) -> Saved {
         Saved {
             path: self.save(snapshot, path),
-            points_in_comment: crate::metadata_storage().in_out == crate::InOutStorage::Comment,
+            points_in_comment: true,
         }
     }
 

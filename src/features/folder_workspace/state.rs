@@ -2226,7 +2226,7 @@ impl FolderWorkspace {
             (None, _) => Task::none(),
         };
         let path_before = current_path.clone();
-        let (report, snapshot_after_save) = snapshot.save_and_reparse_reporting(&current_path);
+        let (report, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
         let new_path = report.path;
         // A running job keeps some of its plan by path: the renamed clip keeps its place in it.
         if new_path != path_before {
@@ -2245,13 +2245,12 @@ impl FolderWorkspace {
         // The comment file (or the video holding the comment) is read-only or locked: the clip
         // reads back with its old comment or in/out points (#425). The points are compared only
         // when the save put them into the comment (#442).
-        let points_in_comment = report.points_in_comment;
         let comment_or_points_lost = !refused
             && !comment_lost
             && frename_core::recovery::comment_or_points_not_saved(
                 &snapshot,
                 &snapshot_after_save,
-                points_in_comment,
+                report.points_in_comment,
             );
         let refused_notice = if refused {
             // The marker description's own reading of the clip may be what holds the file.
@@ -2323,7 +2322,7 @@ impl FolderWorkspace {
             && frename_core::recovery::saved_what_was_wanted(
                 &snapshot,
                 &snapshot_after_save,
-                points_in_comment,
+                report.points_in_comment,
             )
         {
             self.journal_saved(id, &path_before, &new_path, &saved_state);

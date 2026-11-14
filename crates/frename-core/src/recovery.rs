@@ -576,7 +576,8 @@ fn tidy_comment(comment: &str) -> String {
 /// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out. The
-/// points are compared only when `points_in_comment` (see [`crate::Saved::points_in_comment`]): points kept in
+/// points are compared only when `points_in_comment` (see [`crate::Saved::points_in_comment`]):
+/// points kept in
 /// the video read back other than set even when saved.
 pub fn saved_what_was_wanted(
     wanted: &FileSnapshot,
@@ -640,7 +641,7 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
         }
     }
     let wanted = snapshot.clone();
-    let (report, saved) = snapshot.save_and_reparse_reporting(path);
+    let (report, saved) = snapshot.save_and_reparse(path);
     let new_path = report.path;
     if !saved_what_was_wanted(&wanted, &saved, report.points_in_comment) {
         return None;

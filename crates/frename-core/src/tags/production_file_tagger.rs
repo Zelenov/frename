@@ -160,8 +160,9 @@ impl ProductionFileTagger {
         storage: MetadataStorage,
     ) -> Saved {
         // Points typed as an `In/Out:` line stay in the comment wherever the setting keeps them.
+        // A pending snapshot knows neither its comment nor its points, and writes no points.
         let (_, typed) = metadata::split_in_out_line(snapshot.comment());
-        let typed = typed.start.is_some() || typed.end.is_some();
+        let typed = !snapshot.comment_loading() && (typed.start.is_some() || typed.end.is_some());
         // Nothing was written: whatever was wanted is compared.
         let not_saved = || Saved {
             path: path.to_path_buf(),
@@ -189,7 +190,7 @@ impl ProductionFileTagger {
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);
         // What the video did not take went into the comment, as its in/out line (#442).
-        let points_in_comment = !saved.in_out || typed;
+        let mut points_in_comment = !snapshot.comment_loading() && (!saved.in_out || typed);
         // A pending snapshot does not know an XMP comment, so it has no text file to write.
         let writes_text_file =
             !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo);
@@ -217,7 +218,13 @@ impl ProductionFileTagger {
         // In/out points the video did not take are the text's in/out line.
         if writes_text_file {
             let text = metadata::stored_comment(snapshot, saved.in_out);
-            metadata::save_comment_text_file(&new_path, &text, saved.comment);
+            // A text file that could not be rewritten or removed keeps the `In/Out:` line it had,
+            // and its line wins over the video's points when read back (#442).
+            if !metadata::save_comment_text_file(&new_path, &text, saved.comment) {
+                let (_, line) =
+                    metadata::split_in_out_line(&crate::comment::load_comment(&new_path));
+                points_in_comment |= line.start.is_some() || line.end.is_some();
+            }
         }
         metadata::cache::refresh_after_save(path, &new_path);
         Saved {
@@ -952,6 +959,73 @@ mod tests {
             report.points_in_comment
         ));
         assert!(!crate::recovery::saved_what_was_wanted(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
+    /// #442: points typed as an `In/Out:` line are compared even when the video took the points:
+    /// the line is what reads back.
+    #[test]
+    fn a_typed_in_out_line_is_compared_when_the_video_took_the_points() {
+        let storage = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let tagger = ProductionFileTagger;
+        let path = clip_named("typed-line-in-video", "clip.mov");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        wanted.set_comment("Note\nIn/Out: 00:00:00.050 – end".to_string());
+        let report = tagger.save_reporting_with(&wanted, &path, storage);
+        assert!(report.points_in_comment);
+        let mut plain = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
+        plain.set_comment("Note".to_string());
+        plain.set_segment_start(Some(0.05));
+        let report = tagger.save_reporting_with(&plain, &report.path, storage);
+        assert!(!report.points_in_comment, "the video took them");
+    }
+
+    /// #442: a read-only `.comment.txt` with an `In/Out:` line left from before, while the
+    /// points are kept in the video: the video takes the new points, the line keeps the old
+    /// ones and wins when read back. The save says so, and it is told.
+    #[test]
+    fn an_old_in_out_line_a_read_only_comment_file_keeps_is_told() {
+        let storage = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("old-line-read-only", TEXT, "Note", (Some(0.05), None));
+        let comment_file = crate::comment::comment_path(&path);
+        let Some(_read_only) = ReadOnly::set(&[&comment_file]) else {
+            return;
+        };
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        wanted.set_segment_start(Some(0.1));
+        let report = tagger.save_reporting_with(&wanted, &path, storage);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
+        assert!(report.points_in_comment, "the old line is what reads back");
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
+    /// #442: a snapshot whose comment was not read yet writes no points, and they are not
+    /// compared: the tags it was saved for count as saved.
+    #[test]
+    fn a_pending_snapshot_does_not_compare_points() {
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("pending-points", ADOBE, "Note", (Some(0.05), Some(0.1)));
+        let mut wanted = FileSnapshot::parse("clip.mov");
+        wanted.set_comment_loading(true);
+        wanted.set_tags(["Food"]);
+        let report = tagger.save_reporting_with(&wanted, &path, ADOBE);
+        assert!(!report.points_in_comment);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), ADOBE);
+        assert!(crate::recovery::saved_what_was_wanted(
             &wanted,
             &saved,
             report.points_in_comment
