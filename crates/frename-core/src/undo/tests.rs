@@ -12,9 +12,9 @@ mod tests {
     use crate::undo::{
         AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand,
         DeleteTagCommand, History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand,
-        ReorderTagCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
-        SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
-        StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
+        ReorderTagCommand, RestoreCommand, SaveTagCommand, SetCommentCommand,
+        SetMarkerColorCommand, SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand,
+        SetSegmentCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
     };
     use crate::{Directory, File, FileId, FileSnapshot, Marker, MarkerColor, StoredTag, TagList};
     use uuid::Uuid;
@@ -1806,5 +1806,43 @@ mod tests {
         };
         history.undo(&mut ctx).expect("undo");
         assert!(dir_path.join("foo.mp4").exists());
+    }
+
+    // --- RestoreCommand (#156) ---
+
+    #[test]
+    fn undo_and_redo_of_a_restore_show_the_clip_before_and_after_it() {
+        // The restore checked "Action", wrote a comment and an in point, added a marker.
+        let mut restored = snapshot_with_tags(&["Action"]);
+        restored.set_comment("A note".to_string());
+        restored.set_segment_start(Some(1.0));
+        restored.set_markers(Some(vec![Marker::new(5_000)]));
+        let mut on_disk = snapshot_with_tags(&[]);
+        on_disk.set_markers(Some(Vec::new()));
+        let mut tag_list = TagList::new(make_store_with_tags(&["Action"]), restored.clone());
+        tag_list.set_markers(restored.markers().map(<[_]>::to_vec));
+        let mut dir = empty_directory();
+        let mut history = History::new(50);
+        history.push(Box::new(
+            RestoreCommand::new(&on_disk, restored).expect("a change"),
+        ));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+
+        history.undo(&mut ctx).unwrap();
+        let shown = ctx.tag_list.file_snapshot();
+        assert!(shown.tags().is_empty());
+        assert_eq!(shown.comment(), "");
+        assert_eq!(shown.segment_start(), None);
+        assert_eq!(shown.markers(), Some(&[][..]));
+
+        history.redo(&mut ctx).unwrap();
+        let shown = ctx.tag_list.file_snapshot();
+        assert_eq!(shown.tags(), ["Action"]);
+        assert_eq!(shown.comment(), "A note");
+        assert_eq!(shown.segment_start(), Some(1.0));
+        assert_eq!(shown.markers().map(<[_]>::len), Some(1));
     }
 }

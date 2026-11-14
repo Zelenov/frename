@@ -204,6 +204,43 @@ impl FolderWorkspace {
         save_status(unsaved, in_journal)
     }
 
+    /// The clip at `path` was restored after a crash at start and is the one to open first;
+    /// `before` is how it was before the restore.
+    pub fn set_restore_undo(&mut self, path: std::path::PathBuf, before: recovery::Before) {
+        self.restore_undo = Some((path, before));
+    }
+
+    /// A clip at `path` just opened. When it is the first clip to open and the one restored at
+    /// start, the restore becomes an undo step: `Ctrl+Z` puts the clip back as it was before it.
+    /// Any other first clip drops it: the restore is no longer the last thing done to the clip
+    /// the editor sees.
+    pub(super) fn push_restore_undo(&mut self, path: &Path) {
+        let Some((restored, before)) = self.restore_undo.take() else {
+            return;
+        };
+        if restored != path {
+            return;
+        }
+        let Some((id, now)) = self.file_workspace.get_snapshot() else {
+            return;
+        };
+        let Some(command) = frename_core::RestoreCommand::new(&before.snapshot, now) else {
+            return;
+        };
+        self.history.push(Box::new(command));
+        // Markers the clip showed from its video and the restore left there (the comment could
+        // not hold them as they are) are the video's again after the undo: its save leaves
+        // them in the video, as after the undo of any marker edit, rather than write them into
+        // the comment as lines, where close ones would merge (#195).
+        if let Some(held) = before.markers_from_video {
+            if frename_core::FileTagger::load_markers(path).as_ref() == Some(&held) {
+                self.known_marker_guids
+                    .extend(held.iter().filter_map(|m| m.guid.clone()));
+                self.restore_held_markers = Some((id, held));
+            }
+        }
+    }
+
     /// A message from the start (edits restored after a crash) to show once a clip is open.
     pub fn add_startup_note(&mut self, note: String) {
         self.startup_notes.push(note);

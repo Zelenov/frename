@@ -62,10 +62,7 @@ impl FolderWorkspace {
         ) else {
             return Task::none();
         };
-        let untouched = self
-            .markers_in_video
-            .get(&id)
-            .is_some_and(|read| read.as_slice() == markers);
+        let untouched = self.markers_untouched_in_video(id, markers, &path);
         let lines: &[Marker] = if untouched { &[] } else { markers };
         match frename_core::write_marker_lines(&path, lines) {
             Ok(true) => {
@@ -82,6 +79,29 @@ impl FolderWorkspace {
                 )
             }
         }
+    }
+
+    /// Whether `markers`, shown for the file `id` at `path`, are its video's as they were read:
+    /// shown from the video because the comment held none, or back as before a restore that left
+    /// them in the video (#156). A save leaves them there and writes no lines. The restore's are
+    /// checked against what the video holds now: once a save took them out (or anything else
+    /// changed them), they are the comment's like any other markers.
+    pub(super) fn markers_untouched_in_video(
+        &self,
+        id: FileId,
+        markers: &[Marker],
+        path: &Path,
+    ) -> bool {
+        if let Some(read) = self.markers_in_video.get(&id) {
+            return read.as_slice() == markers;
+        }
+        self.restore_held_markers
+            .as_ref()
+            .is_some_and(|(held_id, held)| {
+                *held_id == id
+                    && held.as_slice() == markers
+                    && FileTagger::load_markers(path).as_deref() == Some(markers)
+            })
     }
 
     /// Keep the markers of the file `id` that could not be written: the file is marked in the
@@ -112,6 +132,13 @@ impl FolderWorkspace {
             Ok(()) => {
                 self.clear_from_video.remove(&id);
                 self.markers_in_video.remove(&id);
+                if self
+                    .restore_held_markers
+                    .as_ref()
+                    .is_some_and(|(held_id, _)| *held_id == id)
+                {
+                    self.restore_held_markers = None;
+                }
             }
             Err(e) => {
                 log::warn!("markers of {path:?} are in the comment, not out of the video: {e:?}");

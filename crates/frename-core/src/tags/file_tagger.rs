@@ -266,6 +266,31 @@ impl FileTagger {
         }
     }
 
+    /// The markers the clip at `path` shows when it is opened, with `snapshot` (its parsed state)
+    /// left as the open clip holds it. Markers kept in the comment come out of it: they are
+    /// edited as markers, and saving writes them back as lines. A comment without marker lines,
+    /// on a clip whose video holds some, shows the video's, which move into the comment on the
+    /// first edit: then they are also returned second, as read. `None` first when the file
+    /// cannot hold markers.
+    pub fn markers_as_opened(
+        snapshot: &mut FileSnapshot,
+        path: &Path,
+    ) -> (Option<Vec<Marker>>, Option<Vec<Marker>>) {
+        match crate::marker_storage() {
+            crate::MarkerStorage::Comment => {
+                let (text, markers) = crate::markers_from_comment(snapshot.comment());
+                snapshot.set_comment(text);
+                if markers.is_empty() {
+                    if let Some(held) = Self::load_markers(path).filter(|held| !held.is_empty()) {
+                        return (Some(held.clone()), Some(held));
+                    }
+                }
+                (Some(markers), None)
+            }
+            crate::MarkerStorage::InVideo => (Self::load_markers(path), None),
+        }
+    }
+
     /// The clip markers of the file at `path`, in time order; `None` when the file cannot hold
     /// them.
     pub fn load_markers(path: &Path) -> Option<Vec<Marker>> {
