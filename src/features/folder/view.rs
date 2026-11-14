@@ -45,6 +45,9 @@ pub struct ListProps<'a, 'm> {
     pub width: f32,
 }
 
+/// The All box sits where the rows' boxes sit: centred in the same first column.
+const CHECK_INSET: f32 = (CHECK_COLUMN - CHECK_SIZE) / 2.0;
+
 /// The inset of the lock line and the batch header, level with the rows' content.
 const STRIP_PADDING: Padding = Padding {
     top: 0.0,
@@ -254,10 +257,8 @@ fn batch_header<'a>(
     // fit the list: a narrow list or a long language makes the header taller instead of drawing
     // over the rows and the next panel (#468, as the lock line, #382).
     let one_line = header_fits(width, &fl!("folder-all"), &fl!("folder-invert"), &label);
-    let count_text = text::secondary(label)
-        .width(Length::Fill)
-        .align_x(Alignment::End);
-    let checked: Element<'a, Message> = if hidden == 0 {
+    let count_text = text::secondary(label);
+    let count: Element<'a, Message> = if hidden == 0 {
         count_text.into()
     } else {
         tooltip::tip_text(
@@ -266,12 +267,12 @@ fn batch_header<'a>(
             Position::Bottom,
         )
     };
-    // The box sits where the rows' boxes sit: centred in the same first column.
-    let inset = (CHECK_COLUMN - CHECK_SIZE) / 2.0;
+    // Flush right in the room left; the tip opens over the words only.
+    let checked = container(count).width(Length::Fill).align_x(Alignment::End);
     let controls = row![
         container(all)
             .padding(Padding {
-                left: inset,
+                left: CHECK_INSET,
                 ..Padding::ZERO
             })
             .center_y(ROW_HEIGHT),
@@ -301,7 +302,9 @@ fn batch_header<'a>(
 /// Whether the batch header's one line (the All box, Invert and the count `label`) fits a list
 /// `width` wide, measured in the font it is drawn in.
 fn header_fits(width: f32, all: &str, invert: &str, label: &str) -> bool {
-    let all = CHECK_COLUMN + SPACE_S + text::text_width(all, TEXT_BODY);
+    // The box, then the checkbox's gap to its label (`form::checkbox`).
+    let all = CHECK_INSET + CHECK_SIZE + SPACE_S + text::text_width(all, TEXT_BODY);
+    // A ghost button's side padding (`ui::button`).
     let invert = 2.0 * SPACE_M + text::text_width(invert, TEXT_BODY);
     let count = text::text_width(label, TEXT_BODY);
     let gaps = 2.0 * SPACE_S + STRIP_PADDING.left + STRIP_PADDING.right;

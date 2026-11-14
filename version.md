@@ -1,6 +1,10 @@
-# 0.227
+# 0.228
 ## Fixed
 - In batch mode, when the file list is narrow, the count of checked files moves to its own line under "All" and "Invert". Before, it was drawn over the first file and the next panel, and "hidden" could be cut off.
+
+# 0.227
+## Fixed
+- Subtitle files saved as "Unicode" (UTF-16) or "ANSI" (for example Windows-1251) by another program now show their text. Before, a UTF-16 file showed no subtitles, and an ANSI file showed "�" instead of each letter outside English (Cyrillic or accented letters).
 
 # 0.226
 ## Fixed
