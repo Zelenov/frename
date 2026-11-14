@@ -859,17 +859,24 @@ mod tests {
     #[test]
     fn a_tag_change_keeps_an_ansi_comment() {
         let tagger = ProductionFileTagger;
+        // On Windows "ANSI" is the system's code page (CI's is Windows-1252); elsewhere it is
+        // detected.
+        let (text, encoding) = if cfg!(windows) {
+            ("Café crème, à revoir", encoding_rs::WINDOWS_1252)
+        } else {
+            ("Привет, вода в кадре", encoding_rs::WINDOWS_1251)
+        };
         for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
             let path = clip_named(&format!("ansi-comment-{name}"), "goat.mov");
-            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode("Привет, вода в кадре");
+            let (ansi, _, _) = encoding.encode(text);
             std::fs::write(crate::comment::comment_path(&path), &*ansi).expect("write");
             let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), storage);
-            assert_eq!(snapshot.comment(), "Привет, вода в кадре", "{name}: read");
+            assert_eq!(snapshot.comment(), text, "{name}: read");
             snapshot.set_tags(["pick"]);
             let new_path = tagger.save_with(&snapshot, &path, storage);
             assert_ne!(new_path, path, "{name}: renamed");
             let saved = tagger.parse_with(&new_path, &FolderInfo::default(), storage);
-            assert_eq!(saved.comment(), "Привет, вода в кадре", "{name}: kept");
+            assert_eq!(saved.comment(), text, "{name}: kept");
         }
     }
 

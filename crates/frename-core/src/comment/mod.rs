@@ -54,7 +54,7 @@ fn decode_comment(bytes: &[u8]) -> String {
     }
     let encoding = ansi_code_page()
         .and_then(code_page_encoding)
-        .unwrap_or_else(|| guess_encoding(bytes));
+        .unwrap_or_else(|| guess_encoding(bytes, locale_country().as_deref()));
     let (text, _) = encoding.decode_without_bom_handling(bytes);
     text.into_owned()
 }
@@ -67,44 +67,59 @@ fn ansi_code_page() -> Option<u32> {
     Some(unsafe { windows_sys::Win32::Globalization::GetACP() })
 }
 
-/// Other systems have no "ANSI" code page: the bytes are guessed from (see [`guess_encoding`]).
+/// Other systems have no "ANSI" code page; the encoding is detected (see [`guess_encoding`]).
 #[cfg(not(windows))]
 fn ansi_code_page() -> Option<u32> {
     None
 }
 
-/// The encoding of a Windows code page, for the ones Windows uses as "ANSI". `None` for any
-/// other (65001, UTF-8, never reaches here: the bytes were not UTF-8).
+/// The encoding of the Windows code pages Windows uses as "ANSI". `None` for any other (65001,
+/// UTF-8, among them): those bytes fall back to detection.
 fn code_page_encoding(code_page: u32) -> Option<&'static encoding_rs::Encoding> {
-    let label = match code_page {
-        874 => "windows-874".to_string(),
-        932 => "shift_jis".to_string(),
-        936 => "gbk".to_string(),
-        949 => "euc-kr".to_string(),
-        950 => "big5".to_string(),
-        1250..=1258 => format!("windows-{code_page}"),
+    use encoding_rs::*;
+    Some(match code_page {
+        874 => WINDOWS_874,
+        932 => SHIFT_JIS,
+        936 => GBK,
+        949 => EUC_KR,
+        950 => BIG5,
+        1250 => WINDOWS_1250,
+        1251 => WINDOWS_1251,
+        1252 => WINDOWS_1252,
+        1253 => WINDOWS_1253,
+        1254 => WINDOWS_1254,
+        1255 => WINDOWS_1255,
+        1256 => WINDOWS_1256,
+        1257 => WINDOWS_1257,
+        1258 => WINDOWS_1258,
         _ => return None,
-    };
-    encoding_rs::Encoding::for_label(label.as_bytes())
+    })
 }
 
-/// The 8-bit encoding `bytes` most likely are in, where the system does not say (a file made on
-/// Windows read on macOS or Linux). Detection is unsure on a word or two, so the language of the
-/// system's locale (`LANG`, e.g. `ru_RU.UTF-8`) is its hint.
-fn guess_encoding(bytes: &[u8]) -> &'static encoding_rs::Encoding {
+/// The country of the system's locale (`ru` for `ru_RU.UTF-8` in `LC_ALL`, `LC_CTYPE` or
+/// `LANG`), lower-case; `None` without one (`C`, `POSIX`, `C.UTF-8`).
+fn locale_country() -> Option<String> {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .iter()
-        .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))
-        .unwrap_or_default();
-    let language: String = locale
-        .chars()
-        .take_while(|c| c.is_ascii_alphabetic())
-        .collect::<String>()
-        .to_ascii_lowercase();
+        .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))?;
+    country_of_locale(&locale)
+}
+
+/// The country part of a locale name (`uk` → none, `uk_UA.UTF-8` → `ua`).
+fn country_of_locale(locale: &str) -> Option<String> {
+    let (_, rest) = locale.split_once('_')?;
+    let country: String = rest.chars().take_while(char::is_ascii_alphabetic).collect();
+    (country.len() == 2).then(|| country.to_ascii_lowercase())
+}
+
+/// The 8-bit encoding `bytes` most likely are in, where the system has no "ANSI" code page (a
+/// file made on Windows, read on macOS or Linux). `country` is the detector's hint: its top
+/// level domain (`ru`). Detection is unsure on a word or two: a short comment may read in
+/// another script.
+fn guess_encoding(bytes: &[u8], country: Option<&str>) -> &'static encoding_rs::Encoding {
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true);
-    let hint = (language.len() == 2).then_some(language.as_bytes());
-    detector.guess(hint, true)
+    detector.guess(country.map(str::as_bytes), true)
 }
 
 /// Save (or delete) the comment file for a file.
@@ -175,66 +190,89 @@ mod tests {
         crate::test_support::fresh_dir(&format!("comment-{name}"))
     }
 
-    /// #458: a comment Notepad saved as "ANSI" (Windows-1251 here) or "Unicode" (UTF-16 LE with
-    /// its byte order mark) is read, not shown as empty and then deleted by the next save.
+    /// #458: a comment Notepad saved as "Unicode" (UTF-16 LE with its byte order mark) is read,
+    /// not shown as empty and then deleted by the next save; UTF-8 reads as before.
     #[test]
-    fn comments_in_other_encodings_are_read() {
+    fn utf16_and_utf8_comments_are_read() {
         let dir = crate::test_support::fresh_dir("comment-encodings");
         let clip = dir.join("goat.mov");
         let text = "Привет, вода в кадре";
-        let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(text);
-        std::fs::write(comment_path(&clip), &*ansi).expect("write");
-        assert_eq!(load_comment(&clip), text);
         let mut utf16 = vec![0xFF, 0xFE];
         utf16.extend(text.encode_utf16().flat_map(u16::to_le_bytes));
         std::fs::write(comment_path(&clip), utf16).expect("write");
         assert_eq!(load_comment(&clip), text);
-        let latin = "Café crème, à revoir";
-        let (ansi, _, _) = encoding_rs::WINDOWS_1252.encode(latin);
-        std::fs::write(comment_path(&clip), &*ansi).expect("write");
-        assert_eq!(load_comment(&clip), latin);
-        // UTF-8, with and without its byte order mark, as before.
         std::fs::write(comment_path(&clip), format!("{UTF8_BOM}{text}")).expect("write");
         assert_eq!(load_comment(&clip), text);
         std::fs::write(comment_path(&clip), text).expect("write");
         assert_eq!(load_comment(&clip), text);
     }
 
-    /// #458: Notepad's "ANSI" is the system's code page: decoded with it, a word or two in it
-    /// (most comments) reads right, where detection alone guesses another script.
+    /// #458: an "ANSI" comment (Windows-1251, Windows-1252) is read on a system without an
+    /// ANSI code page, by detection: a sentence in either, and a word or two with the locale's
+    /// country as the hint.
+    #[cfg(not(windows))]
     #[test]
-    fn short_ansi_comments_read_in_the_system_code_page() {
-        let cyrillic = code_page_encoding(1251).expect("windows-1251");
-        for word in ["брак", "шум", "ок", "Да", "звук", "фокус"] {
-            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(word);
-            let (text, _) = cyrillic.decode_without_bom_handling(&ansi);
-            assert_eq!(text, word);
+    fn ansi_comments_are_detected() {
+        let dir = crate::test_support::fresh_dir("comment-ansi");
+        let clip = dir.join("goat.mov");
+        for (text, encoding) in [
+            ("Привет, вода в кадре", encoding_rs::WINDOWS_1251),
+            ("Café crème, à revoir", encoding_rs::WINDOWS_1252),
+        ] {
+            let (ansi, _, _) = encoding.encode(text);
+            std::fs::write(comment_path(&clip), &*ansi).expect("write");
+            assert_eq!(load_comment(&clip), text);
         }
-        let latin = code_page_encoding(1252).expect("windows-1252");
-        let (ansi, _, _) = encoding_rs::WINDOWS_1252.encode("naïve");
-        assert_eq!(latin.decode_without_bom_handling(&ansi).0, "naïve");
-        for code_page in [874, 932, 936, 949, 950, 1250, 1258] {
+        for word in ["брак", "фокус", "ок", "нет звука"] {
+            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(word);
+            assert_eq!(
+                guess_encoding(&ansi, Some("ru")),
+                encoding_rs::WINDOWS_1251,
+                "{word}"
+            );
+        }
+    }
+
+    /// #458: the country of a locale is the detector's hint (`uk` is Ukrainian, not the UK).
+    #[test]
+    fn the_hint_is_the_locales_country() {
+        assert_eq!(country_of_locale("ru_RU.UTF-8").as_deref(), Some("ru"));
+        assert_eq!(country_of_locale("uk_UA").as_deref(), Some("ua"));
+        assert_eq!(country_of_locale("pt_BR.utf8@x").as_deref(), Some("br"));
+        assert_eq!(country_of_locale("C.UTF-8"), None);
+        assert_eq!(country_of_locale("POSIX"), None);
+        assert_eq!(country_of_locale("en"), None);
+    }
+
+    /// #458: the code pages Windows uses as "ANSI" have an encoding; others fall back to
+    /// detection.
+    #[test]
+    fn windows_code_pages_map_to_encodings() {
+        for code_page in [874, 932, 936, 949, 950, 1250, 1251, 1252, 1258] {
             assert!(code_page_encoding(code_page).is_some(), "{code_page}");
         }
+        assert_eq!(code_page_encoding(1251), Some(encoding_rs::WINDOWS_1251));
         assert!(code_page_encoding(65001).is_none());
         assert!(code_page_encoding(437).is_none());
     }
 
-    /// #458, on Windows: the system's code page is what a short "ANSI" comment is read in.
+    /// #458, on Windows: a short "ANSI" comment is read in the system's code page, whatever
+    /// detection would guess. Runs where that code page is 1251 or 1252 (CI's is 1252).
     #[cfg(windows)]
     #[test]
     fn a_short_ansi_comment_reads_in_the_system_code_page() {
-        let Some(encoding) = ansi_code_page().and_then(code_page_encoding) else {
-            return;
+        let encoding = ansi_code_page().and_then(code_page_encoding);
+        let word = match encoding {
+            Some(e) if e == encoding_rs::WINDOWS_1251 => "брак",
+            Some(e) if e == encoding_rs::WINDOWS_1252 => "naïve",
+            _ => {
+                eprintln!("system code page {:?}: nothing to check", ansi_code_page());
+                return;
+            }
         };
         let dir = crate::test_support::fresh_dir("comment-acp");
         let clip = dir.join("goat.mov");
-        let word = if encoding == encoding_rs::WINDOWS_1251 {
-            "брак"
-        } else {
-            "naïve"
-        };
-        let (ansi, _, _) = encoding.encode(word);
+        let (ansi, _, _) = encoding.expect("mapped").encode(word);
         std::fs::write(comment_path(&clip), &*ansi).expect("write");
         assert_eq!(load_comment(&clip), word);
     }
