@@ -1,3 +1,7 @@
+# 0.228
+## Fixed
+- Three system windows now use your language: the folder picker of "Import from an old frename folder", the file type in the marker list's Export…, and the question at the first start that offers to import settings from an older frename. Before, they were in English.
+
 # 0.227
 ## Fixed
 - Subtitle files saved as "Unicode" (UTF-16) or "ANSI" (for example Windows-1251) by another program now show their text. Before, a UTF-16 file showed no subtitles, and an ANSI file showed "�" instead of each letter outside English (Cyrillic or accented letters).

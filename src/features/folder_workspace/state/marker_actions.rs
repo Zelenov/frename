@@ -617,7 +617,7 @@ impl FolderWorkspace {
         Task::perform(
             async move {
                 let mut dialog = rfd::AsyncFileDialog::new()
-                    .add_filter("Text", &["txt"])
+                    .add_filter(fl!("markers-export-file-type"), &["txt"])
                     .set_title(fl!("markers-export"));
                 if let Some(folder) = suggested.parent() {
                     dialog = dialog.set_directory(folder);
