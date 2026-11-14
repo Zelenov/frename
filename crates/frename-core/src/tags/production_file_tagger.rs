@@ -1085,7 +1085,7 @@ mod tests {
     fn a_tag_change_keeps_an_ansi_comment() {
         let tagger = ProductionFileTagger;
         // "ANSI" as this system reads it: its code page on Windows, detected elsewhere.
-        let Some((text, encoding)) = crate::comment::ansi_sample() else {
+        let Some((text, encoding)) = crate::text_encoding::ansi_sample() else {
             return;
         };
         for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
