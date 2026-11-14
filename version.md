@@ -1,3 +1,7 @@
+# 0.224
+## Fixed
+- A comment file saved by Notepad as "ANSI" (for example Windows-1251) or "Unicode" (UTF-16) is now read, and saved back as UTF-8. Before, the comment showed as empty and was deleted at the next change to the clip.
+
 # 0.223
 ## Fixed
 - In/out points that could not be saved now bring the note that they were not saved, and your change is applied again at the next start. Before, some cases said nothing: an in point past the clip's end with a read-only comment file, or a full disk while the points are kept in the video.

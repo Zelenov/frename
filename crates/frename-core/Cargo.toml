@@ -20,9 +20,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 xmp_toolkit = "1.12"
 toml = "1"
+# Comment files another editor saved in another encoding (UTF-16, an ANSI code page; #458).
+encoding_rs = "0.8"
+chardetng = "0.1"
 # AI descriptions (issue #17): the models, languages and descriptions (without GStreamer), and
 # the API key in the OS credential store.
 clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "bab03dbe6e81fbe3cd146d456c3a228d12bba0f3", default-features = false }
 # Reading a Premiere Pro transcript back as subtitles (`.premiere.json`, #219); same version as the root crate.
 sonisub = { version = "0.9", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(windows)'.dependencies]
+# The system's "ANSI" code page, which comment files Notepad saved as ANSI are in (#458).
+windows-sys = { version = "0.61", features = ["Win32_Globalization"] }
