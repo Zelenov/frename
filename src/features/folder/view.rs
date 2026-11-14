@@ -73,7 +73,7 @@ pub fn view<'a>(props: ListProps<'a, '_>) -> Element<'a, Message> {
         // its place in the widget tree and with it its scroll position when batch mode turns
         // on or off.
         if let Some(batch) = props.batch {
-            top = top.push(batch_header(dir, batch, locked_by.is_some()));
+            top = top.push(batch_header(dir, batch, locked_by.is_some(), props.width));
         }
     }
     // The filter menu floats over the rows. The layers are always there (a space when the menu
@@ -227,6 +227,7 @@ fn batch_header<'a>(
     dir: &'a Directory,
     batch: &'a BatchState,
     locked: bool,
+    width: f32,
 ) -> Element<'a, Message> {
     let listed = dir.listed_count();
     let listed_checked = dir
@@ -243,41 +244,86 @@ fn batch_header<'a>(
     let invert = button::ghost(fl!("folder-invert"))
         .on_press_maybe((!locked).then_some(Message::InvertChecks));
     let count = batch.checked_count() as i64;
-    let hidden = hidden_checked(batch.checked_count(), listed_checked);
-    let checked: Element<'a, Message> = if hidden == 0 {
-        text::secondary(fl!("folder-checked", count = count)).into()
+    let hidden = hidden_checked(batch.checked_count(), listed_checked) as i64;
+    let label = if hidden == 0 {
+        fl!("folder-checked", count = count)
     } else {
-        let hidden = hidden as i64;
+        fl!("folder-checked-hidden", count = count, hidden = hidden)
+    };
+    // The count goes on a line of its own, under All and Invert, when the one line does not
+    // fit the list: a narrow list or a long language makes the header taller instead of drawing
+    // over the rows and the next panel (#468, as the lock line, #382).
+    let one_line = header_fits(width, &fl!("folder-all"), &fl!("folder-invert"), &label);
+    let count_text = text::secondary(label)
+        .width(Length::Fill)
+        .align_x(Alignment::End);
+    let checked: Element<'a, Message> = if hidden == 0 {
+        count_text.into()
+    } else {
         tooltip::tip_text(
-            text::secondary(fl!("folder-checked-hidden", count = count, hidden = hidden)),
+            count_text,
             fl!("folder-checked-hidden-tip", hidden = hidden),
             Position::Bottom,
         )
     };
     // The box sits where the rows' boxes sit: centred in the same first column.
     let inset = (CHECK_COLUMN - CHECK_SIZE) / 2.0;
-    container(
-        row![
-            container(all).padding(Padding {
+    let controls = row![
+        container(all)
+            .padding(Padding {
                 left: inset,
                 ..Padding::ZERO
-            }),
-            invert,
-            space::horizontal(),
-            checked,
-        ]
-        .spacing(SPACE_S)
-        .align_y(Alignment::Center),
-    )
-    .padding(STRIP_PADDING)
-    .width(Length::Fill)
-    .center_y(ROW_HEIGHT)
-    .into()
+            })
+            .center_y(ROW_HEIGHT),
+        invert,
+    ]
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center);
+    let content: Element<'a, Message> = if one_line {
+        row![controls, checked]
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center)
+            .into()
+    } else {
+        column![controls, checked]
+            .padding(Padding {
+                bottom: SPACE_XS,
+                ..Padding::ZERO
+            })
+            .into()
+    };
+    container(content)
+        .padding(STRIP_PADDING)
+        .width(Length::Fill)
+        .into()
+}
+
+/// Whether the batch header's one line (the All box, Invert and the count `label`) fits a list
+/// `width` wide, measured in the font it is drawn in.
+fn header_fits(width: f32, all: &str, invert: &str, label: &str) -> bool {
+    let all = CHECK_COLUMN + SPACE_S + text::text_width(all, TEXT_BODY);
+    let invert = 2.0 * SPACE_M + text::text_width(invert, TEXT_BODY);
+    let count = text::text_width(label, TEXT_BODY);
+    let gaps = 2.0 * SPACE_S + STRIP_PADDING.left + STRIP_PADDING.right;
+    all + invert + count + gaps <= width
 }
 
 #[cfg(test)]
 mod tests {
-    use super::hidden_checked;
+    use super::{header_fits, hidden_checked};
+
+    /// #468: the count leaves the line of All and Invert only when they do not fit together.
+    #[test]
+    fn the_count_has_its_own_line_only_in_a_narrow_list() {
+        assert!(header_fits(400.0, "All", "Invert", "2 checked"));
+        assert!(!header_fits(
+            200.0,
+            "Все",
+            "Обратить",
+            "Отмечено: 2 · скрыто: 1"
+        ));
+        assert!(!header_fits(150.0, "All", "Invert", "2 checked"));
+    }
 
     #[test]
     fn checked_files_outside_the_list_count_as_hidden() {
