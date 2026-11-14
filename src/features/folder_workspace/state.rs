@@ -205,6 +205,9 @@ pub struct FolderWorkspace {
     journal_saved_while_writing: bool,
     /// Messages from the start (edits restored after a crash), shown once a clip is open.
     startup_notes: Vec<String>,
+    /// The clip restored after a crash and opened first, as it was before the restore: when it
+    /// is the first clip to open, its restore becomes an undo step (#156).
+    restore_undo: Option<(std::path::PathBuf, frename_core::FileSnapshot)>,
     /// Files whose markers were shown from the video and then edited into the comment: the
     /// video's own are taken out once a save shows the comment holds them. Kept apart from
     /// `markers_in_video`, which is replaced whenever the clip is opened again: a save still
@@ -339,6 +342,7 @@ impl FolderWorkspace {
             journal_in_flight: None,
             journal_saved_while_writing: false,
             startup_notes: Vec::new(),
+            restore_undo: None,
             clear_from_video: HashSet::new(),
             drag_out: DragOutState::default(),
             modifiers: iced::keyboard::Modifiers::empty(),
@@ -1355,6 +1359,7 @@ impl FolderWorkspace {
         if !same_file {
             self.markers_loaded(file.id());
             self.journal_reset_baseline();
+            self.push_restore_undo(file.file_path());
         }
         log::info!("Opening file: {}", file.file_path().display());
         let Some((id, snap)) = snapshot else {
@@ -8173,7 +8178,7 @@ mod tests {
         drop(workspace); // the process dies before the clip is left
         let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
         match frename_core::recovery::restore_all(&lock).as_slice() {
-            [frename_core::recovery::Restored::Applied { path, summary }] => {
+            [frename_core::recovery::Restored::Applied { path, summary, .. }] => {
                 assert_eq!(summary.markers, 1);
                 assert!(comment_on_disk(path).contains("0:41"));
             }
@@ -8800,6 +8805,116 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(journal_files(&test_dir), 0, "a restored entry is gone");
+    }
+
+    /// The open clip's markers, as their start times.
+    fn marker_starts(workspace: &FolderWorkspace) -> Vec<u64> {
+        workspace
+            .file_workspace()
+            .markers()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| m.start_ms)
+            .collect()
+    }
+
+    /// A crash with a marker added at 0:41 on the first clip, then the restore of the next
+    /// start: where the clip is now, and how it was before the restore.
+    fn crash_and_restore_a_marker(test_dir: &TestDirectory) -> (PathBuf, FileSnapshot) {
+        use crate::features::markers::Message as M;
+        let mut workspace = journal_workspace(test_dir);
+        send_marker(&mut workspace, M::Add, 41_000);
+        tick(&mut workspace);
+        drop(workspace); // the process dies here: no save, no close
+        let lock = frename_core::recovery::InstanceLock::acquire().expect("the only instance");
+        match frename_core::recovery::restore_all(&lock).as_slice() {
+            [frename_core::recovery::Restored::Applied { path, before, .. }] => {
+                (path.clone(), (**before).clone())
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// The next start: a workspace that knows the restore of `restored` and opens `open`.
+    fn start_after_restore(
+        test_dir: &TestDirectory,
+        restored: &Path,
+        before: FileSnapshot,
+        open: &Path,
+    ) -> FolderWorkspace {
+        let mut workspace = test_workspace();
+        workspace.set_restore_undo(restored.to_path_buf(), before);
+        // Scanned as the folder is now, comments read, as the start does.
+        let mut clips: Vec<PathBuf> = test_dir
+            .directory()
+            .files_in_order()
+            .map(|file| file.file_path().to_path_buf())
+            .collect();
+        clips.sort();
+        let files = clips
+            .iter()
+            .map(|clip| {
+                File::from_path_with_folder_info(
+                    clip,
+                    SystemTime::UNIX_EPOCH,
+                    &frename_core::FolderInfo::default(),
+                )
+            })
+            .collect();
+        let store = LoggingAppStateStore::new(AppDatabase::new());
+        let directory = Directory::with_files(test_dir.path(), files, store);
+        let _ = workspace.update(Message::FolderLoaded {
+            directory,
+            target_file: Some(open.to_path_buf()),
+        });
+        flush_file_opened(&mut workspace);
+        workspace
+    }
+
+    /// #156: the restore writes the journaled edits into the clip at start, so no edit of the
+    /// run that crashed is in the history. Its own undo step puts the clip back as it was before
+    /// (unsaved edits, journaled, saved when the clip is left), and redo brings them back.
+    #[test]
+    fn ctrl_z_after_a_crash_restore_puts_the_clip_back() {
+        let test_dir = TestDirectory::new(1);
+        let _storage = video_comment_storage();
+        let (restored, before) = crash_and_restore_a_marker(&test_dir);
+        assert!(comment_on_disk(&restored).contains("0:41"), "restored");
+        assert_eq!(before.markers(), Some(&[][..]), "before the restore: none");
+
+        let mut workspace = start_after_restore(&test_dir, &restored, before, &restored);
+        assert_eq!(marker_starts(&workspace), [41_000], "the restored edit");
+        assert!(workspace.history.can_undo(), "the restore is an undo step");
+
+        let _ = workspace.update(Message::Undo);
+        assert!(marker_starts(&workspace).is_empty(), "back as before");
+        tick(&mut workspace);
+        assert_eq!(
+            journal_files(&test_dir),
+            1,
+            "the undone restore is unsaved: the journal holds it"
+        );
+        save_open_clip(&mut workspace);
+        assert!(!comment_on_disk(&restored).contains("0:41"), "saved");
+
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(marker_starts(&workspace), [41_000], "redo brings it back");
+    }
+
+    /// The step is for the clip the restore opens first: when another clip opens first (the
+    /// restored one could not be opened), there is none, and it is not kept for later.
+    #[test]
+    fn a_restore_is_not_an_undo_step_when_another_clip_opens_first() {
+        let test_dir = TestDirectory::new(2);
+        let _storage = video_comment_storage();
+        let (restored, before) = crash_and_restore_a_marker(&test_dir);
+        let other = test_dir.file_path("file_1.mp4");
+        let workspace = start_after_restore(&test_dir, &restored, before, &other);
+        assert!(!workspace.history.can_undo());
+        assert!(
+            workspace.restore_undo.is_none(),
+            "dropped at the first open"
+        );
     }
 
     #[test]

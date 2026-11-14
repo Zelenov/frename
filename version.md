@@ -1,3 +1,7 @@
+# 0.227
+## Added
+- After a crash, `Ctrl+Z` takes back the restore of your unsaved work on the clip frename opens: the clip goes back to how it was before, and `Ctrl+Y` brings the work back. Before, the restored work could only be undone by hand.
+
 # 0.226
 ## Fixed
 - On Windows and macOS, a clip renamed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its saved frames and subtitles. Before, the file list did not show its subtitles icon or count it in the "have subtitles" filter, and adding a tag left its frames behind under the old name.

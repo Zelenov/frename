@@ -9,7 +9,7 @@ pub mod commands;
 
 pub use commands::{
     AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand,
-    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand, RestoreCommand,
     RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
     SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
     SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand,

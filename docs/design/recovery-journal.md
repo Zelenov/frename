@@ -51,10 +51,7 @@ that gap. Written by the agent; nothing here waited for an answer.
 
 ## Not built (left for the owner / a next session)
 
-- **Undo after a restore:** the restore writes the edits to the clip directly, so Ctrl+Z does
-  not know them. Restoring into the open clip's state (as unsaved edits with a history) would
-  give the undo the issue asks for, but means opening the clip and replaying the edits as
-  commands.
+- Undo after a restore: built in #156, see below.
 - **The saved/saving indicator** ("All changes saved") in the UI.
 - **Writing early** what can be written while playing (XMP comment and markers on Windows): the
   journal covers it for now.
@@ -86,3 +83,28 @@ attribute would pass to the file through the rename), and after the clip is rena
 removes it.
 
 Not done from part 3: writing the XMP comment and markers early while the clip plays on Windows.
+
+## Undo after a restore (#156, part 1)
+
+The restore still writes the journaled edits into the clip at start, before any clip is open:
+that keeps them safe at once and needs no video unloaded. What it adds is one undo step.
+
+- `restore_all` reads the clip as opening it would (`recovery::state_on_disk`: name, tags,
+  comment, in/out points, markers out of the comment or the video) before it applies the entry,
+  and reports it in `Restored::Applied::before`.
+- The app hands the first restored clip, the one it opens, to the folder workspace. When that
+  clip is the first to open, `RestoreCommand` goes into the history: undo puts the open clip's
+  state back to `before` (with the name the restore gave as the clip's name on disk, so the save
+  renames it back), redo to the restored state. Both are unsaved edits like any other: the
+  journal holds them a second later and leaving the clip saves them.
+
+Decisions made without the owner:
+- One step for the whole restore, not one per edit: the journal keeps the clip's final state,
+  not the edits that led to it, so there is nothing to replay one by one.
+- Only the clip opened first gets the step. When another clip opens first (the restored one is
+  gone from the folder), the step is dropped: an undo that changes a clip the editor is not
+  looking at, long after the start, would surprise more than help. Other restored clips (a
+  crash with more than one entry is rare: only the open clip journals) keep their edits with no
+  undo, as before.
+- A restore that changed nothing the clip shows (the same state read back) adds no step.
+- The start message is unchanged; the guide says that `Ctrl+Z` takes the restore back.

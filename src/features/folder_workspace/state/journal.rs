@@ -204,6 +204,36 @@ impl FolderWorkspace {
         save_status(unsaved, in_journal)
     }
 
+    /// The clip at `path` was restored after a crash at start and is the one to open first;
+    /// `before` is how it was on disk before the restore.
+    pub fn set_restore_undo(
+        &mut self,
+        path: std::path::PathBuf,
+        before: frename_core::FileSnapshot,
+    ) {
+        self.restore_undo = Some((path, before));
+    }
+
+    /// A clip at `path` just opened. When it is the first clip to open and the one restored at
+    /// start, the restore becomes an undo step: `Ctrl+Z` puts the clip back as it was before it,
+    /// as unsaved edits. Any other first clip drops it: the restore is no longer the last thing
+    /// done to the clip the editor sees.
+    pub(super) fn push_restore_undo(&mut self, path: &Path) {
+        let Some((restored, before)) = self.restore_undo.take() else {
+            return;
+        };
+        if restored != path {
+            return;
+        }
+        let (_, now) = match self.file_workspace.get_snapshot() {
+            Some(open) => open,
+            None => return,
+        };
+        if let Some(command) = frename_core::RestoreCommand::new(&before, now) {
+            self.history.push(Box::new(command));
+        }
+    }
+
     /// A message from the start (edits restored after a crash) to show once a clip is open.
     pub fn add_startup_note(&mut self, note: String) {
         self.startup_notes.push(note);

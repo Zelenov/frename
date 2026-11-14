@@ -373,10 +373,17 @@ pub enum KeptWhy {
 }
 
 /// What [`restore_all`] did with one entry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Restored {
     /// The edits were applied to the clip, now at `path`: `summary` says what they were.
-    Applied { path: PathBuf, summary: Summary },
+    /// `before` is the clip as it was on disk before them (its tags, name, comment, in/out
+    /// points and markers, read as opening it reads them), so the app can offer to undo the
+    /// restore ([`crate::RestoreCommand`]).
+    Applied {
+        path: PathBuf,
+        summary: Summary,
+        before: Box<FileSnapshot>,
+    },
     /// The edits were not applied and are kept at `kept` (with a readable `.txt` beside it).
     Kept {
         clip: PathBuf,
@@ -461,16 +468,41 @@ fn restore_one(dir: &Path, file: &Path, entry: &Entry) -> Restored {
     if !entry.clip_unchanged() {
         return keep(KeptWhy::ClipChanged);
     }
+    let before = Box::new(state_on_disk(&entry.path));
     match apply(entry) {
         Some(path) => {
             let _ = std::fs::remove_file(file);
             Restored::Applied {
                 path,
                 summary: entry.summary(),
+                before,
             }
         }
         None => keep(KeptWhy::NotWritten),
     }
+}
+
+/// The clip at `path` as opening it shows it: its name, tags, comment and in/out points, and
+/// its markers, taken out of the comment when they are kept there (or the video's, when the
+/// comment holds none), as the app's file workspace reads them.
+pub fn state_on_disk(path: &Path) -> FileSnapshot {
+    let mut snapshot = FileTagger::parse(path, &crate::FolderInfo::default());
+    let markers = match crate::marker_storage() {
+        crate::MarkerStorage::Comment => {
+            let (text, markers) = crate::markers_from_comment(snapshot.comment());
+            snapshot.set_comment(text);
+            if markers.is_empty() {
+                FileTagger::load_markers(path)
+                    .filter(|held| !held.is_empty())
+                    .or(Some(markers))
+            } else {
+                Some(markers)
+            }
+        }
+        crate::MarkerStorage::InVideo => FileTagger::load_markers(path),
+    };
+    snapshot.set_markers(markers);
+    snapshot
 }
 
 /// Whether `saved` read back the in/out points `wanted` asked for.
@@ -1048,9 +1080,15 @@ mod tests {
         write_in(&journal, &entry_for(&path)).expect("write");
         let reports = restore_all_in(&journal);
         match reports.as_slice() {
-            [Restored::Applied { summary, .. }] => {
+            [Restored::Applied {
+                summary, before, ..
+            }] => {
                 assert_eq!(summary.tags, 2);
                 assert_eq!(summary.markers, 1);
+                // #156: the clip as it was before, for the undo of the restore.
+                assert!(before.tags().is_empty());
+                assert_eq!(before.name_without_extension(), "clip");
+                assert_eq!(before.comment(), "");
             }
             other => panic!("{other:?}"),
         }

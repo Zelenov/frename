@@ -71,18 +71,25 @@ fn recovery_what(summary: frename_core::recovery::Summary) -> String {
 }
 
 /// Apply the edits an earlier crash left in the recovery journal, when this is the only frename
-/// running; the messages to show and the first restored clip (to open it, so the message
-/// appears over it). The restore is synchronous on purpose: it must run before any video is
+/// running; the messages to show, the first restored clip (to open it, so the message
+/// appears over it) and that clip as it was before its restore (so `Ctrl+Z` can take it back). The restore is synchronous on purpose: it must run before any video is
 /// open (Windows locks a playing clip), and it is a few small file operations.
-fn restore_after_crash(
-    lock: Option<&frename_core::recovery::InstanceLock>,
-) -> (Vec<String>, Option<frename_core::FolderAndFile>) {
+/// What [`restore_after_crash`] gives back: the messages, the clip to open first, and that clip
+/// as it was before its restore.
+type RestoredAtStart = (
+    Vec<String>,
+    Option<frename_core::FolderAndFile>,
+    Option<(std::path::PathBuf, frename_core::FileSnapshot)>,
+);
+
+fn restore_after_crash(lock: Option<&frename_core::recovery::InstanceLock>) -> RestoredAtStart {
     use frename_core::recovery::{KeptWhy, Restored};
     let mut notes = Vec::new();
     let mut open = None;
+    let mut undo = None;
     let Some(lock) = lock else {
         log::info!("recovery: another frename is running; leaving the journal to it");
-        return (notes, open);
+        return (notes, open, undo);
     };
     for report in frename_core::recovery::restore_all(lock) {
         let file_name = |path: &std::path::Path| {
@@ -96,7 +103,11 @@ fn restore_after_crash(
                 .unwrap_or_default()
         };
         match report {
-            Restored::Applied { path, summary } => {
+            Restored::Applied {
+                path,
+                summary,
+                before,
+            } => {
                 log::info!("recovery: restored {summary:?} on {path:?}");
                 notes.push(fl!(
                     "recovery-restored",
@@ -107,6 +118,8 @@ fn restore_after_crash(
                     open = path
                         .parent()
                         .map(|folder| frename_core::FolderAndFile::new(folder, Some(&path)));
+                    // The clip opened first can undo its restore (#156).
+                    undo = Some((path, *before));
                 }
             }
             Restored::Kept {
@@ -135,7 +148,7 @@ fn restore_after_crash(
             }
         }
     }
-    (notes, open)
+    (notes, open, undo)
 }
 
 /// Global keyboard and window events of the main window: shortcuts, typing into the search bar,
@@ -580,10 +593,14 @@ impl FrenameApp {
         // Edits left in the recovery journal mean the last run ended abnormally: apply them now,
         // before any clip is open (nothing locks the clips yet).
         let recovery_lock = frename_core::recovery::InstanceLock::acquire();
-        let (recovery_notes, restored_clip) = restore_after_crash(recovery_lock.as_ref());
+        let (recovery_notes, restored_clip, restore_undo) =
+            restore_after_crash(recovery_lock.as_ref());
         let mut folder_workspace = folder_workspace::FolderWorkspace::new();
         for note in recovery_notes {
             folder_workspace.add_startup_note(note);
+        }
+        if let Some((path, before)) = restore_undo {
+            folder_workspace.set_restore_undo(path, before);
         }
         Self {
             drag_drop_state: drag_drop::DragDropState::default(),
