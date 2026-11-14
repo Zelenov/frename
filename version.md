@@ -1,6 +1,6 @@
 # 0.227
 ## Fixed
-- Subtitle files saved as "Unicode" (UTF-16) or "ANSI" (for example Windows-1251) by another program now show their text. Before, a UTF-16 file showed no subtitles, and an ANSI file showed "�" instead of each Cyrillic letter.
+- Subtitle files saved as "Unicode" (UTF-16) or "ANSI" (for example Windows-1251) by another program now show their text. Before, a UTF-16 file showed no subtitles, and an ANSI file showed "�" instead of each letter outside English (Cyrillic or accented letters).
 
 # 0.226
 ## Fixed

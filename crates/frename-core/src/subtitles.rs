@@ -317,8 +317,7 @@ fn capt_cues(
 /// The cues of the file at `path`, by its kind. A CAPT file or a Premiere transcript is laid out
 /// by `length`, with speaker names; one that does not parse (or has no words) gives none.
 fn read_cues(path: &Path, length: CueLength) -> std::io::Result<Vec<SubtitleCue>> {
-    // Another tool may have saved it as UTF-16 or in an "ANSI" code page (#467).
-    let source = crate::comment::decode_text(&std::fs::read(path)?);
+    let source = crate::text_encoding::decode(&std::fs::read(path)?);
     Ok(if is_ass(path) {
         clipscribe::ass::parse(&source)
     } else if is_capt(path) {
@@ -463,7 +462,11 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
         // The text, a timing line and the numbering of each cue.
         return cues.iter().map(|c| c.text.len() + 40).sum();
     }
-    std::fs::metadata(path).map_or(0, |m| m.len() as usize)
+    // The text: a UTF-16 file has about twice as many bytes on disk (#467).
+    std::fs::read(path).map_or(0, |bytes| match std::str::from_utf8(&bytes) {
+        Ok(text) => text.len(),
+        Err(_) => crate::text_encoding::decode(&bytes).len(),
+    })
 }
 
 /// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
@@ -646,7 +649,6 @@ mod tests {
         );
     }
 
-    /// A fresh temp folder for one test.
     /// #467: a `.srt` saved by Notepad as "Unicode" (UTF-16 with its byte order mark) or as
     /// "ANSI" shows its text, as a comment file does (#458).
     #[test]
@@ -661,7 +663,7 @@ mod tests {
         assert_eq!(cues.len(), 1, "UTF-16 .srt");
         assert_eq!(cues[0].text, "Привет");
         // The code page "ANSI" files are read in on this system (none to test on some).
-        if let Some((sentence, encoding)) = crate::comment::ansi_sample() {
+        if let Some((sentence, encoding)) = crate::text_encoding::ansi_sample() {
             let video = dir.join("ansi.mp4");
             let text = cue(sentence);
             let (bytes, _, _) = encoding.encode(&text);
@@ -673,6 +675,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A fresh temp folder for one test.
     fn temp_dir(name: &str) -> PathBuf {
         crate::test_support::fresh_dir(name)
     }
