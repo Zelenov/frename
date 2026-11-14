@@ -132,7 +132,9 @@ impl ProductionFileTagger {
         };
         // Look for the comment sidecar in the listing. Probing the disk instead cost a failed
         // file open per file, which a folder scan pays for every file it finds.
-        let has_text_file = effective_info.contains(&format!("{name}.comment.txt"));
+        // In any case where the file system ignores it: a comment file left in other case is
+        // the one a read or a save reaches (#459).
+        let has_text_file = effective_info.has_entry(&format!("{name}.comment.txt"));
         // A folder scan does not open files: XMP comes from the tag file's file list or waits.
         let source = match (
             folder_info.defers_comment_loading(),
@@ -1044,6 +1046,24 @@ mod tests {
         let short = clip_named("short-name-frame", "clip.mov");
         assert!(tagger.save_screenshot(&short, 10_936, b"jpeg").is_ok());
         assert!(screenshot_path(&short, 10_936).exists());
+    }
+
+    /// #459, on Windows and macOS: a clip renamed in Explorer only in case (`A001.MOV` →
+    /// `A001.mov`) keeps its comment file under the old case. It is read, and a tag change
+    /// keeps it instead of deleting it.
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn a_comment_file_in_other_case_is_read_and_kept() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("comment-other-case", "A001.mov");
+        std::fs::write(path.with_file_name("A001.MOV.comment.txt"), "Note").expect("write");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        assert_eq!(snapshot.comment(), "Note", "read");
+        snapshot.set_tags(["pick"]);
+        let new_path = tagger.save_with(&snapshot, &path, TEXT);
+        assert_ne!(new_path, path, "renamed");
+        let saved = tagger.parse_with(&new_path, &FolderInfo::default(), TEXT);
+        assert_eq!(saved.comment(), "Note", "kept");
     }
 
     #[test]

@@ -13,6 +13,8 @@ use super::CachedFile;
 pub struct FolderInfo {
     /// Sorted; see [FolderInfo::contains] and [FolderInfo::names_starting_with].
     file_names: Vec<String>,
+    /// The same names in lower case, sorted; see [FolderInfo::contains_ignoring_case].
+    lower_names: Vec<String>,
     /// Set for a folder scan: parsing must not open files, and takes comments stored inside
     /// videos from `cache` when a line still matches, leaving them to load later otherwise.
     scan: Option<ScanInfo>,
@@ -30,8 +32,11 @@ struct ScanInfo {
 impl FolderInfo {
     pub fn new(mut file_names: Vec<String>) -> Self {
         file_names.sort();
+        let mut lower_names: Vec<String> = file_names.iter().map(|n| n.to_lowercase()).collect();
+        lower_names.sort();
         Self {
             file_names,
+            lower_names,
             scan: None,
         }
     }
@@ -75,6 +80,20 @@ impl FolderInfo {
         self.file_names
             .binary_search_by(|n| n.as_str().cmp(name))
             .is_ok()
+    }
+
+    /// Whether the folder has an entry that `name` opens: exactly this name, or on Windows and
+    /// macOS, whose file systems ignore case, the same name in other case (#459). A sidecar
+    /// renamed apart from its clip in Explorer (`A001.MOV.comment.txt` next to `A001.mov`) is
+    /// still the one a read or a removal of `A001.mov.comment.txt` reaches there.
+    pub fn has_entry(&self, name: &str) -> bool {
+        self.contains(name)
+            || (cfg!(any(windows, target_os = "macos")) && self.contains_ignoring_case(name))
+    }
+
+    /// Whether the folder contains an entry with this name in any case.
+    pub fn contains_ignoring_case(&self, name: &str) -> bool {
+        self.lower_names.binary_search(&name.to_lowercase()).is_ok()
     }
 
     /// Every entry name starting with `prefix`, in sorted order.
@@ -133,6 +152,22 @@ mod tests {
         assert!(i.contains("a.mp4.comment.txt"));
         assert!(!i.contains("b.mp4.comment.txt"));
         assert!(!i.contains("a.mp4.snap."));
+    }
+
+    /// #459: a name in other case is found ignoring case, and only there.
+    #[test]
+    fn contains_ignoring_case_finds_other_case() {
+        let i = FolderInfo::new(vec!["A001.MOV.comment.txt".into(), "Ёлка.mp4".into()]);
+        assert!(i.contains_ignoring_case("a001.mov.comment.txt"));
+        assert!(i.contains_ignoring_case("ёлка.MP4"));
+        assert!(!i.contains_ignoring_case("a002.mov.comment.txt"));
+        assert!(!i.contains("a001.mov.comment.txt"));
+        // Case-insensitive file systems only: on Linux `A001.mov.comment.txt` is another file.
+        assert_eq!(
+            i.has_entry("A001.mov.comment.txt"),
+            cfg!(any(windows, target_os = "macos"))
+        );
+        assert!(i.has_entry("A001.MOV.comment.txt"));
     }
 
     #[test]

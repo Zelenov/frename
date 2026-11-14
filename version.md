@@ -1,3 +1,7 @@
+# 0.224
+## Fixed
+- On Windows and macOS, a clip whose name was changed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its comment. Before, the comment file was not found, the comment box was empty, and the next change to the clip deleted the file.
+
 # 0.223
 ## Fixed
 - In/out points that could not be saved now bring the note that they were not saved, and your change is applied again at the next start. Before, some cases said nothing: an in point past the clip's end with a read-only comment file, or a full disk while the points are kept in the video.
