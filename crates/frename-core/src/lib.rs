@@ -69,8 +69,8 @@ pub use tags::{
     has_forbidden_file_name_char, install_file_tagger, is_allowed_tag_name, set_space_after_tags,
     space_after_tags, tag_name_problem, CachedFile, DefaultTag, FileSnapshot, FileTagger,
     FileTaggerBackend, FolderInfo, FolderTagStore, InMemoryFileTagger, LoggingFileTagger,
-    ProductionFileTagger, SaveAndReparse, Screenshot, StoredTag, Tag, TagColorMapping, TagId,
-    TagList, TagNameProblem, TagOrderState, DEFAULT_TAGS,
+    ProductionFileTagger, SaveAndReparse, Saved, Screenshot, StoredTag, Tag, TagColorMapping,
+    TagId, TagList, TagNameProblem, TagOrderState, DEFAULT_TAGS,
 };
 pub use timecode::{TimeFormat, TimecodeStyle};
 pub use undo::{

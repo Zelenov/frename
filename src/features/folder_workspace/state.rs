@@ -2226,7 +2226,8 @@ impl FolderWorkspace {
             (None, _) => Task::none(),
         };
         let path_before = current_path.clone();
-        let (new_path, snapshot_after_save) = snapshot.save_and_reparse(&current_path);
+        let (report, snapshot_after_save) = snapshot.save_and_reparse_reporting(&current_path);
+        let new_path = report.path;
         // A running job keeps some of its plan by path: the renamed clip keeps its place in it.
         if new_path != path_before {
             self.batch.path_changed(&path_before, &new_path);
@@ -2235,17 +2236,16 @@ impl FolderWorkspace {
         // already exists (issue #84), or the video is read-only or open elsewhere. The same
         // check the drag-out path already uses to detect this.
         let refused = drag_out::save_failed(&snapshot, &snapshot_after_save);
-        let comment_lost =
-            !refused && frename_core::recovery::comment_not_saved(&snapshot, &snapshot_after_save);
-        // The comment file (or the video holding the comment) is read-only or locked: the clip
-        // reads back with its old comment or in/out points (#425).
-        // Looked up only for a save whose name took: both uses below need `!refused` (#442).
-        let points_in_comment = !refused
-            && frename_core::recovery::points_to_compare(
+        let comment_lost = !refused
+            && frename_core::recovery::comment_not_saved(
                 &snapshot,
                 &snapshot_after_save,
                 &new_path,
             );
+        // The comment file (or the video holding the comment) is read-only or locked: the clip
+        // reads back with its old comment or in/out points (#425). The points are compared only
+        // when the save put them into the comment (#442).
+        let points_in_comment = report.points_in_comment;
         let comment_or_points_lost = !refused
             && !comment_lost
             && frename_core::recovery::comment_or_points_not_saved(

@@ -1,3 +1,8 @@
+# 0.223
+## Fixed
+- In/out points that could not be saved are now always reported, and kept for the next start. Before, some cases went unreported: an in point past the clip's end with a read-only comment file, or a full disk while the points are kept in the video.
+- A comment file that another program holds open is now reported as such. Before, the note said the file name was too long or the folder was read-only.
+
 # 0.222
 ## Fixed
 - In French, the question mark of the "remove the Gemini key" question no longer wraps to a line on its own.

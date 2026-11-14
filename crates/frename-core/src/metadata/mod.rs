@@ -448,19 +448,6 @@ pub(crate) fn cannot_hold_markers(path: &Path) -> MarkersError {
     }
 }
 
-/// Whether a save can put in/out points into the video at `path`: its format holds XMP and the
-/// file opens for writing. When not, a save keeps them in the comment instead (see
-/// [`save_to_xmp`]).
-/// A cloud placeholder is not opened: it takes them unless it is read-only.
-pub(crate) fn video_takes_points(path: &Path) -> bool {
-    // A cloud placeholder is left unopened, as opening it for writing may download it (#442):
-    // its read-only attribute stands in for the write test.
-    if xmp::is_cloud_placeholder(path) {
-        return std::fs::metadata(path).is_ok_and(|m| !m.permissions().readonly());
-    }
-    xmp::can_hold_xmp(path) && std::fs::OpenOptions::new().write(true).open(path).is_ok()
-}
-
 /// Length of the clip in milliseconds, when the file's header tells it.
 pub(crate) fn clip_length_ms(path: &Path) -> Option<u64> {
     xmp::clip_length_ms(path)

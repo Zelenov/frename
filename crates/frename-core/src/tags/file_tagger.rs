@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use super::file_snapshot::FileSnapshot;
-use super::file_tagger_backend::FileTaggerBackend;
+use super::file_tagger_backend::{FileTaggerBackend, Saved};
 use super::folder_info::FolderInfo;
 use super::folder_tag_store::FolderTagStore;
 use super::in_memory_file_tagger::InMemoryFileTagger;
@@ -42,6 +42,11 @@ impl FileTagger {
     /// Returns the new path (may differ from `path` after a disk rename).
     pub fn save(snapshot: &FileSnapshot, path: &Path) -> PathBuf {
         backend().save(snapshot, path)
+    }
+
+    /// [`Self::save`], and what the save did with the in/out points (see [`Saved`]).
+    pub fn save_reporting(snapshot: &FileSnapshot, path: &Path) -> Saved {
+        backend().save_reporting(snapshot, path)
     }
 
     /// Bring the tag `tag` in line with the file's comment: added last when the file has a
@@ -379,14 +384,21 @@ pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
 /// Returns `(new_path, new_snapshot)`.
 pub trait SaveAndReparse {
     fn save_and_reparse(&self, path: &Path) -> (PathBuf, FileSnapshot);
+
+    /// [`Self::save_and_reparse`], with what the save did (see [`Saved`]).
+    fn save_and_reparse_reporting(&self, path: &Path) -> (Saved, FileSnapshot);
 }
 
 impl SaveAndReparse for FileSnapshot {
     fn save_and_reparse(&self, path: &Path) -> (PathBuf, FileSnapshot) {
-        let new_path = FileTagger::save(self, path);
-        let folder_info = FolderInfo::default();
-        let snapshot = FileTagger::parse(&new_path, &folder_info);
-        (new_path, snapshot)
+        let (saved, snapshot) = self.save_and_reparse_reporting(path);
+        (saved.path, snapshot)
+    }
+
+    fn save_and_reparse_reporting(&self, path: &Path) -> (Saved, FileSnapshot) {
+        let saved = FileTagger::save_reporting(self, path);
+        let snapshot = FileTagger::parse(&saved.path, &FolderInfo::default());
+        (saved, snapshot)
     }
 }
 
