@@ -1,6 +1,6 @@
 # 0.223
 ## Fixed
-- A comment file saved by another editor as "ANSI" (for example Windows-1251) or "Unicode" (UTF-16) is now read. Before, the comment showed as empty and was deleted at the next change to the clip.
+- A comment file saved by Notepad as "ANSI" (for example Windows-1251) or "Unicode" (UTF-16) is now read, and saved back as UTF-8. Before, the comment showed as empty and was deleted at the next change to the clip.
 
 # 0.222
 ## Fixed

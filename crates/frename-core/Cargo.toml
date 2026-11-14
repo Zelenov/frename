@@ -29,3 +29,7 @@ clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "bab03dbe6e8
 # Reading a Premiere Pro transcript back as subtitles (`.premiere.json`, #219); same version as the root crate.
 sonisub = { version = "0.9", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(windows)'.dependencies]
+# The system's "ANSI" code page, which comment files Notepad saved as ANSI are in (#458).
+windows-sys = { version = "0.61", features = ["Win32_Globalization"] }

@@ -43,7 +43,7 @@ pub fn load_comment(file_path: &Path) -> String {
 }
 
 /// The text of a comment file's `bytes`: UTF-8 (with or without its byte order mark), UTF-16
-/// with its byte order mark, or else the legacy encoding the bytes look like.
+/// with its byte order mark, or else an 8-bit "ANSI" code page.
 fn decode_comment(bytes: &[u8]) -> String {
     if let Some((encoding, bom_length)) = encoding_rs::Encoding::for_bom(bytes) {
         let (text, _) = encoding.decode_without_bom_handling(&bytes[bom_length..]);
@@ -52,12 +52,59 @@ fn decode_comment(bytes: &[u8]) -> String {
     if let Ok(text) = std::str::from_utf8(bytes) {
         return text.to_string();
     }
-    // A single-byte code page has no mark: the detector picks the one whose letters the bytes
-    // make the most sense in (Cyrillic for Windows-1251, Latin for Windows-1252, …).
+    let encoding = ansi_code_page()
+        .and_then(code_page_encoding)
+        .unwrap_or_else(|| guess_encoding(bytes));
+    let (text, _) = encoding.decode_without_bom_handling(bytes);
+    text.into_owned()
+}
+
+/// The system's "ANSI" code page, which Notepad saves "ANSI" files in (Windows-1251 on a
+/// Russian system).
+#[cfg(windows)]
+fn ansi_code_page() -> Option<u32> {
+    // SAFETY: GetACP takes no arguments and only reads a system setting.
+    Some(unsafe { windows_sys::Win32::Globalization::GetACP() })
+}
+
+/// Other systems have no "ANSI" code page: the bytes are guessed from (see [`guess_encoding`]).
+#[cfg(not(windows))]
+fn ansi_code_page() -> Option<u32> {
+    None
+}
+
+/// The encoding of a Windows code page, for the ones Windows uses as "ANSI". `None` for any
+/// other (65001, UTF-8, never reaches here: the bytes were not UTF-8).
+fn code_page_encoding(code_page: u32) -> Option<&'static encoding_rs::Encoding> {
+    let label = match code_page {
+        874 => "windows-874".to_string(),
+        932 => "shift_jis".to_string(),
+        936 => "gbk".to_string(),
+        949 => "euc-kr".to_string(),
+        950 => "big5".to_string(),
+        1250..=1258 => format!("windows-{code_page}"),
+        _ => return None,
+    };
+    encoding_rs::Encoding::for_label(label.as_bytes())
+}
+
+/// The 8-bit encoding `bytes` most likely are in, where the system does not say (a file made on
+/// Windows read on macOS or Linux). Detection is unsure on a word or two, so the language of the
+/// system's locale (`LANG`, e.g. `ru_RU.UTF-8`) is its hint.
+fn guess_encoding(bytes: &[u8]) -> &'static encoding_rs::Encoding {
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .iter()
+        .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))
+        .unwrap_or_default();
+    let language: String = locale
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_lowercase();
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true);
-    let (text, _, _) = detector.guess(None, true).decode(bytes);
-    text.into_owned()
+    let hint = (language.len() == 2).then_some(language.as_bytes());
+    detector.guess(hint, true)
 }
 
 /// Save (or delete) the comment file for a file.
@@ -122,6 +169,11 @@ pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn temp_folder(name: &str) -> PathBuf {
+        crate::test_support::fresh_dir(&format!("comment-{name}"))
+    }
 
     /// #458: a comment Notepad saved as "ANSI" (Windows-1251 here) or "Unicode" (UTF-16 LE with
     /// its byte order mark) is read, not shown as empty and then deleted by the next save.
@@ -148,10 +200,43 @@ mod tests {
         assert_eq!(load_comment(&clip), text);
     }
 
-    use super::*;
+    /// #458: Notepad's "ANSI" is the system's code page: decoded with it, a word or two in it
+    /// (most comments) reads right, where detection alone guesses another script.
+    #[test]
+    fn short_ansi_comments_read_in_the_system_code_page() {
+        let cyrillic = code_page_encoding(1251).expect("windows-1251");
+        for word in ["брак", "шум", "ок", "Да", "звук", "фокус"] {
+            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(word);
+            let (text, _) = cyrillic.decode_without_bom_handling(&ansi);
+            assert_eq!(text, word);
+        }
+        let latin = code_page_encoding(1252).expect("windows-1252");
+        let (ansi, _, _) = encoding_rs::WINDOWS_1252.encode("naïve");
+        assert_eq!(latin.decode_without_bom_handling(&ansi).0, "naïve");
+        for code_page in [874, 932, 936, 949, 950, 1250, 1258] {
+            assert!(code_page_encoding(code_page).is_some(), "{code_page}");
+        }
+        assert!(code_page_encoding(65001).is_none());
+        assert!(code_page_encoding(437).is_none());
+    }
 
-    fn temp_folder(name: &str) -> PathBuf {
-        crate::test_support::fresh_dir(&format!("comment-{name}"))
+    /// #458, on Windows: the system's code page is what a short "ANSI" comment is read in.
+    #[cfg(windows)]
+    #[test]
+    fn a_short_ansi_comment_reads_in_the_system_code_page() {
+        let Some(encoding) = ansi_code_page().and_then(code_page_encoding) else {
+            return;
+        };
+        let dir = crate::test_support::fresh_dir("comment-acp");
+        let clip = dir.join("goat.mov");
+        let word = if encoding == encoding_rs::WINDOWS_1251 {
+            "брак"
+        } else {
+            "naïve"
+        };
+        let (ansi, _, _) = encoding.encode(word);
+        std::fs::write(comment_path(&clip), &*ansi).expect("write");
+        assert_eq!(load_comment(&clip), word);
     }
 
     #[test]
