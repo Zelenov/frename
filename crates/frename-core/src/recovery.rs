@@ -473,13 +473,13 @@ fn restore_one(dir: &Path, file: &Path, entry: &Entry) -> Restored {
     }
 }
 
-/// Whether two segment points are the same time: the file keeps them in milliseconds.
 /// Whether `saved` read back the in/out points `wanted` asked for.
 fn same_points(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
     same_point(wanted.segment_start(), saved.segment_start())
         && same_point(wanted.segment_end(), saved.segment_end())
 }
 
+/// Whether two segment points are the same time: the file keeps them in milliseconds.
 fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
     match (wanted, saved) {
         (None, None) => true,
@@ -495,7 +495,11 @@ fn same_point(wanted: Option<f32>, saved: Option<f32>) -> bool {
 /// line (it reads back as the in/out points). Narrower than [`saved_what_was_wanted`], which
 /// keeps the journal entry for any difference a save would not have tidied: this one only says
 /// when to tell the editor.
-pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+///
+/// `path` is the clip after the save. A `.comment.txt` that is there but read back empty is held
+/// by another program, not one that could not be written: that is
+/// [`comment_or_points_not_saved`]'s case, with its own reason (#442).
+pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot, path: &Path) -> bool {
     // An `In/Out:` line is read back as the in/out points, not as comment text: a comment of
     // only that line is saved when it reads back empty.
     let (text, _) = crate::metadata::split_in_out_line(wanted.comment());
@@ -504,6 +508,7 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
         && !saved.comment_loading()
         && !tidy_comment(&text).is_empty()
         && tidy_comment(saved.comment()).is_empty()
+        && !crate::comment::comment_path(&FileTagger::disk_path(path)).exists()
 }
 
 /// Whether a save left the comment or the in/out points other than `wanted` asked, though the
@@ -514,10 +519,10 @@ pub fn comment_not_saved(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
 ///
 /// The comment is compared without an `In/Out:` line (it reads back as the points), and without
 /// what a save may tidy ([`tidy_comment`]).
-/// `points_in_comment` says the in/out points are kept as the comment's `In/Out:` line (the
-/// setting, or [`points_kept_in_text`] for a clip whose video does not take them); only then
-/// are they compared. Points kept in the video read back other than set even when saved (an in
-/// point at 0 s, an out point at the clip's end).
+/// `points_in_comment` says the save put the in/out points into the comment as its `In/Out:`
+/// line ([`crate::Saved::points_in_comment`]); only then are they compared. Points that went
+/// into the video read back other than set even when saved (an in point at 0 s, an out point at
+/// the clip's end).
 pub fn comment_or_points_not_saved(
     wanted: &FileSnapshot,
     saved: &FileSnapshot,
@@ -527,7 +532,7 @@ pub fn comment_or_points_not_saved(
         return false;
     }
     let (wanted_text, line) = crate::metadata::split_in_out_line(wanted.comment());
-    let same_points = |start: Option<f32>, end: Option<f32>| {
+    let reads_back = |start: Option<f32>, end: Option<f32>| {
         same_point(start, saved.segment_start()) && same_point(end, saved.segment_end())
     };
     // Points typed as an `In/Out:` line in the comment are read back as the points: either the
@@ -535,41 +540,13 @@ pub fn comment_or_points_not_saved(
     let typed_points = line.start.is_some() || line.end.is_some();
     let set_points = wanted.segment_start().is_some() || wanted.segment_end().is_some();
     let points_kept = if typed_points {
-        same_points(line.start, line.end)
-            || (set_points && same_points(wanted.segment_start(), wanted.segment_end()))
+        reads_back(line.start, line.end)
+            || (set_points && reads_back(wanted.segment_start(), wanted.segment_end()))
     } else {
-        same_points(wanted.segment_start(), wanted.segment_end())
+        reads_back(wanted.segment_start(), wanted.segment_end())
     };
     tidy_comment(&wanted_text) != tidy_comment(saved.comment())
         || (points_in_comment && !points_kept)
-}
-
-/// Whether the clip at `path` keeps its in/out points as an `In/Out:` line, whatever the setting
-/// says: its `.comment.txt` holds one, or the video cannot take them (a format without XMP, a
-/// read-only or locked file), so a save puts them in the comment.
-pub fn points_kept_in_text(path: &Path) -> bool {
-    let path = FileTagger::disk_path(path);
-    let (_, line) = crate::metadata::split_in_out_line(&crate::comment::load_comment(&path));
-    line.start.is_some() || line.end.is_some() || !crate::metadata::video_takes_points(&path)
-}
-
-/// Whether the in/out points of the clip at `path` are kept as the comment's `In/Out:` line:
-/// the setting says so, or [`points_kept_in_text`]. Only then do [`comment_or_points_not_saved`]
-/// and [`saved_what_was_wanted`] compare them (#448).
-pub fn points_in_comment(path: &Path) -> bool {
-    crate::metadata_storage().in_out == crate::InOutStorage::Comment || points_kept_in_text(path)
-}
-
-/// What to pass as `points_in_comment` to [`comment_or_points_not_saved`] and
-/// [`saved_what_was_wanted`] after a save that wanted `wanted` and read back `saved`. It is false
-/// when the points read back as wanted, whatever the storage, and only then is the answer of
-/// [`points_in_comment`] not needed; it is looked up otherwise, so the clip's files are not
-/// opened again on every save (#442). Not an answer to where the points are kept.
-pub fn points_to_compare(wanted: &FileSnapshot, saved: &FileSnapshot, path: &Path) -> bool {
-    // Points typed as an `In/Out:` line are compared against the read-back too.
-    let (_, typed) = crate::metadata::split_in_out_line(wanted.comment());
-    let typed = typed.start.is_some() || typed.end.is_some();
-    (typed || !same_points(wanted, saved)) && points_in_comment(path)
 }
 
 /// `comment` as a save may leave it: `\n` line endings, control characters as the spaces the
@@ -599,7 +576,8 @@ fn tidy_comment(comment: &str) -> String {
 /// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
 /// in/out points read back from the file. A save that failed silently (a read-only clip, a name
 /// taken) differs in at least one of them. A snapshot whose comment was not read stays out. The
-/// points are compared only when `points_in_comment` (see [`points_in_comment`]): points kept in
+/// points are compared only when `points_in_comment` (see [`crate::Saved::points_in_comment`]):
+/// points kept in
 /// the video read back other than set even when saved.
 pub fn saved_what_was_wanted(
     wanted: &FileSnapshot,
@@ -663,12 +641,9 @@ fn apply(entry: &Entry) -> Option<PathBuf> {
         }
     }
     let wanted = snapshot.clone();
-    let (new_path, saved) = snapshot.save_and_reparse(path);
-    if !saved_what_was_wanted(
-        &wanted,
-        &saved,
-        points_to_compare(&wanted, &saved, &new_path),
-    ) {
+    let (report, saved) = snapshot.save_and_reparse(path);
+    let new_path = report.path;
+    if !saved_what_was_wanted(&wanted, &saved, report.points_in_comment) {
         return None;
     }
     // The markers are in the comment now: the video's own go, so the two never disagree. Only
@@ -895,6 +870,9 @@ fn case_change_done(from: &Path, to: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A clip with no files: its `.comment.txt` is never there.
+    const NO_CLIP: &str = "/nonexistent/frename-recovery/clip.mp4";
 
     fn temp_dir(name: &str) -> PathBuf {
         crate::test_support::fresh_dir(&format!("recovery-{name}"))
@@ -1406,9 +1384,17 @@ mod tests {
         let saved = with("Note\n\nAI: ctl x");
         assert!(saved_what_was_wanted(&wanted, &saved, true));
         assert!(!comment_or_points_not_saved(&wanted, &saved, false));
-        assert!(!comment_not_saved(&with("\0 \u{1}"), &with("")));
+        assert!(!comment_not_saved(
+            &with("\0 \u{1}"),
+            &with(""),
+            Path::new(NO_CLIP)
+        ));
         assert!(saved_what_was_wanted(&with("\0 \u{1}"), &with(""), true));
-        assert!(comment_not_saved(&with("Note"), &with("")));
+        assert!(comment_not_saved(
+            &with("Note"),
+            &with(""),
+            Path::new(NO_CLIP)
+        ));
         assert!(!saved_what_was_wanted(&with("Note"), &with("Other"), true));
     }
 
@@ -1425,18 +1411,10 @@ mod tests {
         assert!(!saved_what_was_wanted(&wanted, &read_back, true));
     }
 
-    /// #442: the clip's files are looked at only when the points read back other than wanted;
-    /// with the same points the answer is false, and it changes nothing.
+    /// #442: a typed `In/Out:` line counts as saved when either the typed points or the set ones
+    /// read back, and is told when neither did (a read-only comment file kept the old ones).
     #[test]
-    fn points_are_looked_up_only_when_they_differ() {
-        let mut wanted = FileSnapshot::parse("clip.mp4");
-        wanted.set_segment_start(Some(1.0));
-        // A path that does not exist: looking it up would say the video cannot take the points.
-        let missing = Path::new("/nonexistent/frename-442/clip.mp4");
-        assert!(!points_to_compare(&wanted, &wanted.clone(), missing));
-        let saved = FileSnapshot::parse("clip.mp4");
-        assert!(points_to_compare(&wanted, &saved, missing));
-        // A typed line whose points did read back is not told, looked up or not.
+    fn typed_points_are_told_only_when_they_did_not_read_back() {
         let mut typed_saved = FileSnapshot::parse("clip.mp4");
         typed_saved.set_comment("Note".to_string());
         typed_saved.set_segment_start(Some(1.0));
@@ -1445,19 +1423,11 @@ mod tests {
         assert!(!comment_or_points_not_saved(
             &typed_wanted,
             &typed_saved,
-            points_to_compare(&typed_wanted, &typed_saved, missing)
+            true
         ));
-        // A typed line that a read-only file did not take is still looked up, and told.
-        let mut typed = FileSnapshot::parse("clip.mp4");
-        typed.set_comment("Note\nIn/Out: 00:00:01.000 – end".to_string());
         let mut old = FileSnapshot::parse("clip.mp4");
         old.set_comment("Note".to_string());
-        assert!(points_to_compare(&typed, &old, missing));
-        assert!(comment_or_points_not_saved(
-            &typed,
-            &old,
-            points_to_compare(&typed, &old, missing)
-        ));
+        assert!(comment_or_points_not_saved(&typed_wanted, &old, true));
     }
 
     /// #441: a NUL the video stored as a space counts as saved, so the journal entry goes.
@@ -1483,17 +1453,34 @@ mod tests {
             snapshot
         };
         let empty = with("");
-        assert!(comment_not_saved(&with("A note"), &empty));
-        assert!(!comment_not_saved(&with("A note"), &with("A note")));
-        assert!(!comment_not_saved(&with("  \n "), &empty));
+        assert!(comment_not_saved(
+            &with("A note"),
+            &empty,
+            Path::new(NO_CLIP)
+        ));
+        assert!(!comment_not_saved(
+            &with("A note"),
+            &with("A note"),
+            Path::new(NO_CLIP)
+        ));
+        assert!(!comment_not_saved(
+            &with("  \n "),
+            &empty,
+            Path::new(NO_CLIP)
+        ));
         assert!(!comment_not_saved(
             &with("In/Out: 00:00:00.050 – end"),
-            &empty
+            &empty,
+            Path::new(NO_CLIP)
         ));
         let mut loading = with("A note");
         loading.set_comment_loading(true);
-        assert!(!comment_not_saved(&loading, &empty));
-        assert!(!comment_not_saved(&with("A note"), &loading));
+        assert!(!comment_not_saved(&loading, &empty, Path::new(NO_CLIP)));
+        assert!(!comment_not_saved(
+            &with("A note"),
+            &loading,
+            Path::new(NO_CLIP)
+        ));
     }
 
     /// #425: a comment or in/out points that read back other than wanted (the old ones a

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::file_snapshot::FileSnapshot;
-use super::file_tagger_backend::FileTaggerBackend;
+use super::file_tagger_backend::{FileTaggerBackend, Saved};
 use super::screenshot::Screenshot;
 use super::FolderInfo;
 use crate::markers::Marker;
@@ -148,6 +148,26 @@ impl ProductionFileTagger {
 
     /// [`FileTaggerBackend::save`] with the comment and in/out storage given explicitly.
     fn save_with(&self, snapshot: &FileSnapshot, path: &Path, storage: MetadataStorage) -> PathBuf {
+        self.save_reporting_with(snapshot, path, storage).path
+    }
+
+    /// [`FileTaggerBackend::save_reporting`] with the comment and in/out storage given
+    /// explicitly.
+    fn save_reporting_with(
+        &self,
+        snapshot: &FileSnapshot,
+        path: &Path,
+        storage: MetadataStorage,
+    ) -> Saved {
+        // Points typed as an `In/Out:` line stay in the comment wherever the setting keeps them.
+        // A pending snapshot knows neither its comment nor its points, and writes no points.
+        let (_, typed) = metadata::split_in_out_line(snapshot.comment());
+        let typed = !snapshot.comment_loading() && (typed.start.is_some() || typed.end.is_some());
+        // Nothing was written: whatever was wanted is compared.
+        let not_saved = || Saved {
+            path: path.to_path_buf(),
+            points_in_comment: true,
+        };
         let new_file_name = snapshot.file_name();
         let new_path = path
             .parent()
@@ -164,11 +184,13 @@ impl ProductionFileTagger {
                 path,
                 new_path
             );
-            return path.to_path_buf();
+            return not_saved();
         }
 
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);
+        // What the video did not take went into the comment, as its in/out line (#442).
+        let mut points_in_comment = !snapshot.comment_loading() && (!saved.in_out || typed);
         // A pending snapshot does not know an XMP comment, so it has no text file to write.
         let writes_text_file =
             !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo);
@@ -186,17 +208,29 @@ impl ProductionFileTagger {
                     new_path,
                     e
                 );
-                return path.to_path_buf();
+                return Saved {
+                    path: path.to_path_buf(),
+                    points_in_comment,
+                };
             }
             log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
         // In/out points the video did not take are the text's in/out line.
         if writes_text_file {
             let text = metadata::stored_comment(snapshot, saved.in_out);
-            metadata::save_comment_text_file(&new_path, &text, saved.comment);
+            // A text file that could not be rewritten or removed keeps the `In/Out:` line it had,
+            // and its line wins over the video's points when read back (#442).
+            if !metadata::save_comment_text_file(&new_path, &text, saved.comment) {
+                let (_, line) =
+                    metadata::split_in_out_line(&crate::comment::load_comment(&new_path));
+                points_in_comment |= line.start.is_some() || line.end.is_some();
+            }
         }
         metadata::cache::refresh_after_save(path, &new_path);
-        new_path
+        Saved {
+            path: new_path,
+            points_in_comment,
+        }
     }
 }
 
@@ -207,6 +241,10 @@ impl FileTaggerBackend for ProductionFileTagger {
 
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf {
         self.save_with(snapshot, path, metadata::metadata_storage())
+    }
+
+    fn save_reporting(&self, snapshot: &FileSnapshot, path: &Path) -> Saved {
+        self.save_reporting_with(snapshot, path, metadata::metadata_storage())
     }
 
     fn load_comments(&self, items: &[(PathBuf, FileSnapshot)]) -> Vec<FileSnapshot> {
@@ -635,21 +673,48 @@ mod tests {
         let new_path = tagger.save_with(&wanted, &path, TEXT);
         let saved = tagger.parse_with(&new_path, &FolderInfo::default(), TEXT);
 
-        assert!(crate::recovery::comment_not_saved(&wanted, &saved));
+        assert!(crate::recovery::comment_not_saved(
+            &wanted, &saved, &new_path
+        ));
         // A short name keeps it, and nothing is reported.
         let short = clip_named("short-name-comment", "clip.mov");
         let mut wanted = tagger.parse_with(&short, &FolderInfo::default(), TEXT);
         wanted.set_comment("Вода в кадре".to_string());
         let saved_path = tagger.save_with(&wanted, &short, TEXT);
         let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
-        assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+        assert!(!crate::recovery::comment_not_saved(
+            &wanted,
+            &saved,
+            &saved_path
+        ));
+    }
+
+    /// #442: a `.comment.txt` that is there but reads back empty is held by another program,
+    /// not one that could not be written: #416's reason is not given for it, #425's is.
+    #[test]
+    fn a_comment_file_that_reads_back_empty_is_not_told_as_unwritable() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("held-comment", "clip.mov");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_comment("New note".to_string());
+        let saved_path = tagger.save_with(&wanted, &path, TEXT);
+        // As another program holding the file without sharing it makes it read.
+        let mut saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
+        saved.set_comment(String::new());
+        assert!(!crate::recovery::comment_not_saved(
+            &wanted,
+            &saved,
+            &saved_path
+        ));
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted, &saved, false
+        ));
     }
 
     /// #425: a save that took reads back as wanted, so no "not saved" note shows: a comment with
     /// a marker line, an AI block after extra blank lines and in/out points, kept in the text
     /// file or in the video, with points inside the clip and at its edges (0 s and its end,
     /// which the video reads back as no point).
-    #[cfg(unix)]
     #[test]
     fn a_comment_and_points_that_were_saved_are_not_told_as_lost() {
         let tagger = ProductionFileTagger;
@@ -681,18 +746,19 @@ mod tests {
                 ));
                 wanted.set_segment_start(Some(start));
                 wanted.set_segment_end(Some(end));
-                let saved_path = tagger.save_with(&wanted, &path, storage);
-                let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), storage);
+                let report = tagger.save_reporting_with(&wanted, &path, storage);
+                let saved = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
                 assert!(saved.comment().contains("вторая строка"), "{name}: written");
-                // As `recovery::points_in_comment` decides it after a save, for the storage this
-                // test passes in (the helper reads the setting).
-                let points_in_comment = storage.in_out == InOutStorage::Comment
-                    || crate::recovery::points_kept_in_text(&saved_path);
+                assert_eq!(
+                    report.points_in_comment,
+                    storage.in_out == InOutStorage::Comment,
+                    "{name}: the points went where the setting keeps them"
+                );
                 assert!(
                     !crate::recovery::comment_or_points_not_saved(
                         &wanted,
                         &saved,
-                        points_in_comment
+                        report.points_in_comment
                     ),
                     "{name} {start}-{end}: {:?} / {:?}",
                     saved.comment(),
@@ -700,61 +766,108 @@ mod tests {
                 );
                 // The journal agrees, edge points kept in the video included (#448).
                 assert!(
-                    crate::recovery::saved_what_was_wanted(&wanted, &saved, points_in_comment),
+                    crate::recovery::saved_what_was_wanted(
+                        &wanted,
+                        &saved,
+                        report.points_in_comment
+                    ),
                     "{name} {start}-{end}: the journal counts it as saved"
                 );
             }
         }
     }
 
+    /// Files made read-only for a test, made writable again when it ends, also when it fails
+    /// (a temp folder with a read-only file in it cannot be cleaned on Windows).
+    struct ReadOnly(Vec<PathBuf>);
+
+    impl ReadOnly {
+        /// `None` where read-only files are writable anyway (running as root): nothing to check
+        /// there. CI runs as a normal user, so there that is a broken setup.
+        fn set(paths: &[&Path]) -> Option<Self> {
+            let guard = Self(paths.iter().map(|p| p.to_path_buf()).collect());
+            for path in &guard.0 {
+                let mut permissions = std::fs::metadata(path).expect("file").permissions();
+                permissions.set_readonly(true);
+                std::fs::set_permissions(path, permissions).expect("read-only");
+            }
+            let writable = guard
+                .0
+                .iter()
+                .any(|p| std::fs::OpenOptions::new().write(true).open(p).is_ok());
+            if writable {
+                assert!(
+                    std::env::var_os("CI").is_none(),
+                    "read-only files are writable in CI"
+                );
+                eprintln!("read-only files are writable here (root?): nothing to check");
+                return None;
+            }
+            Some(guard)
+        }
+    }
+
+    impl Drop for ReadOnly {
+        fn drop(&mut self) {
+            for path in &self.0 {
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    let mut permissions = metadata.permissions();
+                    #[allow(clippy::permissions_set_readonly_false)]
+                    permissions.set_readonly(false);
+                    let _ = std::fs::set_permissions(path, permissions);
+                }
+            }
+        }
+    }
+
+    /// A clip saved with `comment` and in/out points under `storage`, with the path after.
+    fn saved_clip(
+        test: &str,
+        storage: MetadataStorage,
+        comment: &str,
+        points: (Option<f32>, Option<f32>),
+    ) -> PathBuf {
+        let tagger = ProductionFileTagger;
+        let path = clip_named(test, "clip.mov");
+        let mut old = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        old.set_comment(comment.to_string());
+        old.set_segment_start(points.0);
+        old.set_segment_end(points.1);
+        tagger.save_with(&old, &path, storage)
+    }
+
     /// #425: a read-only `.comment.txt` keeps its old comment and in/out points through a save,
-    /// and that is told (not as #416's lost comment). Skipped where read-only files are
-    /// writable anyway (running as root).
-    #[cfg(unix)]
+    /// and that is told (not as #416's lost comment).
     #[test]
     fn a_read_only_comment_file_is_told_as_not_saved() {
         let tagger = ProductionFileTagger;
-        let path = clip_named("read-only-comment", "clip.mov");
-        let mut old = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
-        old.set_comment("Old note".to_string());
-        old.set_segment_start(Some(0.05));
-        old.set_segment_end(Some(0.1));
-        let path = tagger.save_with(&old, &path, TEXT);
+        let path = saved_clip(
+            "read-only-comment",
+            TEXT,
+            "Old note",
+            (Some(0.05), Some(0.1)),
+        );
         let comment_file = crate::comment::comment_path(&path);
-        let mut permissions = std::fs::metadata(&comment_file)
-            .expect("written")
-            .permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(&comment_file, permissions.clone()).expect("read-only");
-        if std::fs::OpenOptions::new()
-            .write(true)
-            .open(&comment_file)
-            .is_ok()
-        {
-            // CI runs as a normal user: there, a writable read-only file is a broken setup.
-            assert!(
-                std::env::var_os("CI").is_none(),
-                "read-only files are writable in CI"
-            );
-            eprintln!("read-only files are writable here (root?): nothing to check");
+        let Some(_read_only) = ReadOnly::set(&[&comment_file]) else {
             return;
-        }
-
+        };
         let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
         wanted.set_comment("New note".to_string());
         wanted.set_segment_start(Some(0.1));
         wanted.set_segment_end(Some(0.15));
-        let saved_path = tagger.save_with(&wanted, &path, TEXT);
-        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), TEXT);
-        #[allow(clippy::permissions_set_readonly_false)]
-        permissions.set_readonly(false);
-        let _ = std::fs::set_permissions(&comment_file, permissions);
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), TEXT);
 
         assert_eq!(saved.comment(), "Old note");
+        assert!(report.points_in_comment);
         assert!(crate::recovery::comment_or_points_not_saved(
             &wanted, &saved, true
         ));
-        assert!(!crate::recovery::comment_not_saved(&wanted, &saved));
+        assert!(!crate::recovery::comment_not_saved(
+            &wanted,
+            &saved,
+            &report.path
+        ));
         let mut points_only = saved.clone();
         points_only.set_segment_start(Some(0.1));
         points_only.set_segment_end(Some(0.15));
@@ -762,82 +875,161 @@ mod tests {
             crate::recovery::comment_or_points_not_saved(&points_only, &saved, true),
             "points kept in the comment file that did not change are told too"
         );
+    }
 
-        // With the default storage, a video that refuses the XMP (read-only here) has its
-        // comment and points kept in the comment file; a read-only one keeps the old points,
-        // and that is told too.
+    /// #425: with the default storage, a video that refuses the XMP (read-only here) has its
+    /// comment and points kept in the comment file; a read-only one keeps the old points, and
+    /// that is told too.
+    #[test]
+    fn a_read_only_video_and_comment_file_keep_the_old_points_and_are_told() {
+        let tagger = ProductionFileTagger;
         let path = clip_named("read-only-comment-video", "clip.mov");
-        let video_permissions = std::fs::metadata(&path).expect("clip").permissions();
-        let mut read_only = video_permissions.clone();
-        read_only.set_readonly(true);
-        std::fs::set_permissions(&path, read_only).expect("read-only video");
+        let Some(_video) = ReadOnly::set(&[&path]) else {
+            return;
+        };
         let mut old = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
         old.set_comment("Note".to_string());
         old.set_segment_start(Some(0.05));
         old.set_segment_end(Some(0.1));
-        let path = tagger.save_with(&old, &path, ADOBE);
-        assert!(
-            crate::recovery::points_kept_in_text(&path),
-            "kept in the text"
-        );
+        let report = tagger.save_reporting_with(&old, &path, ADOBE);
+        assert!(report.points_in_comment, "kept in the text");
+        let path = report.path;
         let comment_file = crate::comment::comment_path(&path);
-        let mut permissions = std::fs::metadata(&comment_file)
-            .expect("written")
-            .permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(&comment_file, permissions.clone()).expect("read-only");
+        let Some(_comment) = ReadOnly::set(&[&comment_file]) else {
+            return;
+        };
         let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
         wanted.set_segment_start(Some(0.1));
         wanted.set_segment_end(Some(0.15));
-        let saved_path = tagger.save_with(&wanted, &path, ADOBE);
-        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
-        #[allow(clippy::permissions_set_readonly_false)]
-        permissions.set_readonly(false);
-        let _ = std::fs::set_permissions(&comment_file, permissions);
-        let _ = std::fs::set_permissions(&saved_path, video_permissions);
+        let report = tagger.save_reporting_with(&wanted, &path, ADOBE);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), ADOBE);
         assert!(crate::recovery::comment_or_points_not_saved(
             &wanted,
             &saved,
-            crate::recovery::points_kept_in_text(&saved_path)
+            report.points_in_comment
         ));
+    }
 
-        // The same, with a comment file that has no points yet: the read-only video cannot take
-        // the new ones and the comment file cannot either, and that is told too.
-        let path = clip_named("read-only-comment-no-points", "clip.mov");
-        let mut old = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
-        old.set_comment("Note".to_string());
-        let path = tagger.save_with(&old, &path, TEXT);
+    /// #425: a comment file that has no points yet, and a read-only video that cannot take the
+    /// new ones: the comment file cannot either, and that is told too.
+    #[test]
+    fn points_refused_by_a_read_only_video_and_comment_file_are_told() {
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("read-only-comment-no-points", TEXT, "Note", (None, None));
         let comment_file = crate::comment::comment_path(&path);
-        let video_permissions = std::fs::metadata(&path).expect("clip").permissions();
-        let mut permissions = std::fs::metadata(&comment_file)
-            .expect("written")
-            .permissions();
-        for (file, mut read_only) in [
-            (&path, video_permissions.clone()),
-            (&comment_file, permissions.clone()),
-        ] {
-            read_only.set_readonly(true);
-            std::fs::set_permissions(file, read_only).expect("read-only");
-        }
-        assert!(
-            crate::recovery::points_kept_in_text(&path),
-            "the video cannot take them"
-        );
+        let Some(_read_only) = ReadOnly::set(&[&path, &comment_file]) else {
+            return;
+        };
         let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
         wanted.set_segment_start(Some(0.05));
         wanted.set_segment_end(Some(0.15));
-        let saved_path = tagger.save_with(&wanted, &path, ADOBE);
-        let saved = tagger.parse_with(&saved_path, &FolderInfo::default(), ADOBE);
-        let told = crate::recovery::comment_or_points_not_saved(
+        let report = tagger.save_reporting_with(&wanted, &path, ADOBE);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), ADOBE);
+        assert!(
+            crate::recovery::comment_or_points_not_saved(&wanted, &saved, report.points_in_comment),
+            "points only, into a read-only video and comment file"
+        );
+    }
+
+    /// #442: points kept in the video, the comment in a read-only `.comment.txt` without an
+    /// `In/Out:` line, and an in point past the clip's end, which no marker can hold: the save
+    /// sends the points to the text file, which refuses them. The save says where it sent them,
+    /// so that is told and the journal keeps the edit (a writable video once hid it).
+    #[test]
+    fn points_a_marker_cannot_hold_and_a_read_only_comment_file_refuses_are_told() {
+        let storage = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("past-end-read-only-comment", storage, "Note", (None, None));
+        let comment_file = crate::comment::comment_path(&path);
+        let Some(_read_only) = ReadOnly::set(&[&comment_file]) else {
+            return;
+        };
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        // The fixture is 0.2 s long.
+        wanted.set_segment_start(Some(5.0));
+        let report = tagger.save_reporting_with(&wanted, &path, storage);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
+        assert!(report.points_in_comment, "the marker could not hold them");
+        assert!(crate::recovery::comment_or_points_not_saved(
             &wanted,
             &saved,
-            crate::recovery::points_kept_in_text(&saved_path),
-        );
-        #[allow(clippy::permissions_set_readonly_false)]
-        permissions.set_readonly(false);
-        let _ = std::fs::set_permissions(&comment_file, permissions);
-        let _ = std::fs::set_permissions(&saved_path, video_permissions);
-        assert!(told, "points only, into a read-only video and comment file");
+            report.points_in_comment
+        ));
+        assert!(!crate::recovery::saved_what_was_wanted(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
+    /// #442: points typed as an `In/Out:` line are compared even when the video took the points:
+    /// the line is what reads back.
+    #[test]
+    fn a_typed_in_out_line_is_compared_when_the_video_took_the_points() {
+        let storage = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let tagger = ProductionFileTagger;
+        let path = clip_named("typed-line-in-video", "clip.mov");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        wanted.set_comment("Note\nIn/Out: 00:00:00.050 – end".to_string());
+        let report = tagger.save_reporting_with(&wanted, &path, storage);
+        assert!(report.points_in_comment);
+        let mut plain = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
+        plain.set_comment("Note".to_string());
+        plain.set_segment_start(Some(0.05));
+        let report = tagger.save_reporting_with(&plain, &report.path, storage);
+        assert!(!report.points_in_comment, "the video took them");
+    }
+
+    /// #442: a read-only `.comment.txt` with an `In/Out:` line left from before, while the
+    /// points are kept in the video: the video takes the new points, the line keeps the old
+    /// ones and wins when read back. The save says so, and it is told.
+    #[test]
+    fn an_old_in_out_line_a_read_only_comment_file_keeps_is_told() {
+        let storage = MetadataStorage {
+            comment: CommentStorage::TextFile,
+            in_out: InOutStorage::InVideo,
+        };
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("old-line-read-only", TEXT, "Note", (Some(0.05), None));
+        let comment_file = crate::comment::comment_path(&path);
+        let Some(_read_only) = ReadOnly::set(&[&comment_file]) else {
+            return;
+        };
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), storage);
+        wanted.set_segment_start(Some(0.1));
+        let report = tagger.save_reporting_with(&wanted, &path, storage);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), storage);
+        assert!(report.points_in_comment, "the old line is what reads back");
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
+    /// #442: a snapshot whose comment was not read yet writes no points, and they are not
+    /// compared: the tags it was saved for count as saved.
+    #[test]
+    fn a_pending_snapshot_does_not_compare_points() {
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("pending-points", ADOBE, "Note", (Some(0.05), Some(0.1)));
+        let mut wanted = FileSnapshot::parse("clip.mov");
+        wanted.set_comment_loading(true);
+        wanted.set_tags(["Food"]);
+        let report = tagger.save_reporting_with(&wanted, &path, ADOBE);
+        assert!(!report.points_in_comment);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), ADOBE);
+        assert!(crate::recovery::saved_what_was_wanted(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
     }
 
     /// #424: a frame of a clip whose name leaves no room for `<name>.snap.HH-MM-SS-mmm.jpg` (a

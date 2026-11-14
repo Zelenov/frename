@@ -9,6 +9,21 @@ use super::production_file_tagger::is_screenshot_sidecar;
 use crate::markers::Marker;
 use crate::metadata::{MarkersError, MetadataMove, Rotation, RotationError};
 
+/// What a save did, as [`FileTaggerBackend::save_reporting`] tells it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Saved {
+    /// The clip's path after the save (it differs after a rename).
+    pub path: PathBuf,
+    /// The save put the in/out points into the comment as its `In/Out:` line, or the comment
+    /// holds one the editor typed: the setting says so, the video could not take them (a format
+    /// without XMP, a read-only or locked file, points a marker cannot hold), or its XMP write
+    /// failed. Only then do the points read back as set, so only then are they compared
+    /// ([`crate::recovery::comment_or_points_not_saved`],
+    /// [`crate::recovery::saved_what_was_wanted`]). Points that went into the video read back
+    /// other than set even when saved (an in point at 0 s, an out point at the clip's end).
+    pub points_in_comment: bool,
+}
+
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
 pub trait FileTaggerBackend: Send + Sync {
     /// Parse the file at `path` and return its snapshot (tags, name, extension, comment).
@@ -17,6 +32,16 @@ pub trait FileTaggerBackend: Send + Sync {
     /// Save `snapshot` for the file at `path`.
     /// Returns the new path (which may differ from `path` if the file was renamed).
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf;
+
+    /// [`Self::save`], and what the save did with the in/out points (see [`Saved`]). By default
+    /// they are compared: a backend that keeps them nowhere but the snapshot reads them back
+    /// exactly as set.
+    fn save_reporting(&self, snapshot: &FileSnapshot, path: &Path) -> Saved {
+        Saved {
+            path: self.save(snapshot, path),
+            points_in_comment: true,
+        }
+    }
 
     /// Returns true if `path` is a sidecar file (should be hidden from the file list):
     /// a comment, a screenshot, or the folder's tag file.

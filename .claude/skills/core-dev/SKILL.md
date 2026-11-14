@@ -167,7 +167,7 @@ Built by `TagList::file_snapshot()`. Contains:
 
 **Parsing** (loading a file): `FileTagger::parse(path)` splits the file name by `.`: last segment = extension, second-to-last = name, rest = tags.
 
-**Saving** (writing to disk): `snapshot.save_and_reparse(&path)` renames the file and re-parses to get the canonical snapshot.
+**Saving** (writing to disk): `snapshot.save_and_reparse(&path)` renames the file and re-parses to get the canonical snapshot; it returns a `Saved` (the path after, and whether the in/out points went into the comment) with it.
 
 ---
 
