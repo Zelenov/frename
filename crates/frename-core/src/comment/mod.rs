@@ -108,13 +108,19 @@ fn locale_country() -> Option<String> {
 }
 
 /// A sentence in the encoding "ANSI" comment files are read in on this system, for tests:
-/// Windows-1251 where detection decides, the system's code page on Windows when it is 1251 or
-/// 1252 (CI's), `None` for another one.
+/// Windows-1251 where detection decides (when this locale's hint lets it find 1251: a Greek or
+/// Hebrew one may not), the system's code page on Windows when it is 1251 or 1252 (CI's),
+/// `None` otherwise.
 #[cfg(test)]
 pub(crate) fn ansi_sample() -> Option<(&'static str, &'static encoding_rs::Encoding)> {
+    const CYRILLIC: &str = "Привет, вода в кадре";
     match ansi_code_page().map(code_page_encoding) {
-        None => Some(("Привет, вода в кадре", encoding_rs::WINDOWS_1251)),
-        Some(Some(e)) if e == encoding_rs::WINDOWS_1251 => Some(("Привет, вода в кадре", e)),
+        None => {
+            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(CYRILLIC);
+            let found = guess_encoding(&ansi, locale_country().as_deref());
+            (found == encoding_rs::WINDOWS_1251).then_some((CYRILLIC, found))
+        }
+        Some(Some(e)) if e == encoding_rs::WINDOWS_1251 => Some((CYRILLIC, e)),
         Some(Some(e)) if e == encoding_rs::WINDOWS_1252 => Some(("Café crème, à revoir", e)),
         Some(_) => None,
     }
