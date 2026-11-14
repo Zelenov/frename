@@ -305,22 +305,13 @@ fn describe_all_bar<'a>(
         if unnamed == 0 {
             return None;
         }
-        // A question about another count is out of date: the button asks again.
+        // A question about another count is out of date: the button asks again. The question
+        // takes the button's place, inside the same padding (#469).
         if state.describe_all_asked() == Some(unnamed) {
-            return Some(confirm_bar(unnamed, price_usd));
+            confirm_bar(unnamed, price_usd)
+        } else {
+            describe_unnamed_button(unnamed, price_usd)
         }
-        let button = ui_button::with_icon(
-            ButtonKind::Secondary,
-            Icon::Sparkles,
-            fl!("markers-ai-describe-unnamed", count = unnamed),
-            true,
-        )
-        .on_press(Message::DescribeUnnamed);
-        tooltip::tip(
-            button,
-            Tip::new(describe_unnamed_tip(unnamed, price_usd)),
-            Position::Bottom,
-        )
     };
     Some(
         container(content)
@@ -332,6 +323,22 @@ fn describe_all_bar<'a>(
             })
             .width(Length::Fill)
             .into(),
+    )
+}
+
+/// "Describe N unnamed", with its price in the tooltip.
+fn describe_unnamed_button<'a>(unnamed: usize, price_usd: Option<f64>) -> Element<'a, Message> {
+    let button = ui_button::with_icon(
+        ButtonKind::Secondary,
+        Icon::Sparkles,
+        fl!("markers-ai-describe-unnamed", count = unnamed),
+        true,
+    )
+    .on_press(Message::DescribeUnnamed);
+    tooltip::tip(
+        button,
+        Tip::new(describe_unnamed_tip(unnamed, price_usd)),
+        Position::Bottom,
     )
 }
 

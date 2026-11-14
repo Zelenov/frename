@@ -1,3 +1,7 @@
+# 0.227
+## Fixed
+- In the marker list, the "Describe N markers?" question and its buttons have the same margin as the rest of the list. Before, they sat against the panel's left edge.
+
 # 0.226
 ## Fixed
 - On Windows and macOS, a clip renamed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its saved frames and subtitles. Before, the file list did not show its subtitles icon or count it in the "have subtitles" filter, and adding a tag left its frames behind under the old name.
