@@ -99,7 +99,8 @@ impl File {
         let has_subtitles = subtitle_candidates(&file_path).iter().any(|path| {
             path.file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|name| folder_info.contains(name))
+                // In any case where the file system ignores it (#463).
+                .is_some_and(|name| folder_info.has_entry(name))
         });
         Self::new_from_parts(file_path, modified_at, file_snapshot, has_subtitles)
     }

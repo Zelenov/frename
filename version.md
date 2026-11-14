@@ -1,3 +1,7 @@
+# 0.226
+## Fixed
+- On Windows and macOS, a clip renamed only in case outside frename keeps its screenshots and subtitles. Before, they were not shown for the clip, and a tag change left its screenshots behind under the old name.
+
 # 0.225
 ## Fixed
 - On Windows and macOS, a clip whose name was changed only in case outside frename (`A001.MOV` to `A001.mov` in Explorer) keeps its comment. Before, the comment file was not found, the comment box was empty, and the next change to the clip deleted the file.
