@@ -854,6 +854,25 @@ mod tests {
         assert!(screenshot_path(&short, 10_936).exists());
     }
 
+    /// #458: a comment file Notepad saved as "ANSI" is read, and a tag change keeps it (as
+    /// UTF-8 now) instead of deleting it, with the comment in the text file or in the video.
+    #[test]
+    fn a_tag_change_keeps_an_ansi_comment() {
+        let tagger = ProductionFileTagger;
+        for (name, storage) in [("text", TEXT), ("adobe", ADOBE)] {
+            let path = clip_named(&format!("ansi-comment-{name}"), "goat.mov");
+            let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode("Привет, вода в кадре");
+            std::fs::write(crate::comment::comment_path(&path), &*ansi).expect("write");
+            let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), storage);
+            assert_eq!(snapshot.comment(), "Привет, вода в кадре", "{name}: read");
+            snapshot.set_tags(["pick"]);
+            let new_path = tagger.save_with(&snapshot, &path, storage);
+            assert_ne!(new_path, path, "{name}: renamed");
+            let saved = tagger.parse_with(&new_path, &FolderInfo::default(), storage);
+            assert_eq!(saved.comment(), "Привет, вода в кадре", "{name}: kept");
+        }
+    }
+
     #[test]
     fn a_failed_rename_keeps_the_comment_with_the_video() {
         let tagger = ProductionFileTagger;

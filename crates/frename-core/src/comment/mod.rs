@@ -33,12 +33,31 @@ pub fn is_comment_file(path: &Path) -> bool {
 const UTF8_BOM: char = '\u{feff}';
 
 /// Load the comment file for a file. Returns empty string if absent or empty.
+///
+/// A file another editor saved in another encoding is read too (#458): Notepad's "Unicode"
+/// (UTF-16 with its byte order mark) and "ANSI" (the system's code page, such as Windows-1251).
+/// Read as nothing, its text would be gone at the next save, which writes the comment shown.
 pub fn load_comment(file_path: &Path) -> String {
-    let text = std::fs::read_to_string(comment_path(file_path)).unwrap_or_default();
-    text.strip_prefix(UTF8_BOM)
-        .unwrap_or(&text)
-        .trim()
-        .to_string()
+    let bytes = std::fs::read(comment_path(file_path)).unwrap_or_default();
+    decode_comment(&bytes).trim().to_string()
+}
+
+/// The text of a comment file's `bytes`: UTF-8 (with or without its byte order mark), UTF-16
+/// with its byte order mark, or else the legacy encoding the bytes look like.
+fn decode_comment(bytes: &[u8]) -> String {
+    if let Some((encoding, bom_length)) = encoding_rs::Encoding::for_bom(bytes) {
+        let (text, _) = encoding.decode_without_bom_handling(&bytes[bom_length..]);
+        return text.into_owned();
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_string();
+    }
+    // A single-byte code page has no mark: the detector picks the one whose letters the bytes
+    // make the most sense in (Cyrillic for Windows-1251, Latin for Windows-1252, …).
+    let mut detector = chardetng::EncodingDetector::new();
+    detector.feed(bytes, true);
+    let (text, _, _) = detector.guess(None, true).decode(bytes);
+    text.into_owned()
 }
 
 /// Save (or delete) the comment file for a file.
@@ -103,6 +122,32 @@ pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
 
 #[cfg(test)]
 mod tests {
+
+    /// #458: a comment Notepad saved as "ANSI" (Windows-1251 here) or "Unicode" (UTF-16 LE with
+    /// its byte order mark) is read, not shown as empty and then deleted by the next save.
+    #[test]
+    fn comments_in_other_encodings_are_read() {
+        let dir = crate::test_support::fresh_dir("comment-encodings");
+        let clip = dir.join("goat.mov");
+        let text = "Привет, вода в кадре";
+        let (ansi, _, _) = encoding_rs::WINDOWS_1251.encode(text);
+        std::fs::write(comment_path(&clip), &*ansi).expect("write");
+        assert_eq!(load_comment(&clip), text);
+        let mut utf16 = vec![0xFF, 0xFE];
+        utf16.extend(text.encode_utf16().flat_map(u16::to_le_bytes));
+        std::fs::write(comment_path(&clip), utf16).expect("write");
+        assert_eq!(load_comment(&clip), text);
+        let latin = "Café crème, à revoir";
+        let (ansi, _, _) = encoding_rs::WINDOWS_1252.encode(latin);
+        std::fs::write(comment_path(&clip), &*ansi).expect("write");
+        assert_eq!(load_comment(&clip), latin);
+        // UTF-8, with and without its byte order mark, as before.
+        std::fs::write(comment_path(&clip), format!("{UTF8_BOM}{text}")).expect("write");
+        assert_eq!(load_comment(&clip), text);
+        std::fs::write(comment_path(&clip), text).expect("write");
+        assert_eq!(load_comment(&clip), text);
+    }
+
     use super::*;
 
     fn temp_folder(name: &str) -> PathBuf {
