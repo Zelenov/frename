@@ -120,7 +120,6 @@ fn guess_encoding(bytes: &[u8], country: Option<&str>) -> &'static encoding_rs::
     detector.guess(country.map(str::as_bytes), true)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -129,9 +129,6 @@ mod tests {
         assert_eq!(load_comment(&clip), text);
     }
 
-
-
-
     /// #458, on Windows: a short "ANSI" comment is read in the system's code page, whatever
     /// detection would guess. Runs where that code page is 1251 or 1252 (CI's is 1252).
     #[cfg(windows)]
