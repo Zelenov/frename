@@ -27,7 +27,8 @@ pub fn run(data_dir: &Path) {
         return;
     };
     log::info!("found settings of an older frename in {}", folder.display());
-    // Before the settings are read: the question is in the system's language (#470).
+    // The stored language is not available yet (the database is not open): the question is
+    // in the system's language (#470).
     crate::i18n::apply("");
     let question = format!(
         "{}\n\n{}\n{}\n{}",

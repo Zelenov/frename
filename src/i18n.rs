@@ -960,7 +960,9 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 110] = [
+    const NOT_UI_TEXT: [(&str, &str); 112] = [
+        ("txt", "file extension of a save dialog's file type"),
+        ("frename", "app name, the title of the first-start import question"),
         ("https://raw.githubusercontent.com/Zelenov/frename", "address"),
         ("main", "branch name"),
         ("ai-notes-editor", "widget id"),
@@ -1398,6 +1400,77 @@ mod tests {
             "UI text belongs in i18n/en/frename.ftl (or NOT_UI_TEXT, with a reason):\n{}",
             found.join("\n")
         );
+    }
+
+    /// The text a call hands to a native dialog (`rfd`), anywhere in the app: the dialog
+    /// builders' title, description and file type (#470). Not only the files `ui_files` scans:
+    /// a dialog is often built where its message is handled, in a `state.rs`.
+    fn dialog_texts(tokens: proc_macro2::TokenStream, out: &mut Vec<String>) {
+        use proc_macro2::TokenTree;
+        let tokens: Vec<TokenTree> = tokens.into_iter().collect();
+        for (i, token) in tokens.iter().enumerate() {
+            match token {
+                TokenTree::Ident(name)
+                    if ["set_title", "set_description", "add_filter"]
+                        .contains(&name.to_string().as_str())
+                        && matches!(tokens.get(i.wrapping_sub(1)), Some(TokenTree::Punct(p)) if p.as_char() == '.') =>
+                {
+                    if let Some(TokenTree::Group(arguments)) = tokens.get(i + 1) {
+                        literals(arguments.stream(), out);
+                    }
+                }
+                TokenTree::Group(group) => dialog_texts(group.stream(), out),
+                _ => {}
+            }
+        }
+    }
+
+    fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    #[test]
+    fn native_dialogs_get_translated_text() {
+        let mut files = Vec::new();
+        rust_files(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        let mut found = Vec::new();
+        for path in files {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let tokens: proc_macro2::TokenStream = text
+                .parse()
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let mut texts = Vec::new();
+            dialog_texts(tokens, &mut texts);
+            for literal in texts {
+                if has_latin_word(&literal) && !NOT_UI_TEXT.iter().any(|(l, _)| *l == literal) {
+                    found.push(format!("{}: {literal:?}", path.display()));
+                }
+            }
+        }
+        assert!(
+            found.is_empty(),
+            "a native dialog's text belongs in i18n/en/frename.ftl:\n{}",
+            found.join("\n")
+        );
+    }
+
+    #[test]
+    fn the_dialog_scan_sees_builder_calls_and_skips_message_ids() {
+        let source = "fn f() { rfd::AsyncFileDialog::new().add_filter(\"Text\", &[\"txt\"])\n\
+                      .set_title(fl!(\"markers-export\")); w.title(\"Other\"); }";
+        let mut texts = Vec::new();
+        dialog_texts(source.parse().unwrap(), &mut texts);
+        assert_eq!(texts, ["Text", "txt"]);
     }
 
     #[test]
