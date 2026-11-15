@@ -1,5 +1,9 @@
 # 0.231
 ## Fixed
+- A folder opened while another one is still loading stays open, and is the folder the next start opens. Before, the folder asked for first replaced it when its loading ended.
+
+# 0.231
+## Fixed
 - In the marker list, with a Premiere or Resolve time display, the "In/out points" label stays on one line and ends with "…" when it does not fit. Before, in Russian it wrapped and its second line was cut in half.
 
 # 0.230
