@@ -34,8 +34,8 @@ pub enum Message {
         directory: Directory,
         target_file: Option<PathBuf>,
     },
-    /// Directory scan failed; keep previous state (no directory replaced).
-    FolderLoadFailed,
+    /// The scan of this folder failed; keep previous state (no directory replaced).
+    FolderLoadFailed(PathBuf),
     /// File was selected (by directory). Apply snapshot, set file workspace, load/unload video.
     FileOpened(File),
     /// Snapshot to persist: created by folder workspace when switching file.
