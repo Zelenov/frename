@@ -1,6 +1,6 @@
 # 0.235
 ## Fixed
-- After copying tags with Ctrl+C, Ctrl+V in the comment box, the file search, a file name or the time field pastes only the text. Shift+Space in the comment box types a space. Before, both also changed the clip's tags. In the tag search they still paste or toggle tags.
+- In the comment box, the file search, a file name or the time field, Ctrl+V only pastes the text and Shift+Space only types a space. Before, Ctrl+V also pasted copied tags onto the clip, and Shift+Space toggled a tag. In the tag search they still paste or toggle tags.
 
 # 0.233
 ## Fixed

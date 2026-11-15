@@ -2877,7 +2877,6 @@ impl FolderWorkspace {
         Self::long_notice(fl!("tag-not-usable", tag = name))
     }
 
-    /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     /// `then` when the tag search has the keys, else nothing: for a shortcut that a text field
     /// took, which only the tag search shares with it (#480).
     fn if_tag_search_has_the_keys(then: Message) -> Task<Message> {
@@ -2890,6 +2889,7 @@ impl FolderWorkspace {
         })
     }
 
+    /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     fn toggle_selected_tag(&mut self) -> Task<Message> {
         self.end_comment_session();
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
@@ -9833,9 +9833,11 @@ mod tests {
         let tags =
             |w: &FolderWorkspace| w.file_workspace().get_snapshot().unwrap().1.tags().to_vec();
         let before = tags(&workspace);
-        let _ = workspace.update(Message::PasteTagsWhileTyping);
-        let _ = workspace.update(Message::ToggleSelectedTagWhileTyping);
+        let paste = workspace.update(Message::PasteTagsWhileTyping);
+        let toggle = workspace.update(Message::ToggleSelectedTagWhileTyping);
         assert_eq!(tags(&workspace), before);
+        assert_eq!(paste.units(), 1, "the focus of the tag search is asked");
+        assert_eq!(toggle.units(), 1, "the focus of the tag search is asked");
     }
 
     #[test]
