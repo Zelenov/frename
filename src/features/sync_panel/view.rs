@@ -68,7 +68,7 @@ fn strip(is_synced: bool, locked: bool, words: bool) -> Element<'static, Message
 /// The icon and the sentence, cut with "…" at the room it has rather than wrapped (§13.9, #391);
 /// the whole sentence is its tooltip, for when it is cut.
 fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'static, Message> {
-    let sentence = tooltip::secondary_line(sentence);
+    let sentence = tooltip::fitted_secondary(sentence);
     row![icon(glyph, ICON_MARK, color), sentence]
 }
 

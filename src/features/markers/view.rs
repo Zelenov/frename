@@ -408,8 +408,7 @@ fn in_out_line<'a>((start, end): (u64, u64), time_format: TimeFormat) -> Element
             .height(ICON_S)
             .style(style::fill(VIDEO_SEGMENT_EDGE)),
         text::mono(times),
-        // One line with "…" when a timecode style leaves it little room (#476).
-        tooltip::secondary_line(fl!("markers-in-out")),
+        tooltip::fitted_secondary(fl!("markers-in-out")),
     ]
     .spacing(SPACE_S)
     .align_y(Alignment::Center);

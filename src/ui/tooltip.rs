@@ -146,7 +146,7 @@ pub fn drag_preview<'a, M: 'a>(
 
 /// Secondary text on one line, cut with "…" at the width it gets rather than wrapped, the whole
 /// text as its tooltip for when it is cut; `LINE_BODY` tall and clipped (§13.9, #391, #476).
-pub fn secondary_line<'a, M: 'a>(line: String) -> Element<'a, M> {
+pub fn fitted_secondary<'a, M: 'a>(line: String) -> Element<'a, M> {
     container(iced::widget::responsive(move |size| {
         let shown = text::secondary(text::fit_body(&line, size.width).into_owned())
             .wrapping(iced::widget::text::Wrapping::None);
