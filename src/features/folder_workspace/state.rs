@@ -861,6 +861,8 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let old_secs = self.file_workspace.segment_start_secs();
         // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
         if old_secs == Some(secs) {
@@ -878,6 +880,8 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let old_secs = self.file_workspace.segment_end_secs();
         // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
         if old_secs == Some(secs) {
@@ -897,6 +901,8 @@ impl FolderWorkspace {
         if self.inline_rename.is_some() {
             return Task::none();
         }
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let Some(new) = file_name_panel::suggested_in_out(self.file_workspace.tag_list()) else {
             return Task::none();
         };
@@ -917,6 +923,8 @@ impl FolderWorkspace {
         if self.inline_rename.is_some() {
             return Task::none();
         }
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let tag_list = self.file_workspace.tag_list();
         let mut ids: Vec<frename_core::TagId> = Vec::new();
         for id in names
@@ -961,6 +969,8 @@ impl FolderWorkspace {
         let Some(names) = self.copied_tags.clone() else {
             return Task::none();
         };
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
         };
@@ -2870,6 +2880,8 @@ impl FolderWorkspace {
 
     /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     fn toggle_selected_tag(&mut self) -> Task<Message> {
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
         let filter = self.file_workspace.tag_list().filter_query();
         if filter.ends_with(' ') {
@@ -2918,6 +2930,19 @@ impl FolderWorkspace {
     }
 
     fn handle_tag_panel(&mut self, msg: tag_panel::Message) -> Task<Message> {
+        // A change to the tags is its own undo step: what was typed in the comment box so far
+        // is one before it (#479). Not for layout or hover messages, which come while typing.
+        if matches!(
+            msg,
+            tag_panel::Message::CreateTag(_)
+                | tag_panel::Message::ToggleTag(_)
+                | tag_panel::Message::DeleteTag(_)
+                | tag_panel::Message::SaveTag(_)
+                | tag_panel::Message::ToggleStar(_)
+                | tag_panel::Message::DragEnded
+        ) {
+            self.end_comment_session();
+        }
         // Capture drag state before update() clears it on DragEnded.
         let drag_on_end = if let tag_panel::Message::DragEnded = &msg {
             Some((
@@ -3143,6 +3168,16 @@ impl FolderWorkspace {
     }
 
     fn handle_file_name_panel(&mut self, msg: file_name_panel::Message) -> Task<Message> {
+        // As in `handle_tag_panel` (#479).
+        if matches!(
+            msg,
+            file_name_panel::Message::RemoveTag(_)
+                | file_name_panel::Message::ClearSegmentStart
+                | file_name_panel::Message::ClearSegmentEnd
+                | file_name_panel::Message::DragEnded
+        ) {
+            self.end_comment_session();
+        }
         if let file_name_panel::Message::OpenFileMenu = msg {
             return self.file_workspace.file().map_or_else(Task::none, |file| {
                 Task::done(Message::FileMenu(file_menu::Message::Open(file.id())))
@@ -3266,6 +3301,8 @@ impl FolderWorkspace {
     }
 
     fn handle_sync_panel(&mut self, msg: sync_panel::Message) -> Task<Message> {
+        // What was typed so far is its own step, before this one (#479).
+        self.end_comment_session();
         let before = self.file_workspace.tag_list().order_state();
         let mut changed = true;
         match msg {
@@ -9698,6 +9735,73 @@ mod tests {
         assert_eq!(comment_of(&workspace), (String::new(), String::new()));
         let _ = workspace.update(Message::Redo);
         assert_eq!(comment_of(&workspace), ("hi".to_string(), "hi".to_string()));
+    }
+
+    /// Issue #479: `]` while the comment box has the keys sets the Out point (and types `]`).
+    /// Undoing the comment must not take the Out point with it: they are two steps.
+    #[test]
+    fn undoing_a_comment_keeps_an_out_point_set_while_typing() {
+        use iced::widget::text_editor::{Action, Edit};
+        let (_test_dir, mut workspace) = open_folder(1);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('a'))));
+        let _ = workspace.update(Message::MediaViewer(
+            media_viewer::Message::SegmentEndMarked(4.0),
+        ));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert(']'))));
+        let _ = workspace.update(Message::CommentFocused(false));
+        let segment_end = |w: &FolderWorkspace| w.file_workspace().segment_end_secs();
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            comment_of(&workspace).0,
+            "a",
+            "the text typed after `]` goes first"
+        );
+        assert_eq!(segment_end(&workspace), Some(4.0));
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(segment_end(&workspace), None, "then the Out point");
+        assert_eq!(comment_of(&workspace).0, "a");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            comment_of(&workspace).0,
+            "",
+            "then the text typed before it"
+        );
+
+        for _ in 0..3 {
+            let _ = workspace.update(Message::Redo);
+        }
+        assert_eq!(comment_of(&workspace).0, "a]");
+        assert_eq!(segment_end(&workspace), Some(4.0));
+    }
+
+    /// Issue #479: a tag ticked while the comment box has the keys is its own undo step.
+    #[test]
+    fn undoing_a_comment_keeps_a_tag_ticked_while_typing() {
+        use iced::widget::text_editor::{Action, Edit};
+        let (_test_dir, mut workspace) = open_folder(1);
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let checked = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(tag_id)
+                .is_some_and(|t| t.is_checked())
+        };
+        let was_checked = checked(&workspace);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('x'))));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let _ = workspace.update(Message::CommentFocused(false));
+        assert_ne!(checked(&workspace), was_checked);
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(checked(&workspace), was_checked, "the tag goes first");
+        assert_eq!(comment_of(&workspace).0, "x");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(comment_of(&workspace).0, "");
+        assert_eq!(checked(&workspace), was_checked);
     }
 
     #[test]

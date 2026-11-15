@@ -1,3 +1,7 @@
+# 0.231
+## Fixed
+- Ctrl+Z after writing a comment takes back only the comment. In and Out points (`[`, `]`) or tags set while the comment box was open are their own steps. Before, undoing the comment took them back too, and the next Ctrl+Z did nothing.
+
 # 0.230
 ## Fixed
 - Three system windows now use your language: the folder picker of "Import from an old frename folder", the file type in the marker list's Export…, and the question at the first start that offers to import settings from an older frename. Before, they were in English.
