@@ -1,3 +1,7 @@
+# 0.237
+## Fixed
+- Ctrl+Z after a batch action that ended while the clip you left was still being saved now takes back what you changed on the new clip first, as it does otherwise. Before, it went back to the clip you left first, and the next Ctrl+Z could act on the wrong clip.
+
 # 0.236
 ## Fixed
 - Ctrl+Z or Ctrl+Y pressed right after moving to another clip, while the clip you left is still being saved, no longer changes the clip you moved to. Before, it could undo the last change of the clip you left on the new clip (for example, uncheck its tag), and Ctrl+Y could not bring that change back. Now the keys do nothing until that save is done, usually a moment later. A change you make on the new clip during that moment is now the first one Ctrl+Z takes back, before the move.

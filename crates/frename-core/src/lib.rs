@@ -76,7 +76,7 @@ pub use tags::{
 pub use timecode::{TimeFormat, TimecodeStyle};
 pub use undo::{
     AddMarkerCommand, CheckTagsCommand, CreateTagCommand, DeleteMarkerCommand, DeleteTagCommand,
-    History, NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
+    History, Mark, NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand,
     RotateVideoCommand, SaveTagCommand, SetCommentCommand, SetMarkerColorCommand,
     SetMarkerNameCommand, SetMarkerSpanCommand, SetMarkerTextCommand, SetSegmentCommand,
     SetSegmentEndCommand, SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand,

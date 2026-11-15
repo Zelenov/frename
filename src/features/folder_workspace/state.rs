@@ -164,7 +164,7 @@ pub struct FolderWorkspace {
     /// NavigateFileCommand from the first of its file, at its mark: under the steps made on the
     /// clip navigated to while the save waited. A list, not one value, so navigations before the
     /// video unloads each get their own step.
-    navigation_targets: Vec<(FileId, FileId, u64)>,
+    navigation_targets: Vec<(FileId, FileId, frename_core::Mark)>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -2051,7 +2051,8 @@ impl FolderWorkspace {
         self.solo.tags_running = None;
         self.prune_suggest_tags();
         // The job renamed files behind the history: undoing across it would use stale paths.
-        self.history = WorkspaceHistory::new(HISTORY_DEPTH);
+        // Cleared, not replaced: a move still waiting for its save keeps its mark (#490).
+        self.history.clear();
         // The job may have written subtitles: the plan is made again.
         let load_comments =
             Task::batch([self.load_next_comment_batch(false), self.subtitle_reads()]);
@@ -5087,21 +5088,16 @@ mod tests {
             let list = w.file_workspace().tag_list();
             list.get_tag(pick(w)).is_some_and(|t| t.is_checked())
         };
-        let unloaded = |w: &mut FolderWorkspace| {
-            let _ = w.update(Message::MediaViewer(
-                crate::features::media_viewer::Message::Unloaded,
-            ));
-        };
 
         // file_1 gets "pick" first: visit it, check the tag, come back to file_0.
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
         flush_file_opened(&mut workspace);
-        unloaded(&mut workspace);
+        unload(&mut workspace);
         let id = pick(&workspace);
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(&mut workspace);
-        unloaded(&mut workspace);
+        unload(&mut workspace);
         assert!(
             workspace
                 .directory()
@@ -5127,7 +5123,7 @@ mod tests {
         let _ = workspace.update(Message::Redo);
         assert!(pick_checked(&workspace), "nor may a redo act meanwhile");
 
-        unloaded(&mut workspace);
+        unload(&mut workspace);
         assert!(
             workspace
                 .directory()
@@ -5173,9 +5169,7 @@ mod tests {
         let id = pick(&workspace);
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
         assert!(pick_checked(&workspace), "pick checked on file_1");
-        let _ = workspace.update(Message::MediaViewer(
-            crate::features::media_viewer::Message::Unloaded,
-        ));
+        unload(&mut workspace);
 
         let _ = workspace.update(Message::Undo);
         assert_eq!(
@@ -5190,6 +5184,51 @@ mod tests {
             Some(0),
             "the second goes back to file_0"
         );
+    }
+
+    /// #490: a batch job that ends while the save of the clip just left waits clears the
+    /// history, but the move still goes under a change made on the new clip after it.
+    #[test]
+    fn a_job_ending_while_the_left_clips_save_waits_keeps_the_moves_place() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let pick = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .expect("pick is a built-in tag")
+        };
+        let pick_checked = |w: &FolderWorkspace| {
+            let list = w.file_workspace().tag_list();
+            list.get_tag(pick(w)).is_some_and(|t| t.is_checked())
+        };
+        // Steps before the move, so the mark it takes is not 0.
+        for _ in 0..2 {
+            let id = pick(&workspace);
+            let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+        }
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.has_pending_rename(), "file_0's save waits");
+        let _ = workspace.update(Message::BatchFinished);
+        let id = pick(&workspace);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+        assert!(pick_checked(&workspace), "pick checked on file_1");
+        unload(&mut workspace);
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            workspace.directory().unwrap().selected_index(),
+            Some(1),
+            "the first undo stays on file_1"
+        );
+        assert!(!pick_checked(&workspace), "and unchecks its pick");
     }
 
     /// Regression test: closing the window while a video is loaded used to reopen it (a fresh

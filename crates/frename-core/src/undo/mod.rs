@@ -17,5 +17,5 @@ pub use commands::{
 };
 pub use context::UndoContext;
 pub use error::UndoError;
-pub use history::History;
+pub use history::{History, Mark};
 pub use traits::{CommandSink, Undoable};
