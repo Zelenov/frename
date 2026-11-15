@@ -408,7 +408,7 @@ fn in_out_line<'a>((start, end): (u64, u64), time_format: TimeFormat) -> Element
             .height(ICON_S)
             .style(style::fill(VIDEO_SEGMENT_EDGE)),
         text::mono(times),
-        text::secondary(fl!("markers-in-out")),
+        tooltip::fitted_secondary(fl!("markers-in-out")),
     ]
     .spacing(SPACE_S)
     .align_y(Alignment::Center);

@@ -24,7 +24,8 @@ use super::{
 /// Renders the file name card (design system §13.5.6):
 /// - first line: the checked tags as chips in the file's order | the trash
 /// - second line: the IN and OUT timecodes (when set), the In/Out the AI suggests (while it
-///   differs from them) | the name without the tags
+///   differs from them) | the name without the tags; the name goes under them, whole, when they
+///   leave it too little room (#477)
 /// - third line, while the AI description suggests tags the clip does not have yet or has tag
 ///   ideas: the suggested tags (a click adds one), "Add all", and the ideas
 pub fn view<'a, S>(
@@ -90,7 +91,7 @@ where
     let bottom_row = row(bottom_items)
         .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center)
-        .width(Length::Fill);
+        .wrap();
 
     let inner = container(
         column![top_row, bottom_row]
