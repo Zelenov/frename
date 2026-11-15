@@ -159,10 +159,12 @@ pub struct FolderWorkspace {
     /// The ID of the file navigated to (captured after dir.select_*).
     /// Taken by apply_file_opened, which pairs it with the file left.
     pending_to_file_id: Option<FileId>,
-    /// The navigations whose save has not run yet, as (file left, file navigated to), oldest
-    /// first. apply_file_updated pushes the NavigateFileCommand from the first of its file. A
-    /// list, not one value, so navigations before the video unloads each get their own step.
-    navigation_targets: Vec<(FileId, FileId)>,
+    /// The navigations whose save has not run yet, as (file left, file navigated to, the
+    /// history's mark when it happened), oldest first. apply_file_updated pushes the
+    /// NavigateFileCommand from the first of its file, at its mark: under the steps made on the
+    /// clip navigated to while the save waited. A list, not one value, so navigations before the
+    /// video unloads each get their own step.
+    navigation_targets: Vec<(FileId, FileId, u64)>,
     left_width: f32,
     folder_width: f32,
     /// Last reported tag list scroll offset and viewport height (for scroll-into-view).
@@ -619,10 +621,10 @@ impl FolderWorkspace {
             {
                 Task::none()
             }
-            // While the clip just left waits for its video to close before its save, the move to
-            // this clip is not a step yet: the top step is still that clip's, and undoing it now
-            // would act on the clip open since. Nothing happens, as for a turn (rotation.rs).
-            Message::Undo | Message::Redo if !self.pending_file_updates.is_empty() => Task::none(),
+            // Until the save of the clip just left has run (it may wait for its video to close),
+            // the move to this clip is not a step yet: the top step is still that clip's, and
+            // undoing it now would act on the clip open since. Nothing happens until then.
+            Message::Undo | Message::Redo if !self.navigation_targets.is_empty() => Task::none(),
             // What was typed or named is a step first, so it is the one undone.
             Message::Undo => {
                 self.close_marker_row();
@@ -1368,7 +1370,8 @@ impl FolderWorkspace {
         let snapshot = self.file_workspace.get_snapshot();
         let navigated_to = self.pending_to_file_id.take();
         if let (Some((left, _)), Some(to)) = (snapshot.as_ref(), navigated_to) {
-            self.navigation_targets.push((*left, to));
+            self.navigation_targets
+                .push((*left, to, self.history.mark()));
         }
         // A same-file refresh (undo, in-place rename) brings its own, newer state.
         let opened = if same_file {
@@ -2387,9 +2390,9 @@ impl FolderWorkspace {
         let target = self
             .navigation_targets
             .iter()
-            .position(|(left, _)| *left == id)
-            .map(|i| self.navigation_targets.remove(i).1);
-        if let Some(to_file_id) = target {
+            .position(|(left, _, _)| *left == id)
+            .map(|i| self.navigation_targets.remove(i));
+        if let Some((_, to_file_id, mark)) = target {
             // A refused save never reached the file: undoing back to it must restore what is
             // really on disk (snapshot_after_save), not the picked-but-unsaved tags, or Ctrl+Z
             // would show them as if they had been saved.
@@ -2398,14 +2401,19 @@ impl FolderWorkspace {
             } else {
                 snapshot
             };
-            self.history.push(Box::new(NavigateFileCommand {
-                file_id: id,
-                to_file_id,
-                path_before,
-                path_after: new_path,
-                snapshot_before,
-                snapshot_after: snapshot_after_save,
-            }));
+            // At the move's mark: what was done on the clip moved to while this save waited
+            // for its video is undone first, while that clip is still the open one.
+            self.history.push_at_mark(
+                mark,
+                Box::new(NavigateFileCommand {
+                    file_id: id,
+                    to_file_id,
+                    path_before,
+                    path_after: new_path,
+                    snapshot_before,
+                    snapshot_after: snapshot_after_save,
+                }),
+            );
         }
 
         // The saved file may have just dropped out of a filtered list, shifting every row
@@ -5057,8 +5065,7 @@ mod tests {
     /// Ctrl+Z right after moving to another clip, while the clip just left still waits for its
     /// video to unload before its save (and the `NavigateFileCommand` that comes with it): the
     /// top step is still the left clip's tag toggle, and undoing it then acts on the tag list
-    /// of the clip now open, not on the clip it was made on. When the save lands, its step
-    /// clears the redo stack, so the toggle cannot be redone either.
+    /// of the clip now open, not on the clip it was made on. Undo and Redo wait for the save.
     #[test]
     fn undo_while_the_left_clips_save_waits_does_not_edit_the_next_clip() {
         let test_dir = TestDirectory::new(2);
@@ -5111,12 +5118,14 @@ mod tests {
         assert!(workspace.has_pending_rename(), "file_0's save waits");
         assert!(pick_checked(&workspace), "file_1 opens with its pick");
 
-        // Ctrl+Z before the video has let go.
+        // Ctrl+Z (and Ctrl+Y) before the video has let go.
         let _ = workspace.update(Message::Undo);
         assert!(
             pick_checked(&workspace),
             "undoing file_0's toggle must not uncheck pick on file_1, the clip now open"
         );
+        let _ = workspace.update(Message::Redo);
+        assert!(pick_checked(&workspace), "nor may a redo act meanwhile");
 
         unloaded(&mut workspace);
         assert!(
@@ -5125,6 +5134,61 @@ mod tests {
                 .and_then(|d| d.file_by_id(file_0_id))
                 .is_some_and(|f| f.snapshot().has_tag("pick")),
             "file_0 is saved with pick"
+        );
+        // Once saved, the move is a step: Undo and Redo no longer wait.
+        assert!(
+            workspace.navigation_targets.is_empty(),
+            "no move waits for its save"
+        );
+        assert!(workspace.history.can_undo());
+    }
+
+    /// A tag checked on the clip moved to while the save of the clip left still waits for its
+    /// video: the move is recorded when that save runs, after the tag. Its step still goes
+    /// under the tag's, so the first Ctrl+Z unchecks the tag on the clip it was checked on, and
+    /// the second goes back to the clip left (#487).
+    #[test]
+    fn a_tag_checked_while_the_left_clips_save_waits_is_undone_first() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let pick = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .expect("pick is a built-in tag")
+        };
+        let pick_checked = |w: &FolderWorkspace| {
+            let list = w.file_workspace().tag_list();
+            list.get_tag(pick(w)).is_some_and(|t| t.is_checked())
+        };
+
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.has_pending_rename(), "file_0's save waits");
+        let id = pick(&workspace);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+        assert!(pick_checked(&workspace), "pick checked on file_1");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            workspace.directory().unwrap().selected_index(),
+            Some(1),
+            "the first undo stays on file_1"
+        );
+        assert!(!pick_checked(&workspace), "and unchecks its pick");
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(
+            workspace.directory().unwrap().selected_index(),
+            Some(0),
+            "the second goes back to file_0"
         );
     }
 

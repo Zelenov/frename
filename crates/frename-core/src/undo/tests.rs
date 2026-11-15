@@ -558,6 +558,64 @@ mod tests {
         assert!(tag_list.tag_id_by_name("missing").is_none());
     }
 
+    /// A step put back at its mark goes under the steps pushed after the mark: undone after
+    /// them, redone before them.
+    #[test]
+    fn a_step_pushed_at_its_mark_goes_under_the_steps_pushed_since() {
+        let store = make_store_with_tags(&["A", "B"]);
+        let snapshot = snapshot_with_tags(&["A", "B"]);
+        let mut tag_list = TagList::new(store, snapshot);
+        let mut dir = empty_directory();
+        let id_a = tag_list.checked_tag_id_at(0).unwrap();
+        let id_b = tag_list.checked_tag_id_at(1).unwrap();
+        let checked = |list: &TagList<FakeAppStorage>, id| list.get_tag(id).unwrap().is_checked();
+
+        let mut history = History::new(50);
+        let mark = history.mark();
+        // B is unchecked after the mark and pushed at once; A's uncheck was made first but is
+        // only recorded now, at its mark.
+        tag_list.toggle_by_id(id_a);
+        tag_list.toggle_by_id(id_b);
+        history.push(Box::new(ToggleTagCommand {
+            tag_id: id_b,
+            was_checked: true,
+        }));
+        history.push_at_mark(
+            mark,
+            Box::new(ToggleTagCommand {
+                tag_id: id_a,
+                was_checked: true,
+            }),
+        );
+
+        let mut step = |history: &mut History<_, _>, undo: bool, list: &mut TagList<_>| {
+            let mut ctx = UndoContext {
+                directory: &mut dir,
+                tag_list: list,
+            };
+            if undo {
+                history.undo(&mut ctx).unwrap();
+            } else {
+                history.redo(&mut ctx).unwrap();
+            }
+        };
+        step(&mut history, true, &mut tag_list);
+        assert!(
+            checked(&tag_list, id_b) && !checked(&tag_list, id_a),
+            "B first"
+        );
+        step(&mut history, true, &mut tag_list);
+        assert!(checked(&tag_list, id_a), "then A");
+        assert!(!history.can_undo());
+        step(&mut history, false, &mut tag_list);
+        assert!(
+            !checked(&tag_list, id_a) && checked(&tag_list, id_b),
+            "redo: A first"
+        );
+        step(&mut history, false, &mut tag_list);
+        assert!(!checked(&tag_list, id_b));
+    }
+
     // --- ToggleTagCommand ---
 
     #[test]
