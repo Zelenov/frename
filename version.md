@@ -1,5 +1,6 @@
 # 0.234
-
+## Fixed
+- If you open a folder while another one is still loading, the new folder stays open and frename opens it next time. Before, the first folder replaced it when it finished loading.
 
 # 0.232
 ## Fixed
