@@ -615,7 +615,10 @@ impl FolderWorkspace {
                 Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
             ),
             // The comment box has the keys while it is focused: its text is not the app's to undo.
-            Message::Undo | Message::Redo
+            Message::Undo
+            | Message::Redo
+            | Message::UndoUnlessRenaming
+            | Message::RedoUnlessRenaming
                 if self.file_workspace.comment_focused()
                     || (self.notes_focused && self.batch.is_active()) =>
             {
@@ -624,9 +627,37 @@ impl FolderWorkspace {
             // Until the save of the clip just left has run (it may wait for its video to close),
             // the move to this clip is not a step yet: the top step is still that clip's, and
             // undoing it now would act on the clip open since. Nothing happens until then.
-            Message::Undo | Message::Redo if !self.navigation_targets.is_empty() => Task::none(),
+            Message::Undo
+            | Message::Redo
+            | Message::UndoUnlessRenaming
+            | Message::RedoUnlessRenaming
+                if !self.navigation_targets.is_empty() =>
+            {
+                Task::none()
+            }
+            // A file name being typed keeps the keys too: iced's text field leaves Ctrl+Z and
+            // Ctrl+Y alone, and undoing a step now would drop the name or edit the clip under it.
+            // A rename open on another row does not hold them, so the focus of its field decides
+            // (as for Shift+Space).
+            Message::Undo | Message::Redo if self.inline_rename.is_some() => {
+                let then = if matches!(message, Message::Undo) {
+                    Message::UndoUnlessRenaming
+                } else {
+                    Message::RedoUnlessRenaming
+                };
+                iced::widget::operation::is_focused(iced::widget::Id::from(
+                    folder::FOLDER_RENAME_INPUT_ID,
+                ))
+                .map(move |renaming| {
+                    if renaming {
+                        Message::Noop
+                    } else {
+                        then.clone()
+                    }
+                })
+            }
             // What was typed or named is a step first, so it is the one undone.
-            Message::Undo => {
+            Message::Undo | Message::UndoUnlessRenaming => {
                 self.close_marker_row();
                 self.end_comment_session();
                 if self.history.can_undo() {
@@ -635,7 +666,7 @@ impl FolderWorkspace {
                     Task::none()
                 }
             }
-            Message::Redo => {
+            Message::Redo | Message::RedoUnlessRenaming => {
                 self.close_marker_row();
                 self.end_comment_session();
                 if self.history.can_redo() {
@@ -1494,12 +1525,11 @@ impl FolderWorkspace {
         }
         // Undo and redo follow what they step over: a marker or a turn of the open video is
         // undone in batch mode (when no job runs), a tag change is not.
-        let not_media = match message {
-            Message::Undo => !self.history.undo_edits_open_video(),
-            Message::Redo => !self.history.redo_edits_open_video(),
+        match message {
+            Message::Undo | Message::UndoUnlessRenaming => !self.history.undo_edits_open_video(),
+            Message::Redo | Message::RedoUnlessRenaming => !self.history.redo_edits_open_video(),
             _ => false,
-        };
-        not_media && matches!(message, Message::Undo | Message::Redo)
+        }
     }
 
     /// Why a running job holds `message` back, if it does: the clip it works on, or the folder
@@ -1512,7 +1542,13 @@ impl FolderWorkspace {
             return None;
         }
         // The job renames files behind the history, so a step back could use a stale path.
-        if matches!(message, Message::Undo | Message::Redo) {
+        if matches!(
+            message,
+            Message::Undo
+                | Message::Redo
+                | Message::UndoUnlessRenaming
+                | Message::RedoUnlessRenaming
+        ) {
             return Some(Hold::Folder);
         }
         let open_is_busy = self.open_clip_is_busy();
@@ -9982,6 +10018,71 @@ mod tests {
                 .trim_end_matches('\n')
                 .to_string(),
         )
+    }
+
+    /// Ctrl+Z while a name is being typed in the file list's rename field: iced's text field
+    /// does not take the key (it types no character), so the app's Undo runs. With the move to
+    /// the renamed clip on top of the history, it goes back to the clip before, which closes
+    /// the rename field and drops the name being typed. As for the comment box and Shift+Space,
+    /// the field must keep the key while it has it (the workspace may ask for its focus first).
+    #[test]
+    fn undo_while_typing_a_name_does_not_leave_the_clip_being_renamed() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        // A double-click on the second row: it opens and its name is being edited.
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(1)));
+        flush_file_opened(&mut workspace);
+        // The first clip's video lets go and its save lands: the move is the top step.
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.inline_rename.is_some(), "renaming file_1");
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "typed name.mp4".to_string(),
+        )));
+
+        for key in [Message::Undo, Message::Redo] {
+            let task = workspace.update(key);
+            assert_eq!(task.units(), 1, "the focus of the rename field is asked");
+            flush_file_opened(&mut workspace);
+        }
+
+        assert_eq!(
+            workspace.directory().and_then(|d| d.selected_index()),
+            Some(1),
+            "Ctrl+Z in the rename field must not move back to file_0"
+        );
+        assert_eq!(
+            workspace.inline_rename.as_ref().map(|r| r.text.as_str()),
+            Some("typed name.mp4"),
+            "the name being typed must stay"
+        );
+    }
+
+    /// The second step of Ctrl+Z with a rename open: the field did not have the key (the focus
+    /// is elsewhere), so the step is undone as without a rename.
+    #[test]
+    fn undo_with_a_rename_open_elsewhere_undoes() {
+        let (_test_dir, mut workspace) = open_folder(1);
+        let first = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let checked = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .get_tag(first)
+                .is_some_and(|t| t.is_checked())
+        };
+        let before = checked(&workspace);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(first)));
+        assert_eq!(checked(&workspace), !before);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(workspace.inline_rename.is_some());
+
+        let _ = workspace.update(Message::UndoUnlessRenaming);
+        assert_eq!(checked(&workspace), before, "undone");
+        let _ = workspace.update(Message::RedoUnlessRenaming);
+        assert_eq!(checked(&workspace), !before, "redone");
     }
 
     #[test]
