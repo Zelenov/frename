@@ -10,7 +10,6 @@ use crate::ui::button;
 use crate::ui::icon_button::IconButton;
 use crate::ui::icons::{icon, Icon};
 use crate::ui::style::ButtonKind;
-use crate::ui::text;
 use crate::ui::tokens::*;
 use crate::ui::tooltip::{self, Position, Tip};
 
@@ -69,14 +68,7 @@ fn strip(is_synced: bool, locked: bool, words: bool) -> Element<'static, Message
 /// The icon and the sentence, cut with "…" at the room it has rather than wrapped (§13.9, #391);
 /// the whole sentence is its tooltip, for when it is cut.
 fn line(glyph: Icon, color: Color, sentence: String) -> iced::widget::Row<'static, Message> {
-    let sentence = container(iced::widget::responsive(move |size| {
-        let shown = text::secondary(text::fit_body(&sentence, size.width).into_owned())
-            .wrapping(iced::widget::text::Wrapping::None);
-        tooltip::tip_text(shown, sentence.clone(), Position::Top)
-    }))
-    .width(Length::Fill)
-    .height(LINE_BODY)
-    .clip(true);
+    let sentence = tooltip::secondary_line(sentence);
     row![icon(glyph, ICON_MARK, color), sentence]
 }
 

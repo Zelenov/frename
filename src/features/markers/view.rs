@@ -408,7 +408,8 @@ fn in_out_line<'a>((start, end): (u64, u64), time_format: TimeFormat) -> Element
             .height(ICON_S)
             .style(style::fill(VIDEO_SEGMENT_EDGE)),
         text::mono(times),
-        in_out_label(fl!("markers-in-out")),
+        // One line with "…" when a timecode style leaves it little room (#476).
+        tooltip::secondary_line(fl!("markers-in-out")),
     ]
     .spacing(SPACE_S)
     .align_y(Alignment::Center);
@@ -423,21 +424,6 @@ fn in_out_line<'a>((start, end): (u64, u64), time_format: TimeFormat) -> Element
         right: SCROLL_GUTTER,
         ..Padding::ZERO
     })
-    .into()
-}
-
-/// The in/out line's label on one line, cut with "…" at the room the times leave rather than
-/// wrapped past the row's fixed height (a timecode style in Russian, #476); the whole label is its
-/// tooltip, for when it is cut.
-fn in_out_label<'a>(label: String) -> Element<'a, Message> {
-    container(iced::widget::responsive(move |size| {
-        let shown = text::secondary(text::fit_body(&label, size.width).into_owned())
-            .wrapping(iced::widget::text::Wrapping::None);
-        tooltip::tip_text(shown, label.clone(), Position::Top)
-    }))
-    .width(Length::Fill)
-    .height(LINE_BODY)
-    .clip(true)
     .into()
 }
 
