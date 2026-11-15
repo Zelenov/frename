@@ -19,12 +19,12 @@ use frename_core::{AppDatabase, AppStateStore, WindowGeometry};
 
 use super::Message;
 
-/// Ctrl+V handler fired when has_copied_tags is true: intercepts paste globally (even when the
-/// search bar has focus) and pastes tags instead. paste_tags() clears the search filter so the
-/// search bar's concurrent OS-clipboard paste gets overwritten.
+/// Ctrl+V handler fired when has_copied_tags is true: pastes tags when no text field took the key,
+/// and also when the tag search did (paste_tags() clears the search filter, so the search bar's
+/// concurrent OS-clipboard paste gets overwritten). Any other field keeps its paste (#480).
 fn ctrl_v_paste_tags_handler(
     ev: iced::Event,
-    _status: event::Status,
+    status: event::Status,
     _window_id: window::Id,
 ) -> Option<Message> {
     if let iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -35,9 +35,11 @@ fn ctrl_v_paste_tags_handler(
     }) = ev
     {
         if latin_key(&key, physical_key) == Some('v') && modifiers.command() && !modifiers.shift() {
-            return Some(Message::FolderWorkspace(
-                folder_workspace::Message::PasteTags,
-            ));
+            // A text field that took the key pastes text; only the tag search pastes tags (#480).
+            return Some(Message::FolderWorkspace(match status {
+                event::Status::Ignored => folder_workspace::Message::PasteTags,
+                event::Status::Captured => folder_workspace::Message::PasteTagsWhileTyping,
+            }));
         }
     }
     None
@@ -168,9 +170,13 @@ fn main_window_event(
             key: keyboard::Key::Named(keyboard::key::Named::Space),
             modifiers,
             ..
-        }) if modifiers.shift() => Some(Message::FolderWorkspace(
-            folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
-        )),
+        }) if modifiers.shift() => Some(Message::FolderWorkspace(match status {
+            event::Status::Ignored => {
+                folder_workspace::Message::TagPanel(tag_panel::Message::ToggleSelectedTag)
+            }
+            // A capital after a space in the comment is typing, not a tag (#480).
+            event::Status::Captured => folder_workspace::Message::ToggleSelectedTagWhileTyping,
+        })),
         // Space toggles video play/pause — only when no text widget has focus.
         iced::Event::Keyboard(keyboard::Event::KeyPressed {
             key: keyboard::Key::Named(keyboard::key::Named::Space),
@@ -1680,6 +1686,43 @@ mod tests {
                 event::Status::Captured
             ),
             Some(W::GoToStartWhileTyping)
+        ));
+    }
+
+    /// Issue #480: Ctrl+V a text field took pastes tags only if that field is the tag search
+    /// (the workspace asks); with no field focused it pastes tags as before.
+    #[test]
+    fn ctrl_v_in_a_text_field_asks_whether_it_is_the_tag_search() {
+        let (ev, _, id) = ctrl_key("v", keyboard::key::Code::KeyV, false);
+        assert!(matches!(
+            ctrl_v_paste_tags_handler(ev.clone(), event::Status::Captured, id),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTagsWhileTyping
+            ))
+        ));
+        assert!(matches!(
+            ctrl_v_paste_tags_handler(ev, event::Status::Ignored, id),
+            Some(Message::FolderWorkspace(
+                folder_workspace::Message::PasteTags
+            ))
+        ));
+    }
+
+    /// Issue #480: Shift+Space typed into a text field (a capital after a space in the comment)
+    /// toggles a tag only if that field is the tag search; with no field focused it toggles.
+    #[test]
+    fn shift_space_in_a_text_field_asks_whether_it_is_the_tag_search() {
+        use keyboard::key::Named;
+        let shift = keyboard::Modifiers::SHIFT;
+        assert!(matches!(
+            arrow(Named::Space, shift, event::Status::Captured),
+            Some(folder_workspace::Message::ToggleSelectedTagWhileTyping)
+        ));
+        assert!(matches!(
+            arrow(Named::Space, shift, event::Status::Ignored),
+            Some(folder_workspace::Message::TagPanel(
+                tag_panel::Message::ToggleSelectedTag
+            ))
         ));
     }
 

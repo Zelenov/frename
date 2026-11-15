@@ -1,3 +1,7 @@
+# 0.235
+## Fixed
+- After copying tags with Ctrl+C, Ctrl+V in the comment box, the file search, a file name or the time field pastes only the text. Shift+Space in the comment box types a space. Before, both also changed the clip's tags. In the tag search they still paste or toggle tags.
+
 # 0.233
 ## Fixed
 - Ctrl+Z after writing a comment no longer takes back In and Out points (`[`, `]`) or tags set while the comment box was open: each is its own step, in the order you made them. Before, undoing the comment took them back too, and the next Ctrl+Z did nothing.

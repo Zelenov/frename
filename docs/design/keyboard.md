@@ -29,7 +29,7 @@ From the code at `main` (63a2bb5). "Always" = works while a text field has the c
 | Key | Context | Action | Source |
 |---|---|---|---|
 | Any character, `Backspace`, `Delete` | not typing, after the keys below did not match | Focus the tag search and emulate the key | `src/app/state.rs` `main_window_event` (end, `FocusSearchBarAndKey`) |
-| `Shift+Space` | always | Toggle the selected tag | `state.rs` `main_window_event` |
+| `Shift+Space` | not typing, or typing in the tag search | Toggle the selected tag (in the comment, a name or another field it is a space, #480) | `state.rs` `main_window_event`; `folder_workspace/state.rs` `ToggleSelectedTagWhileTyping` |
 | `Space` | not typing | Play / pause | same |
 | `←` `→` `↑` `↓` | not typing | Move the tag grid selection (wraps); also walks the recent-folders list when open | same; `folder_workspace/state.rs` `SelectDown` |
 | `PgUp` / `PgDn` | not typing | Previous / next file (renames the one left) | same |
@@ -37,7 +37,7 @@ From the code at `main` (63a2bb5). "Always" = works while a text field has the c
 | `Enter` | not typing | Save the selected unsaved tag / typed name as a tag | same (`SaveSelectedTag`) |
 | `Esc` | always | In order: close More, file menu, "describe all" question, marker row, inline rename, fullscreen, batch mode, else clear tag and file searches | `state.rs`; `folder_workspace/state.rs` `EscapePressed` |
 | `Ctrl+C` | not typing | Copy the file's tags | `state.rs` |
-| `Ctrl+V` | always, only while tags are copied | Paste tags (replaces the file's tags) | `state.rs` `ctrl_v_paste_tags_handler` |
+| `Ctrl+V` | only while tags are copied; not typing, or typing in the tag search | Paste tags (replaces the file's tags); in another text field it pastes text only (#480) | `state.rs` `ctrl_v_paste_tags_handler`; `folder_workspace/state.rs` `PasteTagsWhileTyping` |
 | `Ctrl+Z`, `Ctrl+Y`, `Ctrl+Shift+Z` | not typing | Undo, redo, redo (Latin letter by physical key, so Russian layout works) | `state.rs` `latin_key` |
 | `Ctrl+R` | always | Recent folders list | `state.rs` |
 | `F5` | always | Fullscreen | `state.rs` |

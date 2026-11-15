@@ -76,6 +76,13 @@ pub enum Message {
     CopyTags,
     /// Paste previously copied tags onto the current file (replace semantics).
     PasteTags,
+    /// Ctrl+V that a text field already took: tags are pasted only when that field is the tag
+    /// search (#480). Pasting text into the comment, the file search, a name or the time field
+    /// pastes only the text.
+    PasteTagsWhileTyping,
+    /// Shift+Space that a text field already took: the selected tag is toggled only when that
+    /// field is the tag search (#480). In the comment box it is a space, nothing more.
+    ToggleSelectedTagWhileTyping,
     /// Demo mode only (a screenshot scenario's `describing`): show the open clip's marker of
     /// this name as being described, without sending a request.
     ShowDescribing(String),
