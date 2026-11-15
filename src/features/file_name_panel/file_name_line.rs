@@ -1,8 +1,8 @@
 //! The file name part without the tags, on the card's second line, in mono.
 
 use frename_core::TimeFormat;
-use iced::widget::container;
-use iced::{Element, Length};
+use iced::widget::text::Wrapping;
+use iced::Element;
 
 use crate::ui::text;
 use crate::ui::tokens::TEXT;
@@ -10,9 +10,14 @@ use crate::ui::tokens::TEXT;
 use super::Message;
 
 /// Renders the file name line: name and extension concatenated (extension already includes dot when needed).
+/// It keeps its own width (`Shrink`) so the card's wrapping row moves it whole under the IN/OUT
+/// badges when they leave too little room (#477); a name wider than the whole card wraps anywhere
+/// (`WordOrGlyph`), since a file name has no spaces to break at. Not `Fill`, as flexible text
+/// usually is: a `Fill` child of a wrapping row always takes a line of its own.
 pub fn view(name_ext: impl Into<String>) -> Element<'static, Message> {
-    container(text::mono(name_ext.into()).color(TEXT))
-        .width(Length::Fill)
+    text::mono(name_ext.into())
+        .color(TEXT)
+        .wrapping(Wrapping::WordOrGlyph)
         .into()
 }
 

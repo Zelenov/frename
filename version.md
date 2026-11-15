@@ -1,3 +1,7 @@
+# 0.232
+## Fixed
+- On the file name card, a clip's name moves under its IN and OUT times when they leave it too little room (for example with a Premiere or Resolve time display), and a name too long for the card continues on the next line. Before, it was cut off at the card's edge.
+
 # 0.231
 ## Fixed
 - In the marker list, with a Premiere or Resolve time display, the "In/out points" label stays on one line and ends with "…" when it does not fit. Before, in Russian it wrapped and its second line was cut in half.
