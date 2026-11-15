@@ -1,3 +1,7 @@
+# 0.236
+## Fixed
+- Ctrl+Z or Ctrl+Y pressed right after moving to another clip, while the clip you left is still being saved, no longer changes the clip you moved to. Before, it could undo the last change of the clip you left on the new clip (for example, uncheck its tag), and Ctrl+Y could not bring that change back. Now the keys do nothing until that save is done, usually a moment later. A change you make on the new clip during that moment is now the first one Ctrl+Z takes back, before the move.
+
 # 0.235
 ## Fixed
 - In the comment box, the file search, a file name or the time field, Ctrl+V only pastes the text and Shift+Space only types a space. Before, Ctrl+V also pasted copied tags onto the clip, and Shift+Space toggled a tag. In the tag search they still paste or toggle tags.
