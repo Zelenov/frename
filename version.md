@@ -1,3 +1,7 @@
+# 0.238
+## Fixed
+- Ctrl+Z after a batch action that ended while the clip you left was still being saved now takes back what you changed on the new clip first, as it does otherwise. Before, it went back to the clip you left first, and the next Ctrl+Z could act on the wrong clip.
+
 # 0.237
 ## Fixed
 - Ctrl+Z and Ctrl+Y do nothing while you type a new file name in the file list. Before, they undid or redid the last change, which could take you back to the previous clip and drop the name you were typing.

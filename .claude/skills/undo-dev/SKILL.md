@@ -68,8 +68,16 @@ impl History {
     pub fn redo<S: ...>(&mut self, ctx: &mut UndoContext<S>) -> Result<(), UndoError>;
     pub fn can_undo(&self) -> bool;
     pub fn can_redo(&self) -> bool;
+    pub fn mark(&self) -> Mark;                          // where a step recorded later goes
+    pub fn push_at_mark(&mut self, mark: Mark, cmd: Box<dyn Undoable>); // under steps pushed since
+    pub fn clear(&mut self);                             // empties both stacks, keeps marks valid
 }
 ```
+
+A step whose data is only known later uses `mark` / `push_at_mark`, never a plain `push`: the move
+to another clip is recorded when the clip left has been saved (after its video closed), but steps
+made on the new clip meanwhile must stay above it (#487). Empty the history with `clear`, not a new
+`History`, or a mark still waiting would count from zero (#490).
 
 ---
 
@@ -95,7 +103,10 @@ pub struct NavigateFileCommand {
 
 **`redo`:** same steps swapped (`path_before↔path_after`, `from_index↔to_index`).
 
-**Where to push (binary: `FolderWorkspace::apply_file_updated`):**
+**Where to push (binary: `FolderWorkspace::apply_file_updated`):** the sketch below is the
+original shape. Today the move takes `history.mark()` when it happens (`apply_file_opened`, kept in
+`navigation_targets`) and `apply_file_updated` records it with `push_at_mark`; Undo and Redo do
+nothing while `navigation_targets` is not empty.
 ```rust
 fn apply_file_updated(&mut self, path: PathBuf, snapshot: FileSnapshot, from_index: Option<usize>) -> Task<Message> {
     let (saved, snapshot_after) = snapshot.save_and_reparse(&path);

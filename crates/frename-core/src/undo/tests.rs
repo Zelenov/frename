@@ -616,6 +616,47 @@ mod tests {
         assert!(!checked(&tag_list, id_b));
     }
 
+    /// `clear` empties the stacks but keeps counting: a mark taken before it still puts its
+    /// step under the steps pushed after the clear.
+    #[test]
+    fn a_mark_taken_before_a_clear_still_counts_the_steps_after_it() {
+        let store = make_store_with_tags(&["A", "B"]);
+        let snapshot = snapshot_with_tags(&["A", "B"]);
+        let mut tag_list = TagList::new(store, snapshot);
+        let mut dir = empty_directory();
+        let id_a = tag_list.checked_tag_id_at(0).unwrap();
+        let id_b = tag_list.checked_tag_id_at(1).unwrap();
+        let toggle = |id| {
+            Box::new(ToggleTagCommand {
+                tag_id: id,
+                was_checked: true,
+            })
+        };
+
+        let mut history = History::new(50);
+        for _ in 0..3 {
+            history.push(toggle(id_a));
+        }
+        let mark = history.mark();
+        history.clear();
+        assert!(!history.can_undo() && !history.can_redo());
+        tag_list.toggle_by_id(id_a);
+        tag_list.toggle_by_id(id_b);
+        history.push(toggle(id_b));
+        history.push_at_mark(mark, toggle(id_a));
+
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).unwrap();
+        assert!(
+            ctx.tag_list.get_tag(id_b).unwrap().is_checked(),
+            "B, pushed last, first"
+        );
+        assert!(!ctx.tag_list.get_tag(id_a).unwrap().is_checked());
+    }
+
     // --- ToggleTagCommand ---
 
     #[test]
