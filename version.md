@@ -1,3 +1,7 @@
+# 0.231
+## Fixed
+- In the marker list, with a Premiere or Resolve time display, the "In/out points" label stays on one line and ends with "…" when it does not fit. Before, in Russian it wrapped and its second line was cut in half.
+
 # 0.230
 ## Fixed
 - Three system windows now use your language: the folder picker of "Import from an old frename folder", the file type in the marker list's Export…, and the question at the first start that offers to import settings from an older frename. Before, they were in English.
