@@ -236,7 +236,7 @@ pub enum Operation {
     MoveInOut(InOutStorage),
     MarkersComment(markers_comment::Direction),
     /// Write each clip's markers as `clip.markers.txt`.
-    ExportMarkers,
+    ExportMarkers(export_markers::Run),
     /// Turn each video by changing its rotation flag.
     Rotate(rotate::Turn),
     TagCommented,
@@ -260,7 +260,7 @@ impl Operation {
             Self::MoveComments(to) => move_comments::run(*to, path),
             Self::MoveInOut(to) => move_in_out::run(*to, path),
             Self::MarkersComment(direction) => markers_comment::run(*direction, path),
-            Self::ExportMarkers => export_markers::run(path),
+            Self::ExportMarkers(job) => export_markers::run(job, path),
             Self::Rotate(turn) => rotate::run(*turn, path),
             Self::TagCommented => tag_commented::run(path),
             Self::FixTags => fix_tags::run(path),
@@ -315,7 +315,7 @@ impl Operation {
             Self::MoveComments(_) => Action::MoveComments,
             Self::MoveInOut(_) => Action::MoveInOut,
             Self::MarkersComment(_) => Action::MarkersComment,
-            Self::ExportMarkers => Action::ExportMarkers,
+            Self::ExportMarkers(_) => Action::ExportMarkers,
             Self::Rotate(_) => Action::Rotate,
             Self::TagCommented => Action::TagCommented,
             Self::FixTags => Action::FixTags,
@@ -452,7 +452,7 @@ impl Actions {
             Operation::MoveComments(to) => self.move_comments.prepare(to),
             Operation::MoveInOut(to) => self.move_in_out.prepare(to),
             Operation::MarkersComment(direction) => self.markers_comment.prepare(direction),
-            Operation::ExportMarkers
+            Operation::ExportMarkers(_)
             | Operation::Rotate(_)
             | Operation::TagCommented
             | Operation::FixTags
@@ -470,7 +470,7 @@ impl Actions {
             Action::MoveComments => Some(self.move_comments.operation()),
             Action::MoveInOut => Some(self.move_in_out.operation()),
             Action::MarkersComment => Some(self.markers_comment.operation()),
-            Action::ExportMarkers => Some(Operation::ExportMarkers),
+            Action::ExportMarkers => Some(Operation::ExportMarkers(export_markers::Run::default())),
             Action::Rotate => Some(self.rotate.operation()),
             Action::TagCommented => tag_commented::operation(),
             Action::FixTags => Some(Operation::FixTags),

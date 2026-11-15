@@ -1,3 +1,7 @@
+# 0.239
+## Fixed
+- Export markers to text: of two clips with one name (`A001.mov` and `A001.mp4`), the first now keeps `A001.markers.txt` and the second fails with the reason. Before, the second replaced the first one's text and both said Done.
+
 # 0.238
 ## Fixed
 - Ctrl+Z after a batch action that ended while the clip you left was still being saved now takes back what you changed on the new clip first, as it does otherwise. Before, it went back to the clip you left first, and the next Ctrl+Z could act on the wrong clip.
