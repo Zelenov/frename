@@ -1,6 +1,6 @@
 # 0.231
 ## Fixed
-- On the file name card, a clip's name moves under its IN and OUT times when it does not fit next to them, as with a Premiere or Resolve time display. Before, it was cut off at the card's edge.
+- On the file name card, a clip's name moves under its IN and OUT times when they leave it too little room (for example with a Premiere or Resolve time display), and a name too long for the card continues on the next line. Before, it was cut off at the card's edge.
 
 # 0.230
 ## Fixed

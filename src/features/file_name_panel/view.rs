@@ -88,7 +88,6 @@ where
     }
     bottom_items.push(file_name_line::view(name_ext));
 
-    // Wraps: with wide timecodes (Premiere, Resolve) the name goes under the badges (#477).
     let bottom_row = row(bottom_items)
         .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center)
