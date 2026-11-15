@@ -861,7 +861,6 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let old_secs = self.file_workspace.segment_start_secs();
         // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
@@ -880,7 +879,6 @@ impl FolderWorkspace {
         if self.file_workspace.file().is_none() {
             return Task::none();
         }
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let old_secs = self.file_workspace.segment_end_secs();
         // Marking the same frame again changes nothing: no undo step, Redo stays (#381).
@@ -901,7 +899,6 @@ impl FolderWorkspace {
         if self.inline_rename.is_some() {
             return Task::none();
         }
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let Some(new) = file_name_panel::suggested_in_out(self.file_workspace.tag_list()) else {
             return Task::none();
@@ -923,7 +920,6 @@ impl FolderWorkspace {
         if self.inline_rename.is_some() {
             return Task::none();
         }
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let tag_list = self.file_workspace.tag_list();
         let mut ids: Vec<frename_core::TagId> = Vec::new();
@@ -969,7 +965,6 @@ impl FolderWorkspace {
         let Some(names) = self.copied_tags.clone() else {
             return Task::none();
         };
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let Some((_, snapshot_before)) = self.file_workspace.get_snapshot() else {
             return Task::none();
@@ -2880,7 +2875,6 @@ impl FolderWorkspace {
 
     /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
     fn toggle_selected_tag(&mut self) -> Task<Message> {
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         // If search bar had focus, it may have inserted a space; strip it so Space doesn't add to the filter.
         let filter = self.file_workspace.tag_list().filter_query();
@@ -3284,7 +3278,10 @@ impl FolderWorkspace {
     }
 
     /// The comment box lost the keys (or the file is about to change): what was typed in it
-    /// since it got them is one undo step.
+    /// since it got them is one undo step. Also called before any other change that records its
+    /// own step while the box may still have the keys (`[`, `]`, a tag, a marker…), before that
+    /// change is made: the comment step holds the whole clip, so it must end first, or undoing it
+    /// would take the other change back too (#479). The next letter typed starts a new step.
     fn end_comment_session(&mut self) {
         let Some(snapshot_before) = self.comment_session.take() else {
             return;
@@ -3301,7 +3298,6 @@ impl FolderWorkspace {
     }
 
     fn handle_sync_panel(&mut self, msg: sync_panel::Message) -> Task<Message> {
-        // What was typed so far is its own step, before this one (#479).
         self.end_comment_session();
         let before = self.file_workspace.tag_list().order_state();
         let mut changed = true;
@@ -9737,30 +9733,33 @@ mod tests {
         assert_eq!(comment_of(&workspace), ("hi".to_string(), "hi".to_string()));
     }
 
-    /// Issue #479: `]` while the comment box has the keys sets the Out point (and types `]`).
+    /// Issue #479: `]` while the comment box has the keys types `]` and sets the Out point.
     /// Undoing the comment must not take the Out point with it: they are two steps.
     #[test]
     fn undoing_a_comment_keeps_an_out_point_set_while_typing() {
         use iced::widget::text_editor::{Action, Edit};
         let (_test_dir, mut workspace) = open_folder(1);
-        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('a'))));
+        // `]` reaches the box first; the Out point comes back later from the player.
+        for c in ['a', ']'] {
+            let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert(c))));
+        }
         let _ = workspace.update(Message::MediaViewer(
             media_viewer::Message::SegmentEndMarked(4.0),
         ));
-        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert(']'))));
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('b'))));
         let _ = workspace.update(Message::CommentFocused(false));
         let segment_end = |w: &FolderWorkspace| w.file_workspace().segment_end_secs();
 
         let _ = workspace.update(Message::Undo);
         assert_eq!(
             comment_of(&workspace).0,
-            "a",
-            "the text typed after `]` goes first"
+            "a]",
+            "the text typed after the Out point goes first"
         );
         assert_eq!(segment_end(&workspace), Some(4.0));
         let _ = workspace.update(Message::Undo);
         assert_eq!(segment_end(&workspace), None, "then the Out point");
-        assert_eq!(comment_of(&workspace).0, "a");
+        assert_eq!(comment_of(&workspace).0, "a]");
         let _ = workspace.update(Message::Undo);
         assert_eq!(
             comment_of(&workspace).0,
@@ -9771,7 +9770,7 @@ mod tests {
         for _ in 0..3 {
             let _ = workspace.update(Message::Redo);
         }
-        assert_eq!(comment_of(&workspace).0, "a]");
+        assert_eq!(comment_of(&workspace).0, "a]b");
         assert_eq!(segment_end(&workspace), Some(4.0));
     }
 

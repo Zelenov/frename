@@ -307,6 +307,7 @@ impl FolderWorkspace {
     /// Add a point marker at `position_ms`. One undo step, which takes the marker as it is
     /// when undone, so a range a held `F2` drew goes back and forth whole.
     fn add_marker(&mut self, position_ms: u64, remember: bool, held: bool) -> Task<Message> {
+        self.end_comment_session();
         let marker = Marker::new(position_ms);
         let guid = marker.guid.clone().unwrap_or_default();
         self.file_workspace
@@ -357,6 +358,7 @@ impl FolderWorkspace {
     /// A range's ends were dragged on the bar, or `Alt`+click made it a point: one undo step.
     /// Ends closer than [`markers::MIN_RANGE_MS`] make a point at the start.
     fn set_marker_span(&mut self, guid: &str, start_ms: u64, end_ms: u64) {
+        self.end_comment_session();
         let (start_ms, end_ms) = (start_ms.min(end_ms), start_ms.max(end_ms));
         let Some(old) = self
             .file_workspace
@@ -384,6 +386,7 @@ impl FolderWorkspace {
     /// `Alt`+drag on the bar drew a range: add it as one undo step. A drag too short to be a
     /// range adds a point.
     fn add_range(&mut self, start_ms: u64, end_ms: u64) -> Task<Message> {
+        self.end_comment_session();
         if self.file_workspace.markers().is_none() {
             return self.show_marker_list();
         }
@@ -419,6 +422,7 @@ impl FolderWorkspace {
     }
 
     fn delete_marker(&mut self, guid: &str) {
+        self.end_comment_session();
         if self.markers.edit().is_some_and(|e| e.guid == guid) {
             self.close_marker_row();
         }

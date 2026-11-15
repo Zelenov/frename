@@ -1,6 +1,6 @@
 # 0.231
 ## Fixed
-- Ctrl+Z after writing a comment takes back only the comment. In and Out points (`[`, `]`) or tags set while the comment box was open are their own steps. Before, undoing the comment took them back too, and the next Ctrl+Z did nothing.
+- Ctrl+Z after writing a comment no longer takes back In and Out points (`[`, `]`) or tags set while the comment box was open: each is its own step, in the order you made them. Before, undoing the comment took them back too, and the next Ctrl+Z did nothing.
 
 # 0.230
 ## Fixed
