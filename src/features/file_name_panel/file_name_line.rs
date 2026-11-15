@@ -2,6 +2,7 @@
 
 use frename_core::TimeFormat;
 use iced::widget::container;
+use iced::widget::text::Wrapping;
 use iced::{Element, Length};
 
 use crate::ui::text;
@@ -10,10 +11,16 @@ use crate::ui::tokens::TEXT;
 use super::Message;
 
 /// Renders the file name line: name and extension concatenated (extension already includes dot when needed).
+/// A name has no spaces, so it wraps anywhere (`WordOrGlyph`) when the IN/OUT badges before it
+/// leave too little room; with plain word wrapping it was sliced at the card's edge (#477).
 pub fn view(name_ext: impl Into<String>) -> Element<'static, Message> {
-    container(text::mono(name_ext.into()).color(TEXT))
-        .width(Length::Fill)
-        .into()
+    container(
+        text::mono(name_ext.into())
+            .color(TEXT)
+            .wrapping(Wrapping::WordOrGlyph),
+    )
+    .width(Length::Fill)
+    .into()
 }
 
 /// Builds display string from name and extension parts (no extra dot).

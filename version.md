@@ -1,3 +1,7 @@
+# 0.231
+## Fixed
+- With a Premiere or Resolve time display, a clip's name after its In and Out times on the file name card wraps onto the next line when it does not fit. Before, it was cut off at the card's edge.
+
 # 0.230
 ## Fixed
 - Three system windows now use your language: the folder picker of "Import from an old frename folder", the file type in the marker list's Export…, and the question at the first start that offers to import settings from an older frename. Before, they were in English.
