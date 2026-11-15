@@ -1,3 +1,7 @@
+# 0.235
+## Fixed
+- In the comment box, the file search, a file name or the time field, Ctrl+V only pastes the text and Shift+Space only types a space. Before, Ctrl+V also pasted copied tags onto the clip, and Shift+Space toggled a tag. In the tag search they still paste or toggle tags.
+
 # 0.234
 ## Fixed
 - If you open a folder while another one is still loading, the new folder stays open and frename opens it next time. Before, the first folder replaced it when it finished loading.

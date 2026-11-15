@@ -608,6 +608,10 @@ impl FolderWorkspace {
             }
             Message::CopyTags => self.copy_tags(),
             Message::PasteTags => self.paste_tags(),
+            Message::PasteTagsWhileTyping => Self::if_tag_search_has_the_keys(Message::PasteTags),
+            Message::ToggleSelectedTagWhileTyping => Self::if_tag_search_has_the_keys(
+                Message::TagPanel(tag_panel::Message::ToggleSelectedTag),
+            ),
             // The comment box has the keys while it is focused: its text is not the app's to undo.
             Message::Undo | Message::Redo
                 if self.file_workspace.comment_focused()
@@ -2897,6 +2901,18 @@ impl FolderWorkspace {
             .map(|t| t.tag().to_string())
             .unwrap_or_default();
         Self::long_notice(fl!("tag-not-usable", tag = name))
+    }
+
+    /// `then` when the tag search has the keys, else nothing: for a shortcut that a text field
+    /// took, which only the tag search shares with it (#480).
+    fn if_tag_search_has_the_keys(then: Message) -> Task<Message> {
+        operation::is_focused(iced::widget::Id::from(SEARCH_BAR_INPUT_ID)).map(move |searching| {
+            if searching {
+                then.clone()
+            } else {
+                Message::Noop
+            }
+        })
     }
 
     /// `Shift+Space`: toggles the tag under the tag cursor, then lets the search bar go.
@@ -9889,6 +9905,27 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         assert_eq!(comment_of(&workspace).0, "");
         assert_eq!(checked(&workspace), was_checked);
+    }
+
+    /// Issue #480: a Ctrl+V or Shift+Space a text field took changes nothing by itself; only
+    /// the answer that the tag search has the keys pastes or toggles.
+    #[test]
+    fn a_paste_or_shift_space_typed_into_a_field_leaves_the_tags() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::CopyTags);
+        let tag_id = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()[0];
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(tag_id)));
+        let tags =
+            |w: &FolderWorkspace| w.file_workspace().get_snapshot().unwrap().1.tags().to_vec();
+        let before = tags(&workspace);
+        let paste = workspace.update(Message::PasteTagsWhileTyping);
+        let toggle = workspace.update(Message::ToggleSelectedTagWhileTyping);
+        assert_eq!(tags(&workspace), before);
+        assert_eq!(paste.units(), 1, "the focus of the tag search is asked");
+        assert_eq!(toggle.units(), 1, "the focus of the tag search is asked");
     }
 
     #[test]
