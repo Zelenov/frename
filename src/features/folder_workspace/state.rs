@@ -6,7 +6,7 @@
 //! Each feature view decides how it looks; the workspace view only arranges regions.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use frename_core::undo::History;
 use frename_core::{
@@ -97,6 +97,10 @@ pub struct FolderWorkspace {
     solo: solo::Solo,
     directory: Option<Directory>,
     loading: bool,
+    /// The folder the newest scan opens. A scan of another folder that ends later is dropped, so
+    /// the folder opened last is the one that stays (#481). It tells folders apart, not scans: a
+    /// folder asked for twice shows whichever of its scans ends, as a reload does.
+    scanning: Option<PathBuf>,
     /// File currently being edited: copy of file + tag selection. Rename panel reads/updates this.
     file_workspace: FileWorkspace<FolderTagStore>,
     media_viewer: MediaViewerState,
@@ -293,6 +297,7 @@ impl FolderWorkspace {
         Self {
             directory: None,
             loading: false,
+            scanning: None,
             file_workspace: FileWorkspace::<FolderTagStore>::default(),
             media_viewer: MediaViewerState::default(),
             tag_panel: TagPanelState::default(),
@@ -392,7 +397,7 @@ impl FolderWorkspace {
                 directory,
                 target_file,
             } => self.folder_loaded(directory, target_file),
-            Message::FolderLoadFailed => self.folder_load_failed(),
+            Message::FolderLoadFailed(folder) => self.folder_load_failed(&folder),
             Message::FileOpened(file) => self.apply_file_opened(file),
             Message::FileUpdated { id, snapshot } => self.apply_file_updated(id, snapshot),
             Message::Batch(msg) => self.handle_batch(msg),
@@ -1082,6 +1087,7 @@ impl FolderWorkspace {
         let target_file = pair.file().map(|p| p.to_path_buf());
         let store = LoggingAppStateStore::new(self.app_db.clone());
         self.loading = true;
+        self.scanning = Some(folder.clone());
         self.file_workspace.set_file(None);
         // Any deferred save must already be applied by now: `save_then_scan` only reaches this
         // call after applying (or, past a needed unload, queuing it for `on_media_unloaded` to
@@ -1096,12 +1102,20 @@ impl FolderWorkspace {
                     directory: dir,
                     target_file,
                 },
-                Err(_) => Message::FolderLoadFailed,
+                Err(_) => Message::FolderLoadFailed(folder),
             }
         })
     }
 
-    fn folder_load_failed(&mut self) -> Task<Message> {
+    fn folder_load_failed(&mut self, folder: &Path) -> Task<Message> {
+        // A failed scan of a folder left since says nothing about the one now loading (#481).
+        if self
+            .scanning
+            .as_deref()
+            .is_some_and(|asked| asked != folder)
+        {
+            return Task::none();
+        }
         self.loading = false;
         Task::none()
     }
@@ -1111,7 +1125,19 @@ impl FolderWorkspace {
         mut directory: Directory,
         target_file: Option<PathBuf>,
     ) -> Task<Message> {
+        if self
+            .scanning
+            .as_deref()
+            .is_some_and(|asked| asked != directory.path())
+        {
+            log::info!(
+                "dropping the scan of {}: another folder was opened since",
+                directory.path().display()
+            );
+            return Task::none();
+        }
         self.loading = false;
+        directory.persist_session();
         // A list left open (on the empty screen, where nothing shows it) must not pop up over
         // the folder that just opened.
         let _ = self.recent_folders.update(recent_folders::Message::Close);
@@ -9319,6 +9345,68 @@ mod tests {
         let _ = workspace.update(Message::OpenPath(test_dir.file_path("gone.mp4")));
         assert!(workspace.file_workspace().file().is_some());
         assert!(!workspace.is_loading());
+    }
+
+    // --- A late folder scan (#481) ---
+
+    /// Issue #481: folder A is still loading when folder B is opened. B's scan ends first and
+    /// B shows; A's scan, ending later, must not replace it, nor become the folder to open at
+    /// the next start.
+    #[test]
+    fn a_scan_that_finishes_after_a_newer_one_does_not_replace_its_folder() {
+        // No clip open: both scans start at once (with one open, the first waits for the video
+        // to unload, and the second, asked for while the first runs, starts at once).
+        // One database for both folders and the app, as in the app: the session the next start
+        // opens is read from it.
+        let db = fresh_app_db();
+        let slow_a = TestDirectory::with_store(2, db.clone(), unique_test_folder(), None);
+        let fast_b = TestDirectory::with_store(3, db.clone(), unique_test_folder(), None);
+        let mut workspace = FolderWorkspace::with_app_db(db.clone());
+        for folder in [slow_a.path(), fast_b.path()] {
+            let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+                folder,
+                None::<PathBuf>,
+            )));
+        }
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: fast_b.directory(),
+            target_file: None,
+        });
+        assert_eq!(workspace.directory().unwrap().path(), fast_b.path());
+
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: slow_a.directory(),
+            target_file: None,
+        });
+        assert_eq!(
+            workspace.directory().unwrap().path(),
+            fast_b.path(),
+            "the folder opened last stays open"
+        );
+        let last = LoggingAppStateStore::new(db).get_last_session();
+        assert_eq!(
+            last.as_ref().map(|s| s.folder()),
+            Some(fast_b.path()),
+            "and is the one the next start opens"
+        );
+    }
+
+    /// The same folder asked for twice (a reload) is still shown when its scan ends.
+    #[test]
+    fn a_scan_of_the_folder_asked_for_is_shown() {
+        let first = TestDirectory::new(1);
+        let mut workspace = test_workspace();
+        for _ in 0..2 {
+            let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+                first.path(),
+                None::<PathBuf>,
+            )));
+        }
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: first.directory(),
+            target_file: None,
+        });
+        assert_eq!(workspace.directory().unwrap().path(), first.path());
     }
 
     // --- Multi-select (Ctrl+click / Shift+click), issue #60 ---
