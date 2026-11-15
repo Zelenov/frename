@@ -1,6 +1,9 @@
+# 0.234
+
+
 # 0.232
 ## Fixed
-- If you open a folder while another one is still loading, the new folder stays open and frename opens it next time. Before, the first folder replaced it when it finished loading.
+- On the file name card, a clip's name moves under its IN and OUT times when they leave it too little room (for example with a Premiere or Resolve time display), and a name too long for the card continues on the next line. Before, it was cut off at the card's edge.
 
 # 0.231
 ## Fixed
