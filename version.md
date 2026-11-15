@@ -1,3 +1,7 @@
+# 0.236
+## Fixed
+- Ctrl+Z and Ctrl+Y do nothing while you type a new file name in the file list. Before, they undid or redid the last change, which could take you back to the previous clip and drop the name you were typing.
+
 # 0.235
 ## Fixed
 - In the comment box, the file search, a file name or the time field, Ctrl+V only pastes the text and Shift+Space only types a space. Before, Ctrl+V also pasted copied tags onto the clip, and Shift+Space toggled a tag. In the tag search they still paste or toggle tags.
