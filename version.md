@@ -2,6 +2,10 @@
 ## Fixed
 - If you open a folder while another one is still loading, the new folder stays open and frename opens it next time. Before, the first folder replaced it when it finished loading.
 
+# 0.233
+## Fixed
+- Ctrl+Z after writing a comment no longer takes back In and Out points (`[`, `]`) or tags set while the comment box was open: each is its own step, in the order you made them. Before, undoing the comment took them back too, and the next Ctrl+Z did nothing.
+
 # 0.232
 ## Fixed
 - On the file name card, a clip's name moves under its IN and OUT times when they leave it too little room (for example with a Premiere or Resolve time display), and a name too long for the card continues on the next line. Before, it was cut off at the card's edge.

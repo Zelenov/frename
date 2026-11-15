@@ -227,7 +227,8 @@ readable copy of your work to retype from. Undo history is not restored.
 
 Undo (`Ctrl+Z`) covers tagging, untagging, adding, deleting, starring and reordering tags,
 pasting, in/out points, adding, deleting, coloring, resizing and naming markers, rotating a clip,
-the comment (what you type before leaving the box is one step), a rename by hand (double-click),
+the comment (what you type before leaving the box is one step; setting an in/out point, a
+marker or a tag while typing ends that step and starts a new one), a rename by hand (double-click),
 Sync up, Sync down and the lock, and the rename when you leave a clip. The history is shared by
 the whole folder, so after moving to another clip the first undo goes back to the clip you left
 (a note says so) and the next one undoes its last change. In batch mode only markers and
