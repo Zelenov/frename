@@ -619,6 +619,10 @@ impl FolderWorkspace {
             {
                 Task::none()
             }
+            // While the clip just left waits for its video to close before its save, the move to
+            // this clip is not a step yet: the top step is still that clip's, and undoing it now
+            // would act on the clip open since. Nothing happens, as for a turn (rotation.rs).
+            Message::Undo | Message::Redo if !self.pending_file_updates.is_empty() => Task::none(),
             // What was typed or named is a step first, so it is the one undone.
             Message::Undo => {
                 self.close_marker_row();
@@ -5047,6 +5051,80 @@ mod tests {
                 .and_then(|d| d.file_by_id(file_0_id))
                 .is_some_and(|f| f.snapshot().has_tag("pick")),
             "file_0's tag, deferred before the close queued its own save, must not be dropped"
+        );
+    }
+
+    /// Ctrl+Z right after moving to another clip, while the clip just left still waits for its
+    /// video to unload before its save (and the `NavigateFileCommand` that comes with it): the
+    /// top step is still the left clip's tag toggle, and undoing it then acts on the tag list
+    /// of the clip now open, not on the clip it was made on. When the save lands, its step
+    /// clears the redo stack, so the toggle cannot be redone either.
+    #[test]
+    fn undo_while_the_left_clips_save_waits_does_not_edit_the_next_clip() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        let file_1_id = file_id_at(&workspace, 1);
+        let pick = |w: &FolderWorkspace| {
+            w.file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .expect("pick is a built-in tag")
+        };
+        let pick_checked = |w: &FolderWorkspace| {
+            let list = w.file_workspace().tag_list();
+            list.get_tag(pick(w)).is_some_and(|t| t.is_checked())
+        };
+        let unloaded = |w: &mut FolderWorkspace| {
+            let _ = w.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+        };
+
+        // file_1 gets "pick" first: visit it, check the tag, come back to file_0.
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        unloaded(&mut workspace);
+        let id = pick(&workspace);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
+        flush_file_opened(&mut workspace);
+        unloaded(&mut workspace);
+        assert!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(file_1_id))
+                .is_some_and(|f| f.snapshot().has_tag("pick")),
+            "setup: file_1 has pick"
+        );
+
+        // On file_0: check "pick", move to file_1. file_0's save waits for its video.
+        let id = pick(&workspace);
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(id)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        assert!(workspace.has_pending_rename(), "file_0's save waits");
+        assert!(pick_checked(&workspace), "file_1 opens with its pick");
+
+        // Ctrl+Z before the video has let go.
+        let _ = workspace.update(Message::Undo);
+        assert!(
+            pick_checked(&workspace),
+            "undoing file_0's toggle must not uncheck pick on file_1, the clip now open"
+        );
+
+        unloaded(&mut workspace);
+        assert!(
+            workspace
+                .directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .is_some_and(|f| f.snapshot().has_tag("pick")),
+            "file_0 is saved with pick"
         );
     }
 
