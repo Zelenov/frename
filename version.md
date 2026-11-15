@@ -1,6 +1,6 @@
-# 0.231
+# 0.232
 ## Fixed
-- A folder opened while another one is still loading stays open, and is the folder the next start opens. Before, the folder asked for first replaced it when its loading ended.
+- If you open a folder while another one is still loading, the new folder stays open and frename opens it next time. Before, the first folder replaced it when it finished loading.
 
 # 0.231
 ## Fixed

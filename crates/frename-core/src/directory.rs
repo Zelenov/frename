@@ -77,7 +77,6 @@ impl<S: AppStateStore + Clone> Directory<S> {
                 log::error!("Failed to scan directory: {e}");
                 e
             })?;
-        store.set_last_folder_and_file(&FolderAndFile::new(directory, None::<PathBuf>));
         let names: Vec<String> = files
             .iter()
             .filter_map(|f| f.file_path().file_name())
@@ -465,7 +464,9 @@ impl<S: AppStateStore + Clone> Directory<S> {
     // Private helpers
     // -----------------------------------------------------------------------
 
-    fn persist_session(&self) {
+    /// Save this folder and its selected file as the session the next start opens. `open` does not:
+    /// the app calls this once it shows the folder, so a scan it drops saves nothing (#481).
+    pub fn persist_session(&self) {
         self.store.set_last_folder_and_file(&FolderAndFile::new(
             self.path.as_ref(),
             self.selected_file().map(|f| f.file_path().to_path_buf()),
