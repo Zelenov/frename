@@ -27,6 +27,7 @@ pub use in_memory_file_tagger::InMemoryFileTagger;
 pub use production_file_tagger::ProductionFileTagger;
 pub use screenshot::Screenshot;
 pub use stored_tag::StoredTag;
+pub(crate) use tag::same_tag_name;
 pub use tag::{Tag, TagId};
 pub use tag_color_mapping::TagColorMapping;
 pub use tag_list::{

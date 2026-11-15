@@ -400,7 +400,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let existing = self
             .tags_by_id
             .values()
-            .find(|t| t.tag().eq_ignore_ascii_case(name))
+            .find(|t| super::same_tag_name(t.tag(), name))
             .map(|t| (t.id(), t.is_checked()));
         match existing {
             Some((id, is_checked)) if is_checked != checked => {
@@ -656,7 +656,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     pub fn has_tag_with_name(&self, name: &str) -> bool {
         self.tags_by_id
             .values()
-            .any(|t| t.tag().eq_ignore_ascii_case(name))
+            .any(|t| super::same_tag_name(t.tag(), name))
     }
 
     /// Create a new unsaved tag with the given name, insert it at the front of both display and
@@ -990,7 +990,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     pub fn tag_id_by_name(&self, name: &str) -> Option<TagId> {
         self.tags_by_id
             .values()
-            .find(|t| t.tag().eq_ignore_ascii_case(name))
+            .find(|t| super::same_tag_name(t.tag(), name))
             .map(|t| t.id())
     }
 
@@ -1190,6 +1190,29 @@ mod tests {
             flags[unsaved..].iter().all(|stored| *stored),
             "{when}: unsaved tags are not all first: stored flags {flags:?}"
         );
+    }
+
+    /// #494: a tag name in other capitals is the same tag in any alphabet, not only A–Z: "лес"
+    /// finds "Лес", is not created next to it, and checks it.
+    #[test]
+    fn a_tag_name_in_other_capitals_is_the_same_tag_in_any_alphabet() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Лес", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Été", 2, false), 1)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Forest", 3, false), 2);
+        let mut list = TagList::new(store, FileSnapshot::new(vec![], "file", "mp4", "file.mp4"));
+        let count = list.display_tag_names_ordered().len();
+        for (typed, existing) in [("лес", "Лес"), ("ЛЕС", "Лес"), ("été", "Été"), ("forest", "Forest")] {
+            assert!(list.has_tag_with_name(typed), "{typed}");
+            assert!(list.create_new_tag(typed).is_none(), "{typed}");
+            let id = list.tag_id_by_name(typed).expect(typed);
+            assert_eq!(list.get_tag(id).expect(typed).tag(), existing);
+        }
+        list.set_checked_by_name("лес", true);
+        let id = list.tag_id_by_name("Лес").expect("Лес");
+        assert!(list.get_tag(id).expect("Лес").is_checked());
+        assert_eq!(list.display_tag_names_ordered().len(), count, "no second tag");
+        assert!(!list.has_tag_with_name("лесок"), "a longer name is another tag");
     }
 
     /// #418: a tag with a character a file name cannot hold ("AC/DC" would move the clip into

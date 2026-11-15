@@ -56,14 +56,14 @@ impl FileTagger {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         // Only the editor's own text counts; an AI description alone does not.
         let commented = crate::ai::has_editor_comment(snapshot.comment());
-        let tagged = snapshot.tags().iter().any(|t| t.eq_ignore_ascii_case(tag));
+        let tagged = snapshot.tags().iter().any(|t| super::same_tag_name(t, tag));
         if commented == tagged {
             return MoveOutcome::NothingToMove;
         }
         let mut tags: Vec<String> = snapshot
             .tags()
             .iter()
-            .filter(|t| !t.eq_ignore_ascii_case(tag))
+            .filter(|t| !super::same_tag_name(t, tag))
             .cloned()
             .collect();
         if commented {
@@ -204,7 +204,7 @@ impl FileTagger {
         let mut tags: Vec<String> = snapshot
             .tags()
             .iter()
-            .filter(|t| !t.eq_ignore_ascii_case(&tag))
+            .filter(|t| !super::same_tag_name(t, &tag))
             .cloned()
             .collect();
         if commented {

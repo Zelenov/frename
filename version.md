@@ -1,3 +1,7 @@
+# 0.239
+## Fixed
+- A tag typed in other capitals in a non-Latin alphabet ("лес" for "Лес", "été" for "Été") now finds the tag you have, as it already did for Latin letters. Before, frename offered to create it and made a second tag of the same name.
+
 # 0.238
 ## Fixed
 - Ctrl+Z after a batch action that ended while the clip you left was still being saved now takes back what you changed on the new clip first, as it does otherwise. Before, it went back to the clip you left first, and the next Ctrl+Z could act on the wrong clip.

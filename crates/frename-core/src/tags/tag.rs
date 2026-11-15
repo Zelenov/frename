@@ -21,6 +21,15 @@ impl TagId {
     }
 }
 
+/// Whether two tag names are the same tag: equal when capitals are ignored, in any alphabet
+/// ("Лес" and "лес", "Été" and "été", not only "Forest" and "forest"), as the tag filter matches
+/// them (#494).
+pub(crate) fn same_tag_name(a: &str, b: &str) -> bool {
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .eq(b.chars().flat_map(char::to_lowercase))
+}
+
 /// A single tag that can be applied to a file (stored tag with checked state).
 #[derive(Debug, Clone)]
 pub struct Tag {
