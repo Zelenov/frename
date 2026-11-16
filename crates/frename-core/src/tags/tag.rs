@@ -23,9 +23,9 @@ impl TagId {
 
 /// Whether two tag names are the same tag: equal when capitals are ignored, in any alphabet
 /// ("Лес" and "лес", "Été" and "été", not only "Forest" and "forest"). Folded with
-/// `str::to_lowercase`, exactly as the tag filter folds them, so a name the filter shows as the
-/// full match is never offered for creation (#494). A whole-string fold, not one letter at a
-/// time: a Greek capital sigma at the end of a word becomes `ς` ("ΔΡΟΜΟΣ" is "δρομος" there).
+/// `str::to_lowercase`, the fold the tag filter's `match_rank` uses, so a name equal to a tag
+/// apart from capitals is never offered for creation (#494). A whole-string fold, not one letter
+/// at a time: a Greek capital sigma at the end of a word becomes `ς` ("ΔΡΟΜΟΣ" is "δρομος").
 pub(crate) fn same_tag_name(a: &str, b: &str) -> bool {
     a.to_lowercase() == b.to_lowercase()
 }
@@ -169,7 +169,6 @@ mod tests {
             ("κόσμος", "ΚΌΣΜΟΣ"),
         ] {
             assert!(same_tag_name(a, b), "{a} / {b}");
-            assert_eq!(a.to_lowercase(), b.to_lowercase(), "as the filter folds");
         }
         assert!(!same_tag_name("Лес", "Лесок"));
         assert!(!same_tag_name("Лес", "Лёс"));

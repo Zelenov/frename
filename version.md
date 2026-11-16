@@ -1,6 +1,6 @@
 # 0.239
 ## Fixed
-- A tag typed in other capitals in a non-Latin alphabet ("лес" for "Лес", "été" for "Été") now finds the tag you have, as it already did for Latin letters. Before, frename offered to create it and made a second tag of the same name.
+- A tag typed in other capitals with accented or non-Latin letters ("лес" for "Лес", "été" for "Été") now finds the tag you have, as it already did for A–Z. Before, frename offered to create a second tag of the same name.
 
 # 0.238
 ## Fixed

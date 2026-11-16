@@ -397,11 +397,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// would. Checking a name the list does not have yet adds it as a new, checked, saved tag
     /// with the lowest priority: last in the tag panel and last among the file name's tags.
     pub fn set_checked_by_name(&mut self, name: &str, checked: bool) {
-        let existing = self
-            .tags_by_id
-            .values()
-            .find(|t| super::same_tag_name(t.tag(), name))
-            .map(|t| (t.id(), t.is_checked()));
+        let existing = self.tag_named(name).map(|t| (t.id(), t.is_checked()));
         match existing {
             Some((id, is_checked)) if is_checked != checked => {
                 self.toggle_by_id(id);
@@ -988,10 +984,28 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// The id of the tag named `name` (case-insensitive), saved or not.
     pub fn tag_id_by_name(&self, name: &str) -> Option<TagId> {
+        self.tag_named(name).map(|t| t.id())
+    }
+
+    /// The tag named `name`, capitals ignored ([`super::same_tag_name`]). A folder can hold two
+    /// tags that differ only in capitals (made before #494, or read from file names): the one
+    /// spelled exactly as `name` wins, else the first in the tag panel, so the same tag is picked
+    /// on every start (`tags_by_id` has no order).
+    fn tag_named(&self, name: &str) -> Option<&Tag> {
         self.tags_by_id
             .values()
-            .find(|t| super::same_tag_name(t.tag(), name))
-            .map(|t| t.id())
+            .find(|t| t.tag() == name)
+            .or_else(|| {
+                self.display_tag_ids
+                    .iter()
+                    .filter_map(|(id, _, _)| self.tags_by_id.get(id))
+                    .find(|t| super::same_tag_name(t.tag(), name))
+            })
+            .or_else(|| {
+                self.tags_by_id
+                    .values()
+                    .find(|t| super::same_tag_name(t.tag(), name))
+            })
     }
 
     /// Cached result of whether the checked-tag order matches in both collections.
@@ -1226,6 +1240,29 @@ mod tests {
         assert!(
             !list.has_tag_with_name("лесок"),
             "a longer name is another tag"
+        );
+    }
+
+    /// #494: of two tags that differ only in capitals (made before the fix), a name finds the one
+    /// spelled exactly so, else the first in the tag panel, the same one every time.
+    #[test]
+    fn of_two_tags_differing_only_in_capitals_a_name_finds_the_same_one_every_time() {
+        let (upper, lower) = (Uuid::new_v4(), Uuid::new_v4());
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(upper, "Лес", 1, false), 0)
+            .add_stored_tag(StoredTag::with_all(lower, "лес", 2, false), 1);
+        let list = TagList::new(store, FileSnapshot::new(vec![], "file", "mp4", "file.mp4"));
+        let id_of = |name: &str| {
+            list.tag_id_by_name(name)
+                .map(|id| list.get_tag(id).expect(name).tag().to_string())
+        };
+        assert_eq!(id_of("Лес").as_deref(), Some("Лес"));
+        assert_eq!(id_of("лес").as_deref(), Some("лес"));
+        let first = list.display_tag_names_ordered().into_iter().next();
+        assert_eq!(
+            id_of("ЛЕС"),
+            first,
+            "neither spelled so: the first in the panel"
         );
     }
 

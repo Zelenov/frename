@@ -495,6 +495,21 @@ mod tests {
             MoveOutcome::NothingToMove
         );
 
+        // #494: in any alphabet, not only A–Z.
+        let path = Path::new(r"C:\frename-sync-test\Лес.clip.mp4");
+        let mut cyrillic = FileSnapshot::parse("Лес.clip.mp4");
+        cyrillic.set_comment("коза".to_string());
+        let path = FileTagger::save(&cyrillic, path);
+        let MoveOutcome::Moved(tagged_ru) = FileTagger::sync_commented_tag(&path, "Готово")
+        else {
+            panic!("the tag must be added");
+        };
+        assert_eq!(
+            FileTagger::sync_commented_tag(&tagged_ru, "готово"),
+            MoveOutcome::NothingToMove,
+            "the tag is there in other capitals"
+        );
+
         let mut cleared = FileTagger::parse(&tagged, &FolderInfo::default());
         cleared.set_comment(String::new());
         let tagged = FileTagger::save(&cleared, &tagged);
