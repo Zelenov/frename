@@ -366,6 +366,7 @@ batch-action-respace-tags-status-no-space = スペース: タグの後にスペ�
 batch-action-export-markers = マーカーをテキストに書き出し
 batch-action-export-markers-hint = 選択した各ファイルのマーカーを、隣のテキストファイル clip.markers.txt に書き出します。マーカー 1 つにつき 1 行で、時間順です。例: 「0:41–0:47 [red] — Lion crossing — walks left to right」。緑以外の色は角括弧で示し、コメントは名前の後に続きます。「マーカー ⇄ コメント」は、このような行をマーカーとして読み戻します。マーカーのないファイルにはテキストファイルを作りません。前回のテキストファイルは置き換えられます。
 batch-export-markers-cannot-hold = このファイルにはマーカーを保存できません
+batch-export-markers-shared-name-reason = 同じ名前の別のクリップと同じ { $file } になります
 batch-action-reload-files = キャッシュをリセットして再読み込み
 batch-action-reload-files-hint = 選択した各ファイルのコメントとイン点／アウト点をファイル自体から読み直し、フォルダーが記憶していた内容を置き換えます。別のプログラムでファイルを変更した後に使います。記憶している値がなかった、または古かったファイルは変更ありとして数えます。
 

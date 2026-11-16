@@ -436,6 +436,7 @@ batch-action-respace-tags-status-no-space = Razmak: bez razmaka posle tegova
 batch-action-export-markers = Izvezi markere u tekst
 batch-action-export-markers-hint = Upisuje markere svake označene datoteke u tekstualnu datoteku pored nje, clip.markers.txt: jedan red po markeru, po redu vremena, kao „0:41–0:47 [red] — Lion crossing — walks left to right“. Boja različita od zelene je u uglastim zagradama; komentar sledi iza naziva. „Markeri ⇄ komentar“ vraća takve redove u markere. Datoteka bez markera ne dobija tekstualnu datoteku, a tekstualna datoteka iz ranijeg pokretanja se zamenjuje.
 batch-export-markers-cannot-hold = Ova datoteka ne može da sadrži markere
+batch-export-markers-shared-name-reason = deli { $file } sa drugim klipom istog imena
 batch-action-reload-files = Resetuj keš i ponovo učitaj
 batch-action-reload-files-hint = Ponovo čita komentar i ulazne i izlazne tačke svake označene datoteke iz same datoteke i zamenjuje ono što je fascikla zapamtila za nju. Koristite to nakon što je datoteke promenio drugi program. Datoteke čije su zapamćene vrednosti nedostajale ili bile zastarele računaju se kao izmenjene.
 

@@ -105,6 +105,11 @@ pub struct DemoScenario {
     /// In batch mode (`--batch`), the action to select, by its English name ("Rotate videos").
     #[serde(default)]
     pub batch_action: Option<String>,
+    /// With `batch_action`: run it on the checked files, so the shot shows the job's report
+    /// (it is taken after the job is done: the demo settles for seconds, a quick action takes
+    /// less).
+    #[serde(default)]
+    pub batch_run: bool,
     /// Files to Ctrl+click in order, by name, after the seek: builds a multi-selection the way
     /// a click does (issue #60), turning batch mode on. Independent of `--batch`.
     #[serde(default)]

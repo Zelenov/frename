@@ -388,6 +388,7 @@ batch-action-respace-tags-status-no-space = Spacing: no space after tags
 batch-action-export-markers = Export markers to text
 batch-action-export-markers-hint = Writes the markers of each checked file as a text file next to it, clip.markers.txt: one line per marker in time order, like "0:41–0:47 [red] — Lion crossing — walks left to right". A color other than green is in brackets; the comment follows the name. "Markers ⇄ comment" reads such lines back as markers. A file with no markers gets no text file, and a text file from an earlier run is replaced.
 batch-export-markers-cannot-hold = This file cannot hold markers
+batch-export-markers-shared-name-reason = shares { $file } with another clip of the same name
 batch-action-reload-files = Reset cache and reload
 batch-action-reload-files-hint = Reads the comment and in/out points of each checked file from the file itself again and replaces what the folder remembered for it. Use it after the files were changed in another program. Files whose remembered values were missing or out of date count as changed.
 
