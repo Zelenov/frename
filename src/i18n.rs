@@ -960,12 +960,14 @@ mod tests {
     }
 
     /// String literals in UI code that may hold Latin words, each with why it is not UI text.
-    const NOT_UI_TEXT: [(&str, &str); 112] = [
+    const NOT_UI_TEXT: [(&str, &str); 114] = [
         ("txt", "file extension of a save dialog's file type"),
         ("frename", "app name, the title of the first-start import question"),
         ("https://raw.githubusercontent.com/Zelenov/frename", "address"),
         ("main", "branch name"),
         ("ai-notes-editor", "widget id"),
+        ("ai-notes-once", "widget id"),
+        ("prepare-cap", "widget id"),
         (
             "take takes line lines said says speak speaks speech repeat repeats repeated words",
             "words looked for in the user's notes, not shown",
