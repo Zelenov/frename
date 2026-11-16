@@ -212,7 +212,9 @@ While a text box (tag search, file search, comment) has the cursor, it takes the
 arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
 `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
-you type in a marker's name. The F-keys always work, and so does `Ctrl+R` (except in fullscreen); so do `Ctrl+Alt+←` / `→`
+you type in a marker's name. `Ctrl+Z` and `Ctrl+Y` do nothing while you type a comment, a file
+name, a time or a field of batch mode; in the tag and file search they still undo and redo.
+The F-keys always work, and so does `Ctrl+R` (except in fullscreen); so do `Ctrl+Alt+←` / `→`
 except in the comment box and a marker's name.
 
 ## Recovery after a crash

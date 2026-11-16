@@ -178,6 +178,11 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video) && self.video.is_active()
     }
 
+    /// Whether the video's time field is open.
+    pub fn is_editing_time(&self) -> bool {
+        self.video.is_editing_time()
+    }
+
     /// Close the video's time field; true when it was open.
     pub fn cancel_time_edit(&mut self) -> bool {
         self.video.cancel_time_edit()

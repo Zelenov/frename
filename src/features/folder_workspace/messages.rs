@@ -129,11 +129,12 @@ pub enum Message {
     Undo,
     /// Redo the last undone action (Ctrl+Y / Ctrl+Shift+Z).
     Redo,
-    /// The second step of [`Message::Undo`] with a rename open: the file name being edited does
-    /// not have the key, so the step is undone (#488).
-    UndoUnlessRenaming,
-    /// The second step of [`Message::Redo`] with a rename open, as for `UndoUnlessRenaming`.
-    RedoUnlessRenaming,
+    /// The second step of [`Message::Undo`] while a one-line field may be typed in (a file name
+    /// being edited, the time field, a batch field): none of them has the key, so the step is
+    /// undone (#488, #499).
+    UndoUnlessTyping,
+    /// The second step of [`Message::Redo`], as for `UndoUnlessTyping`.
+    RedoUnlessTyping,
     /// Scroll the folder file list so the selected file is visible (deferred to next frame).
     ScrollFolderListToSelected,
     /// Internal: update cached folder list scroll Y after programmatic scroll.
