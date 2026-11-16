@@ -366,7 +366,7 @@ batch-action-respace-tags-status-no-space = 공백: 태그 뒤에 공백 없음
 batch-action-export-markers = 마커를 텍스트로 내보내기
 batch-action-export-markers-hint = 선택한 각 파일의 마커를 옆에 텍스트 파일(clip.markers.txt)로 저장합니다. 마커마다 한 줄이며 시간순이고, 예: "0:41–0:47 [red] — Lion crossing — walks left to right". 초록색이 아닌 색은 대괄호 안에 쓰고, 이름 뒤에 코멘트가 옵니다. "마커 ⇄ 코멘트"는 이런 줄을 다시 마커로 읽습니다. 마커가 없는 파일에는 텍스트 파일을 만들지 않으며, 이전 실행의 텍스트 파일은 덮어씁니다.
 batch-export-markers-cannot-hold = 이 파일에는 마커를 저장할 수 없습니다
-batch-export-markers-shared-name = 이름이 같은 다른 클립과 { $file }이(가) 겹침
+batch-export-markers-shared-name-reason = 이름이 같은 다른 클립과 { $file }을(를) 공유
 batch-action-reload-files = 캐시 초기화 후 다시 불러오기
 batch-action-reload-files-hint = 선택한 각 파일의 코멘트와 인/아웃 포인트를 파일에서 다시 읽어, 폴더에 기억된 값을 대체합니다. 다른 프로그램에서 파일을 변경한 뒤에 사용하세요. 기억된 값이 없었거나 오래된 파일은 변경된 것으로 집계됩니다.
 

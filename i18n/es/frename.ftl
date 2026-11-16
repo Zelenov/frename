@@ -431,7 +431,7 @@ batch-action-respace-tags-status-no-space = Espaciado: sin espacio después de l
 batch-action-export-markers = Exportar los marcadores a texto
 batch-action-export-markers-hint = Escribe los marcadores de cada archivo seleccionado en un archivo de texto junto a él, clip.markers.txt: una línea por marcador en orden temporal, como «0:41–0:47 [red] — Lion crossing — walks left to right». Un color distinto del verde va entre corchetes; el comentario sigue al nombre. «Marcadores ⇄ comentario» vuelve a leer esas líneas como marcadores. Un archivo sin marcadores no recibe ningún archivo de texto, y el archivo de texto de una ejecución anterior se reemplaza.
 batch-export-markers-cannot-hold = Este archivo no puede contener marcadores
-batch-export-markers-shared-name = comparte { $file } con otro clip del mismo nombre
+batch-export-markers-shared-name-reason = comparte { $file } con otro clip del mismo nombre
 batch-action-reload-files = Restablecer la caché y recargar
 batch-action-reload-files-hint = Vuelve a leer del propio archivo el comentario y los puntos de entrada/salida de cada archivo seleccionado y reemplaza lo que la carpeta recordaba de él. Para usar después de cambiar los archivos en otro programa. Los archivos cuyos valores recordados faltaban o estaban desactualizados cuentan como modificados.
 

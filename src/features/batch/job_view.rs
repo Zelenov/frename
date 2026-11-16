@@ -436,6 +436,11 @@ fn figure<'a>(count: usize, word: String, color: Color) -> Element<'a, Message> 
     .into()
 }
 
+/// Whether the report lists the files `action` left alone with a reason next to the failed ones.
+fn lists_skipped_reasons(action: Action) -> bool {
+    matches!(action, Action::GenerateSubtitles | Action::ExportMarkers)
+}
+
 /// The files the job did not do, with why, as a table; for some actions also the files it left
 /// alone with a reason. When every failure has the reason the notice already gives, only the
 /// names are listed.
@@ -453,11 +458,12 @@ fn files_not_done<'a>(
         let reason = reason.filter(|r| Some(*r) != stop_reason);
         (id, reason.map(str::to_string))
     });
-    // Generating subtitles also says why each video it left alone got none, and moving in/out
-    // points out of names which files kept the points they had stored.
-    let listed = match action {
-        Action::GenerateSubtitles => state.skipped_with_reason(),
-        _ => Vec::new(),
+    // Generating subtitles also says why each video it left alone got none, and exporting
+    // markers which clip left its text file to another of the same name (#495).
+    let listed = if lists_skipped_reasons(action) {
+        state.skipped_with_reason()
+    } else {
+        Vec::new()
     };
     let rows: Vec<(FileId, Option<String>)> = failed
         .chain(
@@ -589,6 +595,15 @@ mod tests {
             Outcome::of(&progress(1, 1, false), Some("Stopped: no credit.")),
             Outcome::Stopped("Stopped: no credit.".to_string())
         );
+    }
+
+    /// #495: a clip that Export markers left to another of the same name says why in the
+    /// report, as a video Generate subtitles left alone does.
+    #[test]
+    fn export_markers_lists_the_clips_it_left_alone_with_their_reason() {
+        assert!(lists_skipped_reasons(Action::GenerateSubtitles));
+        assert!(lists_skipped_reasons(Action::ExportMarkers));
+        assert!(!lists_skipped_reasons(Action::FixTags));
     }
 
     #[test]

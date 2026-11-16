@@ -320,6 +320,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             steps.push(folder_workspace::Message::Batch(
                 batch::Message::SelectAction(action),
             ));
+            if scenario.batch_run {
+                steps.push(folder_workspace::Message::Batch(batch::Message::Run));
+            }
         }
     }
     if let Some(stage) = scenario.subtitles_stage.clone().filter(|_| batch) {
@@ -726,6 +729,12 @@ mod tests {
             Some(folder_workspace::Message::Batch(
                 batch::Message::SelectAction(batch::Action::Rotate)
             ))
+        ));
+
+        run.batch_run = true;
+        assert!(matches!(
+            steps(&run, true, false).last(),
+            Some(folder_workspace::Message::Batch(batch::Message::Run))
         ));
     }
 

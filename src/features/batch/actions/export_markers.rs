@@ -28,9 +28,10 @@ pub fn view<'a, M: 'a>() -> Element<'a, M> {
     )
 }
 
-/// One run of the action: the text files it has written so far. Two videos of one name
+/// One run of the action: the text files it has written or tried to write. Two videos of one name
 /// (`A001.mov` and `A001.mp4`) have one `A001.markers.txt`; the first keeps it, and the second
-/// is skipped with the reason instead of replacing it (#495). Operations compare equal only when they are the same run.
+/// is skipped with the reason instead of replacing it (#495).
+/// Operations compare equal only when they are the same run.
 #[derive(Debug, Clone, Default)]
 pub struct Run(Arc<Mutex<HashSet<String>>>);
 
@@ -66,15 +67,15 @@ pub fn run(job: &Run, path: &Path) -> ItemResult {
         // Skipped, as Generate subtitles leaves out a clip whose subtitle name another has: a
         // failed row would offer Retry, whose new run would write over the first clip's text.
         return ItemResult {
-            reason: Some(fl!("batch-export-markers-shared-name", file = file)),
+            reason: Some(fl!("batch-export-markers-shared-name-reason", file = file)),
             ..ItemResult::new(ItemStatus::Skipped, None)
         };
     }
+    // Taken before the write: when it fails, Retry runs only this clip again, and a later clip
+    // of the same name must not have taken the file meanwhile.
+    written.insert(key);
     match write_markers_text(&target, &markers) {
-        Ok(()) => {
-            written.insert(key);
-            ItemResult::new(ItemStatus::Done, None)
-        }
+        Ok(()) => ItemResult::new(ItemStatus::Done, None),
         Err(error) => {
             log::warn!("{LOG_LABEL}: {target:?} not written: {error}");
             ItemResult::failed(error.to_string())
