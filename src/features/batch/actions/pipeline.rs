@@ -17,6 +17,9 @@ use iced::Element;
 
 use super::super::page::{self, Change};
 use super::super::{ItemProgress, ItemResult, ItemStatus};
+
+/// The id of the clips cap field: Undo and Redo ask its focus (#499).
+pub const CAP_FIELD_ID: &str = "prepare-cap";
 use super::{describe_ai, generate_subtitles, ActionMessage, Panel, Readiness, Step};
 use crate::ui::layout::{self, NoticeKind};
 use crate::ui::tokens::SPACE_S;
@@ -589,6 +592,7 @@ pub fn panel<'a>(
     } else {
         form::invalid_text_field(&fl!("batch-prepare-cap-none"), &options.cap_text)
     }
+    .id(iced::widget::Id::new(CAP_FIELD_ID))
     .on_input(|text| ActionMessage::PrepareClips(Message::SetCap(text)));
     let cap = page::option_row(fl!("batch-prepare-cap"), Element::from(field));
 

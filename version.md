@@ -1,3 +1,7 @@
+# 0.241
+## Fixed
+- `Ctrl+Z` and `Ctrl+Y` while you type a time under the video, or in a one-line field of batch mode ("notes for this run", the clips cap of Prepare), no longer undo or redo the last change of a clip. Before, they could take back a turn, a marker or a tag, or go back to the previous clip and drop the typed time.
+
 # 0.240
 ## Fixed
 - Export markers to text: of two clips with one name (`A001.mov` and `A001.mp4`), the first now keeps `A001.markers.txt` and the second is skipped with the reason. Before, the second replaced the first one's text and both said Done.

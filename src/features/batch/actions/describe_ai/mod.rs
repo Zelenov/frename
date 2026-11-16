@@ -34,6 +34,8 @@ use crate::ui::{button, form, text};
 
 /// Id of the folder notes' editor, to ask whether it has the keys.
 pub const NOTES_EDITOR_ID: &str = "ai-notes-editor";
+/// The id of the one-line "notes for this run" field: Undo and Redo ask its focus (#499).
+pub const ONE_OFF_NOTES_ID: &str = "ai-notes-once";
 
 pub fn label() -> String {
     fl!("batch-action-describe-ai")
@@ -510,6 +512,7 @@ impl Options {
             page::option_row(
                 fl!("batch-option-notes-once"),
                 form::text_field(&fl!("batch-ai-notes-once-placeholder"), &self.one_off)
+                    .id(iced::widget::Id::new(ONE_OFF_NOTES_ID))
                     .on_input(|line| ActionMessage::DescribeAi(Message::SetOneOff(line)))
                     .width(iced::Length::Fill),
             ),

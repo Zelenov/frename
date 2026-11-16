@@ -242,6 +242,15 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
     )
 }
 
+/// The one-line text fields of the main window that iced lets Ctrl+Z and Ctrl+Y through
+/// (#488, #499): while one of them has the focus, Undo and Redo do nothing.
+const LINE_FIELDS: &[&str] = &[
+    folder::FOLDER_RENAME_INPUT_ID,
+    crate::features::video_controls::view::TIME_EDIT_ID,
+    batch::describe_ai::ONE_OFF_NOTES_ID,
+    batch::pipeline::CAP_FIELD_ID,
+];
+
 /// Takes the keys from the one focusable widget with this id and leaves every other one as it
 /// is (iced's own `unfocus` takes them from all, the rename field and comment box included).
 fn unfocus_only(target: iced::widget::Id) -> impl iced::advanced::widget::Operation<()> {
@@ -269,6 +278,14 @@ fn unfocus_only(target: iced::widget::Id) -> impl iced::advanced::widget::Operat
 }
 
 impl FolderWorkspace {
+    /// Whether one of [`LINE_FIELDS`] is on screen, so Undo and Redo must ask its focus first:
+    /// a file name being edited, the time field, or batch mode with its fields.
+    fn may_be_typing_in_a_line(&self) -> bool {
+        self.inline_rename.is_some()
+            || self.media_viewer.is_editing_time()
+            || self.batch.is_active()
+    }
+
     pub fn new() -> Self {
         Self::with_app_db(AppDatabase::new())
     }
@@ -617,8 +634,8 @@ impl FolderWorkspace {
             // The comment box has the keys while it is focused: its text is not the app's to undo.
             Message::Undo
             | Message::Redo
-            | Message::UndoUnlessRenaming
-            | Message::RedoUnlessRenaming
+            | Message::UndoUnlessTyping
+            | Message::RedoUnlessTyping
                 if self.file_workspace.comment_focused()
                     || (self.notes_focused && self.batch.is_active()) =>
             {
@@ -629,27 +646,24 @@ impl FolderWorkspace {
             // undoing it now would act on the clip open since. Nothing happens until then.
             Message::Undo
             | Message::Redo
-            | Message::UndoUnlessRenaming
-            | Message::RedoUnlessRenaming
+            | Message::UndoUnlessTyping
+            | Message::RedoUnlessTyping
                 if !self.navigation_targets.is_empty() =>
             {
                 Task::none()
             }
-            // A file name being typed keeps the keys too: iced's text field leaves Ctrl+Z and
-            // Ctrl+Y alone, and undoing a step now would drop the name or edit the clip under it.
-            // A rename open on another row does not hold them, so the focus of its field decides
-            // (as for Shift+Space).
-            Message::Undo | Message::Redo if self.inline_rename.is_some() => {
+            // A one-line field being typed in keeps the keys too: iced's text field leaves
+            // Ctrl+Z and Ctrl+Y alone, and undoing a step now would drop a file name or time being
+            // typed, or edit the clip under a batch field (#488, #499). A field that is open but
+            // not focused does not hold them, so the focus decides (as for Shift+Space).
+            Message::Undo | Message::Redo if self.may_be_typing_in_a_line() => {
                 let then = if matches!(message, Message::Undo) {
-                    Message::UndoUnlessRenaming
+                    Message::UndoUnlessTyping
                 } else {
-                    Message::RedoUnlessRenaming
+                    Message::RedoUnlessTyping
                 };
-                iced::widget::operation::is_focused(iced::widget::Id::from(
-                    folder::FOLDER_RENAME_INPUT_ID,
-                ))
-                .map(move |renaming| {
-                    if renaming {
+                crate::widgets::focus_ring::focused_among(LINE_FIELDS).map(move |field| {
+                    if field.is_some() {
                         Message::Noop
                     } else {
                         then.clone()
@@ -657,7 +671,7 @@ impl FolderWorkspace {
                 })
             }
             // What was typed or named is a step first, so it is the one undone.
-            Message::Undo | Message::UndoUnlessRenaming => {
+            Message::Undo | Message::UndoUnlessTyping => {
                 self.close_marker_row();
                 self.end_comment_session();
                 if self.history.can_undo() {
@@ -666,7 +680,7 @@ impl FolderWorkspace {
                     Task::none()
                 }
             }
-            Message::Redo | Message::RedoUnlessRenaming => {
+            Message::Redo | Message::RedoUnlessTyping => {
                 self.close_marker_row();
                 self.end_comment_session();
                 if self.history.can_redo() {
@@ -1526,8 +1540,8 @@ impl FolderWorkspace {
         // Undo and redo follow what they step over: a marker or a turn of the open video is
         // undone in batch mode (when no job runs), a tag change is not.
         match message {
-            Message::Undo | Message::UndoUnlessRenaming => !self.history.undo_edits_open_video(),
-            Message::Redo | Message::RedoUnlessRenaming => !self.history.redo_edits_open_video(),
+            Message::Undo | Message::UndoUnlessTyping => !self.history.undo_edits_open_video(),
+            Message::Redo | Message::RedoUnlessTyping => !self.history.redo_edits_open_video(),
             _ => false,
         }
     }
@@ -1544,10 +1558,7 @@ impl FolderWorkspace {
         // The job renames files behind the history, so a step back could use a stale path.
         if matches!(
             message,
-            Message::Undo
-                | Message::Redo
-                | Message::UndoUnlessRenaming
-                | Message::RedoUnlessRenaming
+            Message::Undo | Message::Redo | Message::UndoUnlessTyping | Message::RedoUnlessTyping
         ) {
             return Some(Hold::Folder);
         }
@@ -7726,9 +7737,11 @@ mod tests {
         let guid = first_marker_guid(&workspace);
         send_marker(&mut workspace, M::Delete(guid), 1_000);
         assert!(marker_names(&workspace).is_empty());
-        let _ = workspace.update(Message::Undo);
+        // In batch mode Undo and Redo first ask whether a batch field has the keys (#499); the
+        // answer here is "none", the second step.
+        let _ = workspace.update(Message::UndoUnlessTyping);
         assert_eq!(marker_names(&workspace).len(), 1);
-        let _ = workspace.update(Message::Redo);
+        let _ = workspace.update(Message::RedoUnlessTyping);
         assert!(marker_names(&workspace).is_empty());
     }
 
@@ -7833,7 +7846,8 @@ mod tests {
             frename_core::FileTagger::video_rotation(&test_dir.target_file()).map(|r| r.degrees())
         };
         assert_eq!(degrees(), Ok(90));
-        let _ = workspace.update(Message::Undo);
+        // No batch field has the keys (#499): the second step of Undo.
+        let _ = workspace.update(Message::UndoUnlessTyping);
         assert_eq!(degrees(), Ok(0));
     }
 
@@ -10079,10 +10093,83 @@ mod tests {
         let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
         assert!(workspace.inline_rename.is_some());
 
-        let _ = workspace.update(Message::UndoUnlessRenaming);
+        let _ = workspace.update(Message::UndoUnlessTyping);
         assert_eq!(checked(&workspace), before, "undone");
-        let _ = workspace.update(Message::RedoUnlessRenaming);
+        let _ = workspace.update(Message::RedoUnlessTyping);
         assert_eq!(checked(&workspace), !before, "redone");
+    }
+
+    /// Issue #499: Ctrl+Z / Ctrl+Y in the time field, as in the file-name field (#488): iced's
+    /// text field leaves them alone, so the app's Undo ran and took back the clip's last turn
+    /// while a time was being typed. With the field open, its focus is asked first; only when
+    /// it does not have the keys is the step undone.
+    #[test]
+    fn undo_while_typing_a_time_asks_the_field_first() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let file = test_dir.target_file();
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&file)
+                .expect("rotation")
+                .degrees()
+        };
+        let _ = workspace.update(Message::RotateVideo(1));
+        assert_eq!(degrees(), 90);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Video(
+                crate::features::media_viewer::video::Message::Controls(
+                    crate::features::video_controls::Message::TimeEdited("1:0".to_string()),
+                ),
+            ),
+        ));
+        assert!(workspace.media_viewer.is_editing_time());
+
+        for key in [Message::Undo, Message::Redo] {
+            let task = workspace.update(key);
+            assert_eq!(task.units(), 1, "the focus of the time field is asked");
+        }
+        assert_eq!(
+            degrees(),
+            90,
+            "Ctrl+Z in the time field must not undo the turn"
+        );
+        assert!(
+            workspace.media_viewer.is_editing_time(),
+            "the typed time stays"
+        );
+
+        // The field does not have the keys: the turn is undone as without it.
+        let _ = workspace.update(Message::UndoUnlessTyping);
+        assert_eq!(degrees(), 0);
+    }
+
+    /// Issue #499: in batch mode, Ctrl+Z in a one-line field ("notes for this run", the clips
+    /// cap) undid the open clip's last turn while the text stayed as typed. Batch mode asks the
+    /// focus of its fields first.
+    #[test]
+    fn undo_in_batch_mode_asks_the_line_fields_first() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let file = test_dir.target_file();
+        let degrees = || {
+            frename_core::FileTagger::video_rotation(&file)
+                .expect("rotation")
+                .degrees()
+        };
+        let _ = workspace.update(Message::RotateVideo(1));
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        assert!(workspace.batch.is_active());
+
+        let task = workspace.update(Message::Undo);
+        assert_eq!(task.units(), 1, "the focus of the batch fields is asked");
+        assert_eq!(
+            degrees(),
+            90,
+            "Ctrl+Z in a batch field must not undo the turn"
+        );
+
+        let _ = workspace.update(Message::UndoUnlessTyping);
+        assert_eq!(degrees(), 0, "no field had the keys: the turn is undone");
     }
 
     #[test]
