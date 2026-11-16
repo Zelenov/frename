@@ -1202,7 +1202,12 @@ mod tests {
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Forest", 3, false), 2);
         let mut list = TagList::new(store, FileSnapshot::new(vec![], "file", "mp4", "file.mp4"));
         let count = list.display_tag_names_ordered().len();
-        for (typed, existing) in [("лес", "Лес"), ("ЛЕС", "Лес"), ("été", "Été"), ("forest", "Forest")] {
+        for (typed, existing) in [
+            ("лес", "Лес"),
+            ("ЛЕС", "Лес"),
+            ("été", "Été"),
+            ("forest", "Forest"),
+        ] {
             assert!(list.has_tag_with_name(typed), "{typed}");
             assert!(list.create_new_tag(typed).is_none(), "{typed}");
             let id = list.tag_id_by_name(typed).expect(typed);
@@ -1211,8 +1216,15 @@ mod tests {
         list.set_checked_by_name("лес", true);
         let id = list.tag_id_by_name("Лес").expect("Лес");
         assert!(list.get_tag(id).expect("Лес").is_checked());
-        assert_eq!(list.display_tag_names_ordered().len(), count, "no second tag");
-        assert!(!list.has_tag_with_name("лесок"), "a longer name is another tag");
+        assert_eq!(
+            list.display_tag_names_ordered().len(),
+            count,
+            "no second tag"
+        );
+        assert!(
+            !list.has_tag_with_name("лесок"),
+            "a longer name is another tag"
+        );
     }
 
     /// #418: a tag with a character a file name cannot hold ("AC/DC" would move the clip into
