@@ -423,7 +423,7 @@ batch-action-respace-tags-status-no-space = Abstand: kein Leerzeichen nach Tags
 batch-action-export-markers = Marker als Text exportieren
 batch-action-export-markers-hint = Schreibt die Marker jeder ausgewählten Datei als Textdatei neben sie, clip.markers.txt: eine Zeile pro Marker in zeitlicher Reihenfolge, etwa „0:41–0:47 [red] — Löwe quert — geht von links nach rechts“. Eine andere Farbe als Grün steht in eckigen Klammern; der Kommentar folgt auf den Namen. „Marker ⇄ Kommentar“ liest solche Zeilen wieder als Marker ein. Eine Datei ohne Marker bekommt keine Textdatei, und eine Textdatei aus einem früheren Lauf wird ersetzt.
 batch-export-markers-cannot-hold = Diese Datei kann keine Marker aufnehmen
-batch-export-markers-shared-name = Ein anderer Clip gleichen Namens hat { $file } bereits geschrieben
+batch-export-markers-shared-name = teilt { $file } mit einem anderen Clip gleichen Namens
 batch-action-reload-files = Cache zurücksetzen und neu laden
 batch-action-reload-files-hint = Liest den Kommentar und die In-/Out-Punkte jeder ausgewählten Datei erneut aus der Datei selbst und ersetzt, was sich der Ordner dafür gemerkt hat. Nutze es, nachdem die Dateien in einem anderen Programm geändert wurden. Dateien, deren gemerkte Werte fehlten oder veraltet waren, zählen als geändert.
 

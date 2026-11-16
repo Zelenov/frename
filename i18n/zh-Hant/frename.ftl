@@ -366,7 +366,7 @@ batch-action-respace-tags-status-no-space = 間距：標籤後不加空格
 batch-action-export-markers = 將標記匯出為文字
 batch-action-export-markers-hint = 將每個勾選檔案的標記寫成旁邊的文字檔 clip.markers.txt：每個標記一行，依時間排序，例如「0:41–0:47 [red] — 獅子過馬路 — 由左走到右」。綠色以外的顏色寫在方括號內；註解接在名稱之後。「標記 ⇄ 註解」可將這類行讀回成標記。沒有標記的檔案不會產生文字檔，先前執行產生的文字檔會被取代。
 batch-export-markers-cannot-hold = 此檔案無法存放標記
-batch-export-markers-shared-name = 另一個同名片段已寫入 { $file }
+batch-export-markers-shared-name = { $file } 與另一個同名片段重複
 batch-action-reload-files = 重設快取並重新載入
 batch-action-reload-files-hint = 重新從檔案本身讀取每個勾選檔案的註解與入點／出點，並取代資料夾記住的內容。在其他程式修改過檔案後使用。記住的值缺漏或已過期的檔案會算作已變更。
 

@@ -30,7 +30,7 @@ pub fn view<'a, M: 'a>() -> Element<'a, M> {
 
 /// One run of the action: the text files it has written so far. Two videos of one name
 /// (`A001.mov` and `A001.mp4`) have one `A001.markers.txt`; the first keeps it, and the second
-/// fails instead of replacing it (#495). Operations compare equal only when they are the same run.
+/// is skipped with the reason instead of replacing it (#495). Operations compare equal only when they are the same run.
 #[derive(Debug, Clone, Default)]
 pub struct Run(Arc<Mutex<HashSet<String>>>);
 
@@ -42,9 +42,9 @@ impl PartialEq for Run {
 
 impl Eq for Run {}
 
-/// Write the markers of the file at `path`. A file with none is skipped, and one that cannot hold
-/// markers, whose text another clip of the same name wrote in this run, or whose text cannot be
-/// written fails with the reason.
+/// Write the markers of the file at `path`. A file with none is skipped, and so is one whose text
+/// another clip of the same name wrote in this run (with the reason). One that cannot hold
+/// markers or whose text cannot be written fails with the reason.
 pub fn run(job: &Run, path: &Path) -> ItemResult {
     let Some(markers) = FileTagger::load_markers(path) else {
         return ItemResult::failed(fl!("batch-export-markers-cannot-hold"));
@@ -63,7 +63,12 @@ pub fn run(job: &Run, path: &Path) -> ItemResult {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        return ItemResult::failed(fl!("batch-export-markers-shared-name", file = file));
+        // Skipped, as Generate subtitles leaves out a clip whose subtitle name another has: a
+        // failed row would offer Retry, whose new run would write over the first clip's text.
+        return ItemResult {
+            reason: Some(fl!("batch-export-markers-shared-name", file = file)),
+            ..ItemResult::new(ItemStatus::Skipped, None)
+        };
     }
     match write_markers_text(&target, &markers) {
         Ok(()) => {
@@ -151,26 +156,34 @@ mod tests {
     }
 
     /// #495: of two clips of one name in a run, the first keeps `A001.markers.txt` and the
-    /// second fails with the reason, instead of replacing it while both say Done.
+    /// second is skipped with the reason (not failed: Retry would write over it), instead of
+    /// replacing it while both say Done. Names that differ only in capitals clash too, as on
+    /// Windows.
     #[test]
     fn a_second_clip_of_the_same_name_does_not_replace_the_first_ones_text() {
         let dir = frename_core::test_support::fresh_dir("export-markers-shared-name");
         let mov = clip_in(&dir, "A001.mov", &[marker(1_000, "Original")]);
-        let mp4 = clip_in(&dir, "A001.mp4", &[marker(2_000, "Proxy")]);
+        let mp4 = clip_in(&dir, "a001.mp4", &[marker(2_000, "Proxy")]);
         let job = Run::default();
         assert_eq!(run(&job, &mov).status, ItemStatus::Done);
         let second = run(&job, &mp4);
-        assert_eq!(second.status, ItemStatus::Failed);
+        assert_eq!(second.status, ItemStatus::Skipped);
         assert!(
             second
                 .reason
                 .as_deref()
-                .is_some_and(|r| r.contains("A001.markers.txt")),
+                .is_some_and(|r| r.contains("a001.markers.txt")),
             "{:?}",
             second.reason
         );
         let text = std::fs::read_to_string(dir.join("A001.markers.txt")).expect("text");
         assert_eq!(text.replace("\r\n", "\n"), "0:01 — Original\n");
+        if cfg!(target_os = "linux") {
+            assert!(
+                !dir.join("a001.markers.txt").exists(),
+                "the second wrote nothing"
+            );
+        }
         // A new run writes it again: running again replaces the text, as before.
         assert_eq!(run(&Run::default(), &mp4).status, ItemStatus::Done);
         let _ = std::fs::remove_dir_all(dir);

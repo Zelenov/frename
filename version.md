@@ -1,6 +1,6 @@
 # 0.239
 ## Fixed
-- Export markers to text: of two clips with one name (`A001.mov` and `A001.mp4`), the first now keeps `A001.markers.txt` and the second fails with the reason. Before, the second replaced the first one's text and both said Done.
+- Export markers to text: of two clips with one name (`A001.mov` and `A001.mp4`), the first now keeps `A001.markers.txt` and the second is skipped with the reason. Before, the second replaced the first one's text and both said Done.
 
 # 0.238
 ## Fixed
