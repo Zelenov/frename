@@ -1,6 +1,6 @@
 # 0.241
 ## Fixed
-- `Ctrl+Z` and `Ctrl+Y` while you type a time under the video, or in a one-line field of batch mode ("notes for this run", the clips cap of Prepare), no longer undo or redo the last change of a clip. Before, they could take back a turn, a marker or a tag, or go back to the previous clip and drop the typed time.
+- `Ctrl+Z` and `Ctrl+Y` while you type a time under the video, or in a one-line field of batch mode ("Extra line for this run" in Describe with AI, "Stop spending at" in Prepare clips), no longer undo or redo a change to a clip. Before, they could take back a turn, a marker or a tag, or go back to the previous clip and lose the typed time.
 
 # 0.240
 ## Fixed
