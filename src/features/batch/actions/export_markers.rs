@@ -86,7 +86,11 @@ mod tests {
     use super::*;
 
     fn clip(name: &str, markers: &[Marker]) -> std::path::PathBuf {
-        clip_in(&frename_core::test_support::fresh_dir(name), "clip.mov", markers)
+        clip_in(
+            &frename_core::test_support::fresh_dir(name),
+            "clip.mov",
+            markers,
+        )
     }
 
     fn clip_in(dir: &Path, file_name: &str, markers: &[Marker]) -> std::path::PathBuf {
@@ -158,7 +162,10 @@ mod tests {
         let second = run(&job, &mp4);
         assert_eq!(second.status, ItemStatus::Failed);
         assert!(
-            second.reason.as_deref().is_some_and(|r| r.contains("A001.markers.txt")),
+            second
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("A001.markers.txt")),
             "{:?}",
             second.reason
         );
