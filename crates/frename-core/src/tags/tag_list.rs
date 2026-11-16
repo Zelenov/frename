@@ -1199,7 +1199,8 @@ mod tests {
         let store = FakeAppStorage::new()
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Лес", 1, false), 0)
             .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Été", 2, false), 1)
-            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Forest", 3, false), 2);
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Forest", 3, false), 2)
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "ΔΡΟΜΟΣ", 4, false), 3);
         let mut list = TagList::new(store, FileSnapshot::new(vec![], "file", "mp4", "file.mp4"));
         let count = list.display_tag_names_ordered().len();
         for (typed, existing) in [
@@ -1207,6 +1208,7 @@ mod tests {
             ("ЛЕС", "Лес"),
             ("été", "Été"),
             ("forest", "Forest"),
+            ("δρομος", "ΔΡΟΜΟΣ"),
         ] {
             assert!(list.has_tag_with_name(typed), "{typed}");
             assert!(list.create_new_tag(typed).is_none(), "{typed}");
