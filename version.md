@@ -1,6 +1,10 @@
-# 0.239
+# 0.240
 ## Fixed
 - Export markers to text: of two clips with one name (`A001.mov` and `A001.mp4`), the first now keeps `A001.markers.txt` and the second is skipped with the reason. Before, the second replaced the first one's text and both said Done.
+
+# 0.239
+## Fixed
+- A tag typed in other capitals with accented or non-Latin letters ("лес" for "Лес", "été" for "Été") now finds the tag you have, as it already did for A–Z. Before, frename offered to create a second tag of the same name.
 
 # 0.238
 ## Fixed

@@ -21,6 +21,15 @@ impl TagId {
     }
 }
 
+/// Whether two tag names are the same tag: equal when capitals are ignored, in any alphabet
+/// ("Лес" and "лес", "Été" and "été", not only "Forest" and "forest"). Folded with
+/// `str::to_lowercase`, the fold the tag filter's `match_rank` uses, so a name equal to a tag
+/// apart from capitals is never offered for creation (#494). A whole-string fold, not one letter
+/// at a time: a Greek capital sigma at the end of a word becomes `ς` ("ΔΡΟΜΟΣ" is "δρομος").
+pub(crate) fn same_tag_name(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
+}
+
 /// A single tag that can be applied to a file (stored tag with checked state).
 #[derive(Debug, Clone)]
 pub struct Tag {
@@ -142,5 +151,26 @@ impl OrderedThing for Tag {
 
     fn set_order(&mut self, order: OrderKey) {
         self.order = order;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_tag_name;
+
+    /// #494: one tag whatever the capitals, in any alphabet, folded as the tag filter folds.
+    #[test]
+    fn tag_names_in_other_capitals_are_the_same_in_any_alphabet() {
+        for (a, b) in [
+            ("Лес", "лес"),
+            ("Été", "été"),
+            ("Forest", "FOREST"),
+            ("ΔΡΟΜΟΣ", "δρομος"),
+            ("κόσμος", "ΚΌΣΜΟΣ"),
+        ] {
+            assert!(same_tag_name(a, b), "{a} / {b}");
+        }
+        assert!(!same_tag_name("Лес", "Лесок"));
+        assert!(!same_tag_name("Лес", "Лёс"));
     }
 }

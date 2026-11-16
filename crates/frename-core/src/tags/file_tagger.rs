@@ -56,14 +56,14 @@ impl FileTagger {
         let mut snapshot = Self::parse(path, &FolderInfo::default());
         // Only the editor's own text counts; an AI description alone does not.
         let commented = crate::ai::has_editor_comment(snapshot.comment());
-        let tagged = snapshot.tags().iter().any(|t| t.eq_ignore_ascii_case(tag));
+        let tagged = snapshot.tags().iter().any(|t| super::same_tag_name(t, tag));
         if commented == tagged {
             return MoveOutcome::NothingToMove;
         }
         let mut tags: Vec<String> = snapshot
             .tags()
             .iter()
-            .filter(|t| !t.eq_ignore_ascii_case(tag))
+            .filter(|t| !super::same_tag_name(t, tag))
             .cloned()
             .collect();
         if commented {
@@ -204,7 +204,7 @@ impl FileTagger {
         let mut tags: Vec<String> = snapshot
             .tags()
             .iter()
-            .filter(|t| !t.eq_ignore_ascii_case(&tag))
+            .filter(|t| !super::same_tag_name(t, &tag))
             .cloned()
             .collect();
         if commented {
@@ -493,6 +493,21 @@ mod tests {
         assert_eq!(
             FileTagger::sync_commented_tag(&tagged, "commented"),
             MoveOutcome::NothingToMove
+        );
+
+        // #494: in any alphabet, not only A–Z.
+        let path = Path::new(r"C:\frename-sync-test\Лес.clip.mp4");
+        let mut cyrillic = FileSnapshot::parse("Лес.clip.mp4");
+        cyrillic.set_comment("коза".to_string());
+        let path = FileTagger::save(&cyrillic, path);
+        let MoveOutcome::Moved(tagged_ru) = FileTagger::sync_commented_tag(&path, "Готово")
+        else {
+            panic!("the tag must be added");
+        };
+        assert_eq!(
+            FileTagger::sync_commented_tag(&tagged_ru, "готово"),
+            MoveOutcome::NothingToMove,
+            "the tag is there in other capitals"
         );
 
         let mut cleared = FileTagger::parse(&tagged, &FolderInfo::default());
