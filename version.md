@@ -1,3 +1,7 @@
+# 0.249
+## Fixed
+- A clip that another program renamed, moved or deleted while it was open in frename no longer gets your comment in a stray `.comment.txt` under its old name. frename now says the comment was not saved, and keeps a copy. Before, the comment was lost without a word, and that old text could later replace the comment of a clip that came back under the old name.
+
 # 0.248
 ## Fixed
 - While another folder is still opening, Run does nothing and a clip you stepped to just before no longer opens. Before, a batch action started then could keep the new folder from ever opening (`PgUp`, `PgDn` and `Ctrl+Z` stayed off until you opened a folder again), and that clip's edits were lost when the folder came in.
