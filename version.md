@@ -1,3 +1,7 @@
+# 0.242
+## Fixed
+- While another folder is still opening, `Page Up`, `Page Down`, the Previous and Next buttons and a click in the file list no longer open a clip of the folder you are leaving. Before, they did, and what you changed on that clip was lost without a word when the new folder finished loading.
+
 # 0.241
 ## Fixed
 - `Ctrl+Z` and `Ctrl+Y` while you type a time under the video, or in a one-line field of batch mode ("Extra line for this run" in Describe with AI, "Stop spending at" in Prepare clips), no longer undo or redo a change to a clip. Before, they could take back a turn, a marker or a tag, or go back to the previous clip and lose the typed time.
