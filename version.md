@@ -1,3 +1,7 @@
+# 0.243
+## Fixed
+- Batch mode, Markers → comment and Comment → markers: a clip whose change could not be saved (its new name was already another clip's, or the file could not be written) now shows as not done. Before, it said Done though nothing had changed.
+
 # 0.242
 ## Fixed
 - With comments kept in the video, a clip that could not be renamed after a tag change (Premiere had it open, or the new name was too long) no longer gets its old comment back. Before, the next time you opened the folder it showed the comment from before, and leaving the clip wrote that old comment into the video over the new one.
