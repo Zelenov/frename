@@ -22,24 +22,77 @@ use super::traits::{
     WindowGeometry,
 };
 
-/// `key=value` pairs joined by `;`, for [`BatchRun::options`] in one TEXT column. Values are
-/// always simple identifiers, model ids or `true`/`false`, so none of them ever holds `=` or `;`.
+/// `key=value` pairs joined by `;`, for [`BatchRun::options`] in one TEXT column, after the
+/// marker [`OPTIONS_ESCAPED`]. A `\`, `;` or `=` inside a key or value is written with a `\`
+/// before it: Prepare clips keeps clip names and a folder path there, which may hold any of
+/// them (#514).
 fn encode_options(options: &[(String, String)]) -> String {
-    options
+    let pairs = options
         .iter()
-        .map(|(key, value)| format!("{key}={value}"))
+        .map(|(key, value)| format!("{}={}", escape_option(key), escape_option(value)));
+    std::iter::once(OPTIONS_ESCAPED.to_string())
+        .chain(pairs)
         .collect::<Vec<_>>()
         .join(";")
 }
 
-/// The inverse of [`encode_options`]. A pair without `=`, from a future version's format, is
-/// dropped rather than misread.
+/// The first item of options written by [`encode_options`] since #514. A record without it
+/// was written before, unescaped: its `\` (a Windows path) are plain characters. An older
+/// version drops the marker, as a pair without `=`.
+const OPTIONS_ESCAPED: &str = "~escaped";
+
+fn escape_option(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '\\' | ';' | '=') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// The inverse of [`encode_options`]; a record from before #514 is read as it was written. A
+/// pair without `=`, from a future version's format, is dropped rather than misread.
 fn decode_options(text: &str) -> Vec<(String, String)> {
-    text.split(';')
-        .filter(|pair| !pair.is_empty())
-        .filter_map(|pair| pair.split_once('='))
-        .map(|(key, value)| (key.to_string(), value.to_string()))
-        .collect()
+    let Some(escaped) = text
+        .strip_prefix(OPTIONS_ESCAPED)
+        .filter(|rest| rest.is_empty() || rest.starts_with(';'))
+    else {
+        return text
+            .split(';')
+            .filter(|pair| !pair.is_empty())
+            .filter_map(|pair| pair.split_once('='))
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+    };
+    let mut pairs = Vec::new();
+    // The key and value read so far, and whether the `=` was met.
+    let (mut key, mut value, mut in_value) = (String::new(), String::new(), false);
+    let mut chars = escaped.chars();
+    let mut finish = |key: &mut String, value: &mut String, in_value: &mut bool| {
+        if *in_value {
+            pairs.push((std::mem::take(key), std::mem::take(value)));
+        }
+        key.clear();
+        value.clear();
+        *in_value = false;
+    };
+    while let Some(c) = chars.next() {
+        let target = if in_value { &mut value } else { &mut key };
+        match c {
+            '\\' => {
+                if let Some(next) = chars.next() {
+                    target.push(next);
+                }
+            }
+            ';' => finish(&mut key, &mut value, &mut in_value),
+            '=' if !in_value => in_value = true,
+            _ => target.push(c),
+        }
+    }
+    finish(&mut key, &mut value, &mut in_value);
+    pairs
 }
 
 /// The key a clip's playback position is kept under: its folder ([`folder_key`]) and its file
@@ -1000,6 +1053,27 @@ mod tests {
             db.get_playback_position(elsewhere),
             Some(secs(40)),
             "another folder is left alone"
+        );
+    }
+
+    /// A clip name or folder path with `;`, `=` or `\` comes back as it was (#514), and a record
+    /// written before, unescaped, still reads as written (its Windows paths included).
+    #[test]
+    fn options_with_separators_round_trip_and_old_records_still_read() {
+        let options = vec![
+            ("left".to_string(), "take;2.mp4\nA=B.mov".to_string()),
+            ("left_folder".to_string(), "D:\\shoot;day 2\\".to_string()),
+            ("cap".to_string(), String::new()),
+            ("prepare.left".to_string(), "x\\;=y".to_string()),
+        ];
+        assert_eq!(decode_options(&encode_options(&options)), options);
+        assert_eq!(decode_options(&encode_options(&[])), Vec::new());
+        assert_eq!(
+            decode_options("to=xmp;left_folder=D:\\clips\\"),
+            vec![
+                ("to".to_string(), "xmp".to_string()),
+                ("left_folder".to_string(), "D:\\clips\\".to_string())
+            ]
         );
     }
 
