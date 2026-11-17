@@ -186,8 +186,8 @@ impl ProductionFileTagger {
         };
         // The clip was renamed, moved or deleted outside frename while it was open: its comment
         // text file would be left for a clip that is not there, and win over the comment of the
-        // clip that comes in under that name later (#520). Nothing is written; the editor is
-        // told, and the journal keeps the edits.
+        // clip that comes in under that name later (#520). Nothing is written, and the caller
+        // is told.
         if matches!(path.try_exists(), Ok(false)) {
             log::error!(
                 "ProductionFileTagger: not saving {:?}: it is no longer there",

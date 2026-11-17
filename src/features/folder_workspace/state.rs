@@ -2399,7 +2399,7 @@ impl FolderWorkspace {
         let refused_notice = if report.gone {
             // Another program renamed, moved or deleted the clip while it was open: nothing was
             // written, even what reads back as wanted (a cleared comment), and the reasons below
-            // would send the editor looking elsewhere (#520). The journal keeps the edits.
+            // would send the editor looking elsewhere (#520). The clip's row keeps the edits.
             Self::long_notice(fl!("folder-clip-gone", name = short_file_name(&new_path)))
         } else if refused {
             // The marker description's own reading of the clip may be what holds the file.
@@ -2455,7 +2455,7 @@ impl FolderWorkspace {
                 let notice =
                     self.keep_unsaved_markers(id, wanted, &marker_actions::markers_not_saved());
                 // The note that the comment was lost covers the marker lines it held.
-                if !refused && !comment_lost && !comment_or_points_lost {
+                if !refused && !report.gone && !comment_lost && !comment_or_points_lost {
                     markers_notice = notice;
                 }
             }
@@ -2478,12 +2478,20 @@ impl FolderWorkspace {
             self.journal_saved(id, &path_before, &new_path, &saved_state);
         }
         // A file menu action waiting for this save runs now, on the name the file has on disk.
-        let file_action = self.file_action_after_save(id, refused);
+        let file_action = self.file_action_after_save(id, refused || report.gone);
 
+        // A clip that is gone reads back empty: its row keeps what the editor wanted, so going
+        // back to it still shows the comment to copy out (the journal has no entry for a clip
+        // that vanished before the edit, #520).
+        let row = if report.gone {
+            &saved_state
+        } else {
+            &snapshot_after_save
+        };
         let _ = self
             .directory
             .as_mut()
-            .map(|dir| dir.rename_file(id, &new_path, &snapshot_after_save));
+            .map(|dir| dir.rename_file(id, &new_path, row));
 
         // Remember this as the folder's last viewed file (#98): every path here left a file that
         // was open, whether by switching to another one, closing frename, or switching folders.
