@@ -1516,7 +1516,7 @@ impl FolderWorkspace {
     /// still holds the folder being left: a step, or an undo or redo of its history, would open
     /// one of its clips, and the folder landing would drop that clip's edits unsaved (#507).
     fn steps_while_loading(&self, message: &Message) -> bool {
-        self.opening_folder()
+        let steps = self.opening_folder()
             && (Self::steps_to_clip(message)
                 || matches!(
                     message,
@@ -1524,10 +1524,23 @@ impl FolderWorkspace {
                         | Message::Redo
                         | Message::UndoUnlessTyping
                         | Message::RedoUnlessTyping
-                        // One queued by a step just before the folder was asked for (#513); the
-                        // folder that lands sends its own once it is in.
-                        | Message::FileOpened(_)
-                ))
+                ));
+        steps || self.opens_clip_of_folder_left(message)
+    }
+
+    /// An open of a clip outside the folder now opening, queued by a step just before that
+    /// folder was asked for (#513): the folder that lands sends its own once it is in. A clip of
+    /// that very folder (a reopen of the open clip rescans its folder) still opens.
+    fn opens_clip_of_folder_left(&self, message: &Message) -> bool {
+        let Message::FileOpened(file) = message else {
+            return false;
+        };
+        let opening = self
+            .scanning
+            .as_deref()
+            .filter(|_| self.loading)
+            .or_else(|| self.pending_scan.as_ref().map(|pair| pair.folder()));
+        opening.is_some_and(|folder| file.file_path().parent() != Some(folder))
     }
 
     /// Another folder is on its way in: its scan runs, or waits for the video to unload.
