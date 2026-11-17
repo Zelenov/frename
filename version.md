@@ -1,6 +1,6 @@
 # 0.246
 ## Fixed
-- Prepare clips: after a restart, the clips it did not reach come back right even when a clip name or the folder's path has a `;` or `=` in it. Before, such a name cut the list short, and **Check them** offered the wrong clips or none.
+- Prepare clips: the clips a stopped run did not reach are remembered correctly across a restart even when a clip name or the folder's path has a `;` in it. Before, **Check them** checked only some of those clips, or was not offered at all.
 
 # 0.243
 ## Fixed
