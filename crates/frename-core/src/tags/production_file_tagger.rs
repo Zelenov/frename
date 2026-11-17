@@ -223,6 +223,10 @@ impl ProductionFileTagger {
                     new_path,
                     e
                 );
+                // The video may have taken new XMP and kept its size and time: its file list
+                // line must follow, or the next scan shows the old comment and a save writes it
+                // back (#502).
+                metadata::cache::refresh_after_save(path, path);
                 return Saved {
                     path: path.to_path_buf(),
                     points_in_comment,
@@ -1328,6 +1332,37 @@ mod tests {
                 .comment(),
             "goat"
         );
+    }
+
+    #[test]
+    fn a_failed_rename_still_records_the_comment_the_video_took() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("rename-fails-cache", &format!("{}.mov", "a".repeat(200)));
+        let folder = path.parent().expect("folder").to_path_buf();
+        // Saved twice: the second save finds an XMP packet and keeps the file's size.
+        for comment in ["first", "C1"] {
+            let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+            snapshot.set_comment(comment.to_string());
+            assert_eq!(tagger.save_with(&snapshot, &path, ADOBE), path);
+        }
+
+        // A name past the file system's limit makes the rename fail after the video took the
+        // comment, as a clip Premiere holds does.
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        snapshot.set_comment("C2".to_string());
+        snapshot.set_tags(["b".repeat(60)]);
+        assert_eq!(tagger.save_with(&snapshot, &path, ADOBE), path);
+        assert_eq!(
+            crate::metadata::xmp_comment(&path),
+            "C2",
+            "the video took it"
+        );
+
+        // The next scan shows what the video holds, and saving it keeps it there (#502).
+        let scanned = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
+        assert_eq!(scanned.comment(), "C2");
+        let path = tagger.save_with(&scanned, &path, ADOBE);
+        assert_eq!(crate::metadata::xmp_comment(&path), "C2");
     }
 
     #[test]
