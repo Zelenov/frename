@@ -210,9 +210,12 @@ impl ProductionFileTagger {
         let writes_text_file =
             !(snapshot.comment_loading() && storage.comment == CommentStorage::InVideo);
 
+        // Where the clip is after the save: the new name, or the old one when it could not be
+        // renamed (Premiere holds it). Its comment text file and file list line follow it.
+        let mut new_path = new_path;
         if new_path != path {
-            // The video first: when it cannot be renamed (Premiere holds it), its comment and
-            // subtitle files must stay with it rather than wait under the new name.
+            // The video first: when it cannot be renamed, its comment and subtitle files must
+            // stay with it rather than wait under the new name.
             // Its sidecars follow; a crash in between is finished at the next start (#377).
             if let Err(e) =
                 crate::recovery::rename_clip(path, &new_path, writes_text_file && saved.comment)
@@ -223,18 +226,14 @@ impl ProductionFileTagger {
                     new_path,
                     e
                 );
-                // The video may have taken new XMP and kept its size and time: its file list
-                // line must follow, or the next scan shows the old comment and a save writes it
-                // back (#502).
-                metadata::cache::refresh_after_save(path, path);
-                return Saved {
-                    path: path.to_path_buf(),
-                    points_in_comment,
-                };
+                new_path = path.to_path_buf();
+            } else {
+                log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
             }
-            log::info!("Renamed on disk: {:?} → {:?}", path, new_path);
         }
-        // In/out points the video did not take are the text's in/out line.
+        // In/out points the video did not take are the text's in/out line. Written after a
+        // failed rename too: a text file left from before comments were kept in the video would
+        // otherwise win over the comment the video just took (#509).
         if writes_text_file {
             let text = metadata::stored_comment(snapshot, saved.in_out);
             // A text file that could not be rewritten or removed keeps the `In/Out:` line it had,
@@ -245,6 +244,8 @@ impl ProductionFileTagger {
                 points_in_comment |= line.start.is_some() || line.end.is_some();
             }
         }
+        // The video may have taken new XMP and kept its size and time: its file list line must
+        // follow, or the next scan shows the old comment and a save writes it back (#502).
         metadata::cache::refresh_after_save(path, &new_path);
         Saved {
             path: new_path,
@@ -1363,6 +1364,23 @@ mod tests {
         assert_eq!(scanned.comment(), "C2");
         let path = tagger.save_with(&scanned, &path, ADOBE);
         assert_eq!(crate::metadata::xmp_comment(&path), "C2");
+    }
+
+    #[test]
+    fn a_failed_rename_does_not_let_an_old_text_file_win_over_the_new_comment() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("rename-fails-text", &format!("{}.mov", "a".repeat(200)));
+        // A text file left from before comments were kept in the video: it wins when read.
+        crate::comment::save_comment(&path, "C1");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        assert_eq!(snapshot.comment(), "C1");
+
+        // A name past the file system's limit makes the rename fail, as Premiere holding it does.
+        snapshot.set_comment("C2".to_string());
+        snapshot.set_tags(["b".repeat(60)]);
+        assert_eq!(tagger.save_with(&snapshot, &path, ADOBE), path);
+        let back = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
+        assert_eq!(back.comment(), "C2", "the old text file came back (#509)");
     }
 
     #[test]

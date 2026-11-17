@@ -1,3 +1,7 @@
+# 0.247
+## Fixed
+- With comments kept in the video, a clip that still had a comment text file from before (`clip.mov.comment.txt`) and could not be renamed after a tag change (Premiere had it open) no longer shows its old comment again. Before, the old text file won over the new comment, and leaving the clip wrote the old one back into the video.
+
 # 0.246
 ## Fixed
 - Prepare clips: the clips a stopped run did not reach are remembered correctly across a restart even when a clip name or the folder's path has a `;` in it. Before, **Check them** checked only some of those clips, or was not offered at all.
