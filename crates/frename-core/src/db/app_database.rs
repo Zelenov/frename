@@ -22,19 +22,20 @@ use super::traits::{
     WindowGeometry,
 };
 
-/// `key=value` pairs joined by `;`, for [`BatchRun::options`] in one TEXT column. Values are
-/// always simple identifiers, model ids or `true`/`false`, so none of them ever holds `=` or `;`.
+/// [`BatchRun::options`] in one TEXT column, as a JSON list of `[key, value]` pairs: Prepare
+/// clips keeps clip names and a folder path there, which may hold any character (#514). An
+/// older version, which reads `key=value;…`, finds no pair in it and keeps its defaults.
 fn encode_options(options: &[(String, String)]) -> String {
-    options
-        .iter()
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect::<Vec<_>>()
-        .join(";")
+    serde_json::to_string(options).unwrap_or_default()
 }
 
-/// The inverse of [`encode_options`]. A pair without `=`, from a future version's format, is
-/// dropped rather than misread.
+/// The inverse of [`encode_options`]. A record written before #514 is `key=value` pairs joined
+/// by `;` and is read as it was written (its `\` in Windows paths are plain characters); a pair
+/// without `=`, and a JSON record that does not parse, are dropped rather than misread.
 fn decode_options(text: &str) -> Vec<(String, String)> {
+    if text.starts_with('[') {
+        return serde_json::from_str(text).unwrap_or_default();
+    }
     text.split(';')
         .filter(|pair| !pair.is_empty())
         .filter_map(|pair| pair.split_once('='))
@@ -1000,6 +1001,28 @@ mod tests {
             db.get_playback_position(elsewhere),
             Some(secs(40)),
             "another folder is left alone"
+        );
+    }
+
+    /// A clip name or folder path with `;`, `=` or `\` comes back as it was (#514), and a record
+    /// written before, unescaped, still reads as written (its Windows paths included).
+    #[test]
+    fn options_with_separators_round_trip_and_old_records_still_read() {
+        let options = vec![
+            ("left".to_string(), "take;2.mp4\nA=B.mov".to_string()),
+            ("left_folder".to_string(), "D:\\shoot;day 2\\".to_string()),
+            ("cap".to_string(), String::new()),
+            ("prepare.left".to_string(), "x\\;=y".to_string()),
+        ];
+        assert_eq!(decode_options(&encode_options(&options)), options);
+        assert_eq!(decode_options(&encode_options(&[])), Vec::new());
+        assert_eq!(decode_options("[[\"a\""), Vec::new(), "a cut-off record");
+        assert_eq!(
+            decode_options("to=xmp;left_folder=D:\\clips\\"),
+            vec![
+                ("to".to_string(), "xmp".to_string()),
+                ("left_folder".to_string(), "D:\\clips\\".to_string())
+            ]
         );
     }
 
