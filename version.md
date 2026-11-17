@@ -1,6 +1,6 @@
 # 0.243
 ## Fixed
-- While another folder is still opening, `Page Up`, `Page Down`, the Previous and Next buttons and a click in the file list no longer open a clip of the folder you are leaving. Before, they did, and what you changed on that clip was lost without a word when the new folder finished loading.
+- While another folder is still opening, `PgUp`, `PgDn`, the Previous and Next buttons, `Ctrl+Z` and `Ctrl+Y` no longer open a clip of the folder you are leaving, and a clip you drop on the window opens with its own folder. Before, a clip of the old folder opened, and what you changed on it was lost without a word when the new folder finished loading.
 
 # 0.242
 ## Fixed
