@@ -1505,7 +1505,9 @@ impl FolderWorkspace {
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what
     /// would edit that file is off. A running job keeps the folder as it is (no other folder
     /// opens, no file is deleted or moved) and its clip in work is busy: it cannot be opened or
-    /// edited until its item ends. Everything else goes on while the job runs (#249).
+    /// edited until its item ends. Everything else goes on while the job runs (#249). While
+    /// another folder opens, what would open a clip of the folder being left, or strand the scan,
+    /// is dropped too (`held_while_opening_folder`, #507, #513).
     fn is_blocked(&self, message: &Message) -> bool {
         self.blocked_by_batch_mode(message)
             || self.held_while_opening_folder(message)
