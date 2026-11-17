@@ -109,7 +109,8 @@ impl FileTagger {
     /// [`crate::comment_to_markers`]): a line for a moment that has a marker renames it in
     /// place, and markers the clip already has on one moment are merged. The comment changes
     /// only after the markers were written, so a failed write leaves the comment as it was (the
-    /// markers may already be merged). Lines past the end of the clip stay.
+    /// markers may already be merged). A comment save that does not take (a name taken) is
+    /// `Failed` even when the markers were already written. Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
         Self::comment_to_markers_reporting(path).map(|(outcome, _)| outcome)
     }
@@ -157,7 +158,7 @@ impl FileTagger {
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(result.comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
+        Ok((Self::saved_outcome(&snapshot, path), merged_away))
     }
 
     /// "Markers → comment": append a line per clip marker to the file's comment, leaving out
@@ -189,7 +190,7 @@ impl FileTagger {
         let was_commented = !snapshot.comment().trim().is_empty();
         snapshot.set_comment(comment);
         Self::follow_commented_tag(&mut snapshot, was_commented);
-        Ok((MoveOutcome::Moved(Self::save(&snapshot, path)), merged_away))
+        Ok((Self::saved_outcome(&snapshot, path), merged_away))
     }
 
     /// The commented tag follows a comment that appeared or went, as it does when the comment
@@ -218,6 +219,19 @@ impl FileTagger {
     /// or stale.
     pub fn reload_metadata(path: &Path) -> bool {
         backend().reload_metadata(path)
+    }
+
+    /// Save `snapshot` to `path` and tell whether it took: `Failed` when what was read back
+    /// differs from what was wanted (a name taken, a rename or write that failed), so a move
+    /// that changed nothing is never reported as done (#503).
+    fn saved_outcome(snapshot: &FileSnapshot, path: &Path) -> MoveOutcome {
+        let (saved, read_back) = snapshot.save_and_reparse(path);
+        if crate::recovery::saved_what_was_wanted(snapshot, &read_back, saved.points_in_comment) {
+            MoveOutcome::Moved(saved.path)
+        } else {
+            log::warn!("markers: the comment of {path:?} was not saved");
+            MoveOutcome::Failed(saved.path)
+        }
     }
 
     /// The outcome of a save that must rename `path`: a save that failed keeps the old path.
@@ -704,6 +718,42 @@ AI: A walk.
             ),
             "removing the editor's text with the block kept removes the tag"
         );
+    }
+
+    /// A move whose save is refused (the commented tag's new name is another clip's) changed
+    /// nothing, and says so: never `Moved`, which the batch list shows as Done (#503).
+    #[test]
+    fn a_move_whose_save_is_refused_is_failed_not_done() {
+        let _storage = crate::use_storage_on_this_thread(
+            crate::MetadataStorage {
+                comment: crate::CommentStorage::InVideo,
+                in_out: crate::InOutStorage::InVideo,
+            },
+            crate::MarkerStorage::InVideo,
+        );
+        let tag = crate::metadata::active_commented_tag().expect("commented tag on");
+        let file = clip_with_markers("refused-to-comment", &[named(100, "Lion")]);
+        let taken = file.with_file_name(format!("{tag}.clip.mov"));
+        std::fs::write(&taken, b"another clip").expect("taken name");
+
+        let outcome = FileTagger::markers_to_comment(&file).expect("move");
+        assert_eq!(outcome, MoveOutcome::Failed(file.clone()));
+        let comment = FileTagger::parse(&file, &FolderInfo::default())
+            .comment()
+            .to_string();
+        assert_eq!(comment, "", "nothing was written");
+
+        // The other way: a comment line the save cannot take off the clip.
+        let mut snapshot = FileTagger::parse(&file, &FolderInfo::default());
+        snapshot.set_comment("0:00.050 — Start".into());
+        snapshot.set_tags([tag.as_str()]);
+        std::fs::remove_file(&taken).expect("free the name");
+        let tagged = FileTagger::save(&snapshot, &file);
+        assert_ne!(tagged, file, "commented clip renamed");
+        std::fs::write(&file, b"another clip").expect("taken name");
+        let outcome = FileTagger::comment_to_markers(&tagged).expect("move");
+        assert_eq!(outcome, MoveOutcome::Failed(tagged.clone()));
+        let _ = std::fs::remove_dir_all(file.parent().expect("dir"));
     }
 
     fn clip_with_markers(name: &str, markers: &[Marker]) -> PathBuf {
