@@ -64,16 +64,51 @@ impl FileTaggerBackend for InMemoryFileTagger {
         saved.or_else(|| crate::metadata::load_markers(&on_disk))
     }
 
+    /// Merges like the file does (`markers_xmp::apply_markers`): a marker of `markers` replaces
+    /// the one with its GUID or is added after the others; a marker already there whose GUID
+    /// frename knew (`known`) and that is no longer wanted goes; one it never knew (made
+    /// elsewhere, e.g. in Premiere, since frename last read the file) stays (#518). A marker
+    /// without a GUID is not written, as in the file.
     fn save_markers(
         &self,
         path: &Path,
         markers: &[Marker],
-        _known: &HashSet<String>,
+        known: &HashSet<String>,
     ) -> Result<(), MarkersError> {
+        let guid = |marker: &Marker| marker.guid.as_deref().map(crate::metadata::normalize_guid);
+        let known: HashSet<String> = known
+            .iter()
+            .map(|g| crate::metadata::normalize_guid(g))
+            .collect();
+        let existing = self.load_markers(path).unwrap_or_default();
+        let mut merged: Vec<Marker> = Vec::with_capacity(existing.len() + markers.len());
+        for marker in existing {
+            let Some(id) = guid(&marker) else {
+                merged.push(marker);
+                continue;
+            };
+            match markers.iter().find(|m| guid(m).as_ref() == Some(&id)) {
+                // The file keeps its own spelling of the GUID (`update_marker`).
+                Some(wanted) => merged.push(Marker {
+                    guid: marker.guid,
+                    ..wanted.clone()
+                }),
+                None if known.contains(&id) => {}
+                None => merged.push(marker),
+            }
+        }
+        for wanted in markers {
+            let Some(id) = guid(wanted) else { continue };
+            if !merged.iter().any(|m| guid(m).as_ref() == Some(&id)) {
+                merged.push(wanted.clone());
+            }
+        }
+        // The file keeps them in time order when read back.
+        crate::markers::sort_markers(&mut merged);
         self.markers
             .lock()
             .expect("lock")
-            .insert(self.disk_path(path), markers.to_vec());
+            .insert(self.disk_path(path), merged);
         Ok(())
     }
 
@@ -122,6 +157,41 @@ mod tests {
         let renamed = tagger.save(&snapshot, &renamed);
         assert_eq!(tagger.disk_path(&renamed), original);
         assert_eq!(tagger.disk_path(original), original);
+    }
+
+    /// #518: like the file, a save keeps a marker frename never knew (made elsewhere since it
+    /// last read the clip), drops one it knew and no longer wants, and updates one by its GUID.
+    #[test]
+    fn saved_markers_keep_the_ones_frename_never_knew() {
+        let tagger = InMemoryFileTagger::default();
+        let path = Path::new("shoots/no-such-clip.mp4");
+        let named = |start_ms: u64, name: &str| {
+            let mut marker = Marker::new(start_ms);
+            marker.name = name.to_string();
+            marker
+        };
+        let mut kept = named(1_000, "Kept");
+        let gone = named(2_000, "Gone");
+        let outside = named(3_000, "Outside");
+        tagger
+            .save_markers(path, &[kept.clone(), gone.clone()], &HashSet::new())
+            .expect("first");
+        tagger
+            .save_markers(path, &[outside], &HashSet::new())
+            .expect("outside");
+        kept.name = "Kept, renamed".to_string();
+        let known: HashSet<String> = [&kept, &gone]
+            .iter()
+            .filter_map(|m| m.guid.as_ref().map(|g| g.to_ascii_uppercase()))
+            .collect();
+        tagger.save_markers(path, &[kept], &known).expect("again");
+        let names: Vec<String> = tagger
+            .load_markers(path)
+            .expect("markers")
+            .into_iter()
+            .map(|m| m.name)
+            .collect();
+        assert_eq!(names, ["Kept, renamed", "Outside"]);
     }
 
     /// A debug build turns videos in memory only: the file keeps its bytes, and the turn

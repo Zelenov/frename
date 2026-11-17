@@ -12,6 +12,7 @@ pub(crate) mod cache;
 mod conversion;
 mod in_out_line;
 mod markers_xmp;
+pub(crate) use markers_xmp::normalize_guid;
 pub(crate) mod rotation;
 mod xmp;
 

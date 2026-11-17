@@ -1505,7 +1505,9 @@ impl FolderWorkspace {
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what
     /// would edit that file is off. A running job keeps the folder as it is (no other folder
     /// opens, no file is deleted or moved) and its clip in work is busy: it cannot be opened or
-    /// edited until its item ends. Everything else goes on while the job runs (#249).
+    /// edited until its item ends. Everything else goes on while the job runs (#249). While
+    /// another folder opens, what would open a clip of the folder being left, or strand the scan,
+    /// is dropped too (`held_while_opening_folder`, #507, #513).
     fn is_blocked(&self, message: &Message) -> bool {
         self.blocked_by_batch_mode(message)
             || self.held_while_opening_folder(message)
@@ -1533,22 +1535,18 @@ impl FolderWorkspace {
     }
 
     /// An open of another clip queued by a step just before the folder was asked for (#513): the
-    /// folder that lands sends its own once `loading` is over. Not one:
-    /// - a refresh of the clip still open while the folder waits for the video (an inline
-    ///   rename's commit, a save before Copy path): it queues that clip's save, which
-    ///   `on_media_unloaded` applies before the scan;
-    /// - the clip a reopen asked for (`reread_path`, see `open_file`). At runtime it comes after
-    ///   the folder landed; a test that does not let the scan land opens it during the load.
+    /// folder that lands sends its own once `loading` is over, even for the clip a reopen asked
+    /// for (#518). Except a refresh of the clip still open while the folder waits for the video
+    /// (an inline rename's commit, a save before Copy path): it queues that clip's save, which
+    /// `on_media_unloaded` applies before the scan. Once the scan runs no clip is open.
     fn queued_open(&self, message: &Message) -> bool {
         let Message::FileOpened(file) = message else {
             return false;
         };
-        let refreshes_open_clip = !self.loading
-            && self
-                .file_workspace
-                .file()
-                .is_some_and(|open| open.id() == file.id());
-        !refreshes_open_clip && self.reread_path.as_deref() != Some(file.file_path())
+        !self
+            .file_workspace
+            .file()
+            .is_some_and(|open| open.id() == file.id())
     }
 
     /// Another folder is on its way in: its scan runs, or waits for the video to unload.
@@ -4084,6 +4082,22 @@ mod tests {
         assert_eq!(super::column_widths(640.0, 300.0), (640.0, 300.0));
     }
 
+    /// Lands the rescan a reopen of `clip` in `test_dir` started (`open_file` → `save_then_scan`):
+    /// the video lets go if the scan waits for it, the folder comes in with that clip as its
+    /// target, and the clip opens.
+    fn land_rescan(workspace: &mut FolderWorkspace, test_dir: &TestDirectory, clip: &Path) {
+        if workspace.pending_scan.is_some() {
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+        }
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(clip.to_path_buf()),
+        });
+        flush_file_opened(workspace);
+    }
+
     /// Simulates the iced runtime processing a FileOpened task: directory already has selection, so send FileOpened(selected_file).
     fn flush_file_opened(workspace: &mut FolderWorkspace) {
         if let Some(file) = workspace
@@ -5098,6 +5112,12 @@ mod tests {
         let try_both = |workspace: &mut FolderWorkspace, phase: &str| {
             let _ = workspace.update(Message::Batch(batch::Message::Run));
             assert!(!workspace.is_batch_running(), "a job started ({phase})");
+            // A run of the open clip alone (the comment box) is held by `start_batch` too.
+            let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+            assert!(
+                !workspace.is_batch_running(),
+                "a one-clip job started ({phase})"
+            );
             let _ = workspace.update(Message::FileOpened(old_clip.clone()));
             assert!(
                 workspace
@@ -7886,10 +7906,9 @@ mod tests {
             &std::collections::HashSet::new(),
         )
         .expect("written");
-        let _ = workspace.update(Message::OpenPath(test_dir.file_path("file_0.mp4")));
-        flush_file_opened(&mut workspace);
+        // Reopening the open clip rescans its folder; the clip opens once that folder lands.
         let _ = workspace.update(Message::OpenPath(test_dir.target_file()));
-        flush_file_opened(&mut workspace);
+        land_rescan(&mut workspace, &test_dir, &test_dir.target_file());
         assert_eq!(marker_spans(&workspace), [(3_000, 3_000)]);
 
         send_marker(&mut workspace, M::ToggleColorPicker(guid.clone()), 0);
@@ -7902,6 +7921,49 @@ mod tests {
         let _ = workspace.update(Message::FileUpdated { id, snapshot });
         let saved = frename_core::FileTagger::load_markers(&test_dir.target_file()).expect("saved");
         assert_eq!(saved[0].color, frename_core::MarkerColor::Red);
+    }
+
+    /// #518: a step to B queues `FileOpened(B)` from the listing being left, and in the same
+    /// frame B itself is opened again ("Open with", a drop), which rescans B's folder. The queued
+    /// open is held like any other while that folder opens, so it cannot open B from the old
+    /// listing; B opens once the folder lands, with the markers read from its file.
+    #[test]
+    fn a_reopen_of_a_clip_does_not_let_its_queued_open_through_while_the_folder_opens() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = marker_workspace(&test_dir, 2);
+        let b_path = test_dir.file_path("file_1.mp4");
+        // The step to B: the listing selects B and the runtime will deliver its FileOpened.
+        let queued = workspace
+            .directory
+            .as_mut()
+            .and_then(|dir| dir.open_path(&b_path))
+            .expect("B is listed");
+        let mut written = frename_core::Marker::new(2_000);
+        written.name = "From outside".to_string();
+        frename_core::FileTagger::save_markers(
+            &b_path,
+            &[written],
+            &std::collections::HashSet::new(),
+        )
+        .expect("written");
+        let _ = workspace.update(Message::OpenPath(b_path.clone()));
+        assert!(workspace.opening_folder(), "the reopen rescans the folder");
+
+        let _ = workspace.update(Message::FileOpened(queued));
+        assert!(
+            workspace.file_workspace().file().is_none(),
+            "the queued open waits for the folder"
+        );
+
+        land_rescan(&mut workspace, &test_dir, &b_path);
+        assert_eq!(
+            workspace.file_workspace().file().map(|f| f.file_path()),
+            Some(b_path.as_path())
+        );
+        assert_eq!(
+            marker_names(&workspace),
+            [(2_000, "From outside".to_string())]
+        );
     }
 
     #[test]
