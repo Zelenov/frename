@@ -12,13 +12,12 @@ use frename_core::{File, FileId, FileSnapshot};
 use super::actions::{generate_subtitles, Actions};
 use super::{Action, Message, Operation};
 
-/// How far the file in work is, told by its operation from the worker thread. Only slow
-/// operations (AI descriptions) tell; the others finish before anyone could look.
-
 /// The key prefix of Prepare clips' options in another action's saved record
 /// ([`BatchState::last_run`]).
 const PREPARE_PREFIX: &str = "prepare.";
 
+/// How far the file in work is, told by its operation from the worker thread. Only slow
+/// operations (AI descriptions) tell; the others finish before anyone could look.
 #[derive(Debug, Default)]
 pub struct ItemProgress(Mutex<ItemStep>);
 
