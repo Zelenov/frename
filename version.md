@@ -1,3 +1,7 @@
+# 0.245
+## Fixed
+- Prepare clips remembers the clips it did not reach, and its "Stop spending at" cap, after a restart even when you ran another batch action or described one clip in between. Before, any other run made it forget them, so it no longer offered **Check them**.
+
 # 0.244
 ## Fixed
 - Batch action "Markers ⇄ comment", either direction: a clip whose change could not be saved (the "Commented" tag would have renamed it to another clip's name, or the file could not be written) now shows as not done. Before, it said Done though nothing had changed.
