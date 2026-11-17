@@ -10,12 +10,11 @@ use std::path::{Path, PathBuf};
 
 use frename_core::undo::History;
 use frename_core::{
-    AppDatabase, AppStateStore, BatchRun, CheckTagsCommand, CreateTagCommand, DeleteTagCommand,
-    File, FileId, FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker,
-    NavigateFileCommand, PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse,
-    SaveTagCommand, Segment, SetCommentCommand, SetSegmentCommand, SetSegmentEndCommand,
-    SetSegmentStartCommand, StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext,
-    UndoError,
+    AppDatabase, AppStateStore, CheckTagsCommand, CreateTagCommand, DeleteTagCommand, File, FileId,
+    FileSnapshot, FolderAndFile, FolderTagStore, LoggingAppStateStore, Marker, NavigateFileCommand,
+    PasteTagsCommand, RenameFileCommand, ReorderTagCommand, SaveAndReparse, SaveTagCommand,
+    Segment, SetCommentCommand, SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand,
+    StarTagCommand, SyncTagOrderCommand, ToggleTagCommand, UndoContext, UndoError,
 };
 use rfd;
 
@@ -1934,10 +1933,7 @@ impl FolderWorkspace {
         }
         let action = self.batch.action();
         self.batch.forget_prepare_groups();
-        self.app_db.set_batch_run(BatchRun {
-            action: action.id().to_string(),
-            options: self.batch.actions().persist(action),
-        });
+        self.app_db.set_batch_run(self.batch.last_run(action));
         // The editor keeps the open clip; it is closed only while the job's item for that very
         // clip runs (see `run_batch_item`).
         self.next_batch_item()
@@ -2144,11 +2140,8 @@ impl FolderWorkspace {
         let folder = dir.path().to_path_buf();
         self.batch.set_prepare_left(left, &folder, found);
         // The record of the last run carries the clips left, for the next time.
-        let saved_action = batch::Action::PrepareClips;
-        self.app_db.set_batch_run(BatchRun {
-            action: saved_action.id().to_string(),
-            options: self.batch.actions().persist(saved_action),
-        });
+        self.app_db
+            .set_batch_run(self.batch.last_run(batch::Action::PrepareClips));
         let Some(batch::Operation::PrepareClips(run)) = self.batch.job_operation().cloned() else {
             return Task::none();
         };

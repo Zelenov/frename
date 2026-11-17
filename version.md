@@ -1,3 +1,7 @@
+# 0.243
+## Fixed
+- Prepare clips remembers the clips it did not reach, and its "Stop spending at" cap, after a restart even when you ran another batch action or described one clip in between. Before, any other run made it forget them, so it no longer offered **Check them**.
+
 # 0.242
 ## Fixed
 - With comments kept in the video, a clip that could not be renamed after a tag change (Premiere had it open, or the new name was too long) no longer gets its old comment back. Before, the next time you opened the folder it showed the comment from before, and leaving the clip wrote that old comment into the video over the new one.
