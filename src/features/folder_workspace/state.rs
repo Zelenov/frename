@@ -1535,23 +1535,18 @@ impl FolderWorkspace {
     }
 
     /// An open of another clip queued by a step just before the folder was asked for (#513): the
-    /// folder that lands sends its own once `loading` is over. Not one:
-    /// - a refresh of the clip still open while the folder waits for the video (an inline
-    ///   rename's commit, a save before Copy path): it queues that clip's save, which
-    ///   `on_media_unloaded` applies before the scan.
-    ///
-    /// The clip a reopen asked for (`reread_path`, see `open_file`) is no exception: the folder
-    /// that lands opens it (#518).
+    /// folder that lands sends its own once `loading` is over, even for the clip a reopen asked
+    /// for (#518). Except a refresh of the clip still open while the folder waits for the video
+    /// (an inline rename's commit, a save before Copy path): it queues that clip's save, which
+    /// `on_media_unloaded` applies before the scan. Once the scan runs no clip is open.
     fn queued_open(&self, message: &Message) -> bool {
         let Message::FileOpened(file) = message else {
             return false;
         };
-        let refreshes_open_clip = !self.loading
-            && self
-                .file_workspace
-                .file()
-                .is_some_and(|open| open.id() == file.id());
-        !refreshes_open_clip
+        !self
+            .file_workspace
+            .file()
+            .is_some_and(|open| open.id() == file.id())
     }
 
     /// Another folder is on its way in: its scan runs, or waits for the video to unload.
@@ -5111,6 +5106,12 @@ mod tests {
         let try_both = |workspace: &mut FolderWorkspace, phase: &str| {
             let _ = workspace.update(Message::Batch(batch::Message::Run));
             assert!(!workspace.is_batch_running(), "a job started ({phase})");
+            // A run of the open clip alone (the comment box) is held by `start_batch` too.
+            let _ = workspace.update(Message::RunOnOpenClip(batch::Action::FixTags));
+            assert!(
+                !workspace.is_batch_running(),
+                "a one-clip job started ({phase})"
+            );
             let _ = workspace.update(Message::FileOpened(old_clip.clone()));
             assert!(
                 workspace

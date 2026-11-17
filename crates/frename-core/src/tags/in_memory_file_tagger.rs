@@ -88,7 +88,11 @@ impl FileTaggerBackend for InMemoryFileTagger {
                 continue;
             };
             match markers.iter().find(|m| guid(m).as_ref() == Some(&id)) {
-                Some(wanted) => merged.push(wanted.clone()),
+                // The file keeps its own spelling of the GUID (`update_marker`).
+                Some(wanted) => merged.push(Marker {
+                    guid: marker.guid,
+                    ..wanted.clone()
+                }),
                 None if known.contains(&id) => {}
                 None => merged.push(marker),
             }

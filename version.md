@@ -1,6 +1,6 @@
 # 0.249
 ## Fixed
-- Opening the clip you just stepped to again ("Open with", or dropping it on the window) no longer opens it from the folder being left. Before, in rare timing, that clip opened before its folder was read again, and an edit made on it just before was lost.
+- Opening the clip you just stepped to again ("Open with", or dropping it on the window) now waits until its folder is read again. Before, in rare timing, it opened too early, and what you changed on it then was lost when the folder came in.
 
 # 0.248
 ## Fixed
