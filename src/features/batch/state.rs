@@ -12,6 +12,10 @@ use frename_core::{File, FileId, FileSnapshot};
 use super::actions::{generate_subtitles, Actions};
 use super::{Action, Message, Operation};
 
+/// The key prefix of Prepare clips' options in another action's saved record
+/// ([`BatchState::last_run`]).
+const PREPARE_PREFIX: &str = "prepare.";
+
 /// How far the file in work is, told by its operation from the worker thread. Only slow
 /// operations (AI descriptions) tell; the others finish before anyone could look.
 #[derive(Debug, Default)]
@@ -378,6 +382,40 @@ impl BatchState {
         };
         self.action = action;
         self.actions.restore(action, &run.options);
+        // Prepare clips' own choices, and the clips it did not reach, ride along with any other
+        // action's record (`last_run`).
+        if action != Action::PrepareClips {
+            let prepare: Vec<(String, String)> = run
+                .options
+                .iter()
+                .filter_map(|(key, value)| {
+                    let key = key.strip_prefix(PREPARE_PREFIX)?;
+                    Some((key.to_string(), value.clone()))
+                })
+                .collect();
+            if !prepare.is_empty() {
+                self.actions.restore(Action::PrepareClips, &prepare);
+            }
+        }
+    }
+
+    /// The record of a run of `action` to keep for the next start: its options, and Prepare
+    /// clips' own under [`PREPARE_PREFIX`] when it is another action. The record is one row, so
+    /// without them any other run would forget the clips Prepare clips did not reach (#505).
+    pub fn last_run(&self, action: Action) -> frename_core::BatchRun {
+        let mut options = self.actions.persist(action);
+        if action != Action::PrepareClips {
+            options.extend(
+                self.actions
+                    .persist(Action::PrepareClips)
+                    .into_iter()
+                    .map(|(key, value)| (format!("{PREPARE_PREFIX}{key}"), value)),
+            );
+        }
+        frename_core::BatchRun {
+            action: action.id().to_string(),
+            options,
+        }
     }
 
     /// Start the selected action on `files` (the checked ones, in list order). Returns false
@@ -852,6 +890,34 @@ mod tests {
                 .id()
             })
             .collect()
+    }
+
+    /// Another action's run after a Prepare clips run that stopped keeps what Prepare clips
+    /// needs at the next start: the clips it did not reach, and its cap (#505).
+    #[test]
+    fn another_runs_record_keeps_the_clips_prepare_clips_did_not_reach() {
+        let folder = Path::new("C:/clips");
+        let mut batch = BatchState::default();
+        batch.update(Message::Action(super::super::ActionMessage::PrepareClips(
+            super::super::actions::pipeline::Message::SetCap("1.50".into()),
+        )));
+        batch.set_prepare_left(vec!["b.mp4".into(), "c.mp4".into()], folder, 2);
+        let record = batch.last_run(Action::FixTags);
+        assert_eq!(record.action, Action::FixTags.id());
+
+        let mut restarted = BatchState::default();
+        restarted.restore_last_run(record);
+        assert_eq!(restarted.action(), Action::FixTags);
+        assert_eq!(restarted.actions().prepare_left(folder), ["b.mp4", "c.mp4"]);
+        let saved = restarted.actions().persist(Action::PrepareClips);
+        assert!(saved.contains(&("cap".to_string(), "1.50".to_string())));
+
+        // Prepare clips' own record is as before, without a prefix.
+        let own = batch.last_run(Action::PrepareClips);
+        assert!(own
+            .options
+            .iter()
+            .all(|(key, _)| !key.starts_with(PREPARE_PREFIX)));
     }
 
     fn done() -> ItemResult {
