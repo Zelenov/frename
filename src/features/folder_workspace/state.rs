@@ -1514,9 +1514,10 @@ impl FolderWorkspace {
 
     /// While another folder opens (or waits for the video to let go before it does), the list
     /// still holds the folder being left: a step, or an undo or redo of its history, would open
-    /// one of its clips, and the folder landing would drop that clip's edits unsaved (#507).
+    /// one of its clips, and the folder landing would drop that clip's edits unsaved (#507). So
+    /// would an open already queued, and a batch run would strand the scan (#513).
     fn steps_while_loading(&self, message: &Message) -> bool {
-        let steps = self.opening_folder()
+        self.opening_folder()
             && (Self::steps_to_clip(message)
                 || matches!(
                     message,
@@ -1524,23 +1525,21 @@ impl FolderWorkspace {
                         | Message::Redo
                         | Message::UndoUnlessTyping
                         | Message::RedoUnlessTyping
-                ));
-        steps || self.opens_clip_of_folder_left(message)
+                        // A job on the folder being left would also take the unload the folder's
+                        // scan may wait for, so that scan would never start (#513).
+                        | Message::Batch(batch::Message::Run | batch::Message::Retry)
+                )
+                || self.queued_open(message))
     }
 
-    /// An open of a clip outside the folder now opening, queued by a step just before that
-    /// folder was asked for (#513): the folder that lands sends its own once it is in. A clip of
-    /// that very folder (a reopen of the open clip rescans its folder) still opens.
-    fn opens_clip_of_folder_left(&self, message: &Message) -> bool {
+    /// An open queued by a step just before the folder was asked for (#513): the folder that
+    /// lands sends its own once `loading` is over. Only the clip a reopen asked for
+    /// (`reread_path`, see `open_file`) is not one.
+    fn queued_open(&self, message: &Message) -> bool {
         let Message::FileOpened(file) = message else {
             return false;
         };
-        let opening = self
-            .scanning
-            .as_deref()
-            .filter(|_| self.loading)
-            .or_else(|| self.pending_scan.as_ref().map(|pair| pair.folder()));
-        opening.is_some_and(|folder| file.file_path().parent() != Some(folder))
+        self.reread_path.as_deref() != Some(file.file_path())
     }
 
     /// Another folder is on its way in: its scan runs, or waits for the video to unload.
@@ -1951,8 +1950,9 @@ impl FolderWorkspace {
     /// Start the selected batch action on the checked files, in folder order. The job runs in the
     /// background (#249); see [`Self::run_batch_item`] for the clip that is open.
     fn start_batch(&mut self) -> Task<Message> {
-        // The list is the folder being left, and a job waiting for the video to let go would
-        // take the unload the folder's scan waits for, so that scan would never start (#513).
+        // Run and Retry are held while a folder opens (`steps_while_loading`); a run of one clip
+        // from the comment box comes here directly. The list is the folder being left, and a job
+        // waiting for the video would take the unload the folder's scan waits for (#513).
         if self.opening_folder() {
             return Task::none();
         }
@@ -5045,7 +5045,8 @@ mod tests {
     }
 
     /// While another folder opens, an open queued by a step just before is dropped, and no
-    /// batch run starts on the folder being left (#513).
+    /// batch run starts on the folder being left: neither while the folder waits for the video
+    /// to let go, which a job would take so the scan never started, nor while it scans (#513).
     #[test]
     fn a_queued_open_or_a_batch_run_waits_for_the_folder_that_opens() {
         let a = TestDirectory::new(2);
@@ -5066,35 +5067,42 @@ mod tests {
             .files_in_order()
             .map(|f| f.id())
             .collect();
-
-        let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
-            b.path().to_path_buf(),
-            None::<PathBuf>,
-        )));
-        let _ = workspace.update(Message::MediaViewer(
-            crate::features::media_viewer::Message::Unloaded,
-        ));
-        assert!(workspace.is_loading());
-
-        let _ = workspace.update(Message::FileOpened(old_clip));
-        assert!(
-            workspace.file_workspace().file().is_none(),
-            "the old clip opened"
-        );
-
         let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
         let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
             batch::Action::FixTags,
         )));
         let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
-        let _ = workspace.start_batch();
-        assert!(
-            !workspace.is_batch_running(),
-            "a job started on the old folder"
-        );
+
+        // The video must let go before the scan: the folder waits for the unload.
+        workspace.media_viewer_mut().pretend_video_loading(true);
+        let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+            b.path().to_path_buf(),
+            None::<PathBuf>,
+        )));
+        assert!(!workspace.is_loading(), "the scan waits for the unload");
+        let try_both = |workspace: &mut FolderWorkspace, phase: &str| {
+            let _ = workspace.update(Message::Batch(batch::Message::Run));
+            assert!(!workspace.is_batch_running(), "a job started ({phase})");
+            let _ = workspace.update(Message::FileOpened(old_clip.clone()));
+            assert!(
+                workspace
+                    .file_workspace()
+                    .file()
+                    .is_none_or(|open| open.id() != old_clip.id()),
+                "the old clip opened ({phase})"
+            );
+        };
+        try_both(&mut workspace, "waiting for the unload");
+
+        // The unload comes: the scan starts, it was not stranded.
+        workspace.media_viewer_mut().pretend_video_loading(false);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.is_loading(), "the scan started");
+        try_both(&mut workspace, "scanning");
     }
 
-    /// While another folder opens, the list still holds the folder being left: no step may open
     /// one of its clips, whose edits the landing folder would drop unsaved (#507).
     #[test]
     fn no_clip_of_the_folder_being_left_opens_while_another_loads() {
