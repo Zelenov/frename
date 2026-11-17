@@ -109,7 +109,8 @@ impl FileTagger {
     /// [`crate::comment_to_markers`]): a line for a moment that has a marker renames it in
     /// place, and markers the clip already has on one moment are merged. The comment changes
     /// only after the markers were written, so a failed write leaves the comment as it was (the
-    /// markers may already be merged). Lines past the end of the clip stay.
+    /// markers may already be merged). A comment save that does not take (a name taken) is
+    /// `Failed` even when the markers were already written. Lines past the end of the clip stay.
     pub fn comment_to_markers(path: &Path) -> Result<MoveOutcome, MarkersError> {
         Self::comment_to_markers_reporting(path).map(|(outcome, _)| outcome)
     }

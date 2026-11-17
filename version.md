@@ -1,6 +1,6 @@
 # 0.243
 ## Fixed
-- Batch mode, Markers → comment and Comment → markers: a clip whose change could not be saved (its new name was already another clip's, or the file could not be written) now shows as not done. Before, it said Done though nothing had changed.
+- Batch action "Markers ⇄ comment", either direction: a clip whose change could not be saved (the "Commented" tag would have renamed it to another clip's name, or the file could not be written) now shows as not done. Before, it said Done though nothing had changed.
 
 # 0.242
 ## Fixed
