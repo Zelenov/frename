@@ -1,3 +1,7 @@
+# 0.248
+## Fixed
+- While another folder is still opening, a batch action no longer starts on the folder you are leaving, and a clip you clicked just before no longer opens in the moment the new folder loads. Before, the new folder could stay "opening" for good (PgUp, PgDn and `Ctrl+Z` stopped working until you opened a folder again), or that clip's edits were lost when the folder came in.
+
 # 0.245
 ## Fixed
 - Prepare clips remembers the clips it did not reach, and its "Stop spending at" cap, after a restart even when you ran another batch action or described one clip in between. Before, any other run made it forget them, so it no longer offered **Check them**.

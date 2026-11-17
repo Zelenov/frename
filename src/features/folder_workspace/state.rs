@@ -1524,6 +1524,9 @@ impl FolderWorkspace {
                         | Message::Redo
                         | Message::UndoUnlessTyping
                         | Message::RedoUnlessTyping
+                        // One queued by a step just before the folder was asked for (#513); the
+                        // folder that lands sends its own once it is in.
+                        | Message::FileOpened(_)
                 ))
     }
 
@@ -1935,6 +1938,11 @@ impl FolderWorkspace {
     /// Start the selected batch action on the checked files, in folder order. The job runs in the
     /// background (#249); see [`Self::run_batch_item`] for the clip that is open.
     fn start_batch(&mut self) -> Task<Message> {
+        // The list is the folder being left, and a job waiting for the video to let go would
+        // take the unload the folder's scan waits for, so that scan would never start (#513).
+        if self.opening_folder() {
+            return Task::none();
+        }
         // A list left open would swallow the keys with nothing to show for it.
         let _ = self.recent_folders.update(recent_folders::Message::Close);
         let Some(dir) = self.directory.as_ref() else {
@@ -5020,6 +5028,56 @@ mod tests {
                 .and_then(|d| d.file_by_id(file_0_id))
                 .is_some_and(|f| f.snapshot().has_tag("pick")),
             "the tag toggled just before closing must be saved, not lost"
+        );
+    }
+
+    /// While another folder opens, an open queued by a step just before is dropped, and no
+    /// batch run starts on the folder being left (#513).
+    #[test]
+    fn a_queued_open_or_a_batch_run_waits_for_the_folder_that_opens() {
+        let a = TestDirectory::new(2);
+        let b = TestDirectory::new(1);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: a.directory(),
+            target_file: Some(a.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let old_clip = workspace
+            .directory()
+            .and_then(|d| d.files_in_order().nth(1).cloned())
+            .expect("a second clip");
+        let ids: Vec<FileId> = workspace
+            .directory()
+            .expect("folder")
+            .files_in_order()
+            .map(|f| f.id())
+            .collect();
+
+        let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+            b.path().to_path_buf(),
+            None::<PathBuf>,
+        )));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.is_loading());
+
+        let _ = workspace.update(Message::FileOpened(old_clip));
+        assert!(
+            workspace.file_workspace().file().is_none(),
+            "the old clip opened"
+        );
+
+        let _ = workspace.update(Message::Batch(batch::Message::SetActive(true)));
+        let _ = workspace.update(Message::Batch(batch::Message::SelectAction(
+            batch::Action::FixTags,
+        )));
+        let _ = workspace.update(Message::Batch(batch::Message::CheckAll(ids)));
+        let _ = workspace.start_batch();
+        assert!(
+            !workspace.is_batch_running(),
+            "a job started on the old folder"
         );
     }
 
