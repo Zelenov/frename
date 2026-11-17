@@ -1,3 +1,7 @@
+# 0.243
+## Fixed
+- While another folder is still opening, `PgUp`, `PgDn`, the Previous and Next buttons, `Ctrl+Z` and `Ctrl+Y` no longer open a clip of the folder you are leaving, and a clip you drop on the window opens with its own folder. Before, a clip of the old folder opened, and what you changed on it was lost without a word when the new folder finished loading.
+
 # 0.242
 ## Fixed
 - With comments kept in the video, a clip that could not be renamed after a tag change (Premiere had it open, or the new name was too long) no longer gets its old comment back. Before, the next time you opened the folder it showed the comment from before, and leaving the clip wrote that old comment into the video over the new one.
