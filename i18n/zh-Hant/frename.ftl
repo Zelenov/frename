@@ -803,6 +803,7 @@ folder-frame-saved = 影格已儲存
 folder-frame-not-saved = 影格未儲存：檔名過長，或資料夾為唯讀
 folder-frame-not-taken = 未擷取影格：還沒有畫面。請稍後再試。
 folder-not-saved = 未儲存：已有同名檔案，或檔案為唯讀或使用中
+folder-clip-gone = { $name } 已不在原處：另一個程式將其重新命名、移動或刪除了，因此沒有儲存任何內容。請重新開啟資料夾，找到片段現在所在的位置，再做一次變更。
 folder-comment-not-saved = { $name } 的註解未儲存：無法寫入其 .comment.txt 檔案（檔名過長，或資料夾為唯讀）。若名稱過長請先縮短，再重新寫註解。
 folder-comment-or-points-not-saved = { $name } 的新註解或入點／出點未儲存：無法寫入儲存它們的檔案（檔案或資料夾為唯讀，或已在其他程式中開啟）。請先處理，再重新修改。
 markers-deleted-notice = 標記已刪除

@@ -1,6 +1,6 @@
 # 0.249
 ## Fixed
-- A clip that another program renamed, moved or deleted while it was open in frename no longer gets your comment in a stray `.comment.txt` under its old name. frename now says the comment was not saved, and keeps a copy. Before, the comment was lost without a word, and that old text could later replace the comment of a clip that came back under the old name.
+- When another program renames, moves or deletes the clip open in frename, leaving it now says the clip is no longer there and nothing was saved to it. Before, its comment went into a stray `.comment.txt` without a word, and could later replace the comment of a clip that came back under that name.
 
 # 0.248
 ## Fixed

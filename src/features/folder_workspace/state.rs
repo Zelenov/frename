@@ -2398,7 +2398,12 @@ impl FolderWorkspace {
                 &snapshot_after_save,
                 report.points_in_comment,
             );
-        let refused_notice = if refused {
+        let refused_notice = if report.gone {
+            // Another program renamed, moved or deleted the clip while it was open: nothing was
+            // written, even what reads back as wanted (a cleared comment), and the reasons below
+            // would send the editor looking elsewhere (#520). The journal keeps the edits.
+            Self::long_notice(fl!("folder-clip-gone", name = short_file_name(&new_path)))
+        } else if refused {
             // The marker description's own reading of the clip may be what holds the file.
             if self.marker_reading_clip() {
                 Self::notice(&fl!("folder-not-saved-marker-ai"))
@@ -2464,6 +2469,7 @@ impl FolderWorkspace {
         // needed. A refused save, markers that did not get written, or a comment or in/out
         // point that is not on disk keep it.
         if !refused
+            && !report.gone
             && !self.unsaved_markers.contains_key(&id)
             && frename_core::recovery::saved_what_was_wanted(
                 &snapshot,

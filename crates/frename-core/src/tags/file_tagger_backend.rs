@@ -22,6 +22,9 @@ pub struct Saved {
     /// [`crate::recovery::saved_what_was_wanted`]). Points that went into the video read back
     /// other than set even when saved (an in point at 0 s, an out point at the clip's end).
     pub points_in_comment: bool,
+    /// The clip was not at `path` (another program renamed, moved or deleted it while it was
+    /// open): nothing was written (#520).
+    pub gone: bool,
 }
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
@@ -40,6 +43,7 @@ pub trait FileTaggerBackend: Send + Sync {
         Saved {
             path: self.save(snapshot, path),
             points_in_comment: true,
+            gone: false,
         }
     }
 
