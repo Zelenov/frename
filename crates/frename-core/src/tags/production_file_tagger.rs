@@ -1352,7 +1352,11 @@ mod tests {
         snapshot.set_comment("C2".to_string());
         snapshot.set_tags(["b".repeat(60)]);
         assert_eq!(tagger.save_with(&snapshot, &path, ADOBE), path);
-        assert_eq!(crate::metadata::xmp_comment(&path), "C2", "the video took it");
+        assert_eq!(
+            crate::metadata::xmp_comment(&path),
+            "C2",
+            "the video took it"
+        );
 
         // The next scan shows what the video holds, and saving it keeps it there (#502).
         let scanned = tagger.parse_with(&path, &scan_info(&folder), ADOBE);
