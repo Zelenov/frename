@@ -905,6 +905,7 @@ folder-frame-saved = Kadar je sačuvan
 folder-frame-not-saved = Kadar nije sačuvan: naziv datoteke je predugačak ili je fascikla samo za čitanje
 folder-frame-not-taken = Kadar nije snimljen: slike još nema. Pokušajte ponovo za trenutak.
 folder-not-saved = Nije sačuvano: datoteka sa tim nazivom već postoji, ili je samo za čitanje ili u upotrebi
+folder-clip-gone = { $name } više nije tu: drugi program ga je preimenovao, premestio ili obrisao, pa u njega ništa nije sačuvano. Ako je preimenovan, ponovo otvorite fasciklu, pronađite ga i tu unesite izmenu.
 folder-comment-not-saved = Komentar za { $name } nije sačuvan: njegova datoteka .comment.txt nije mogla da se upiše (predugačak naziv datoteke ili fascikla samo za čitanje). Skratite dugačak naziv, pa ponovo napišite komentar.
 folder-comment-or-points-not-saved = Novi komentar ili ulazne i izlazne tačke za { $name } nisu sačuvani: datoteka u kojoj stoje nije mogla da se upiše (ona ili njena fascikla je samo za čitanje, ili je otvorena u drugom programu). Ispravite to, pa ponovo napravite izmenu.
 markers-deleted-notice = Marker je obrisan

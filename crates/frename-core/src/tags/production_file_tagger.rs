@@ -182,7 +182,22 @@ impl ProductionFileTagger {
         let not_saved = || Saved {
             path: path.to_path_buf(),
             points_in_comment: true,
+            gone: false,
         };
+        // The clip was renamed, moved or deleted outside frename while it was open: its comment
+        // text file would be left for a clip that is not there, and win over the comment of the
+        // clip that comes in under that name later (#520). Nothing is written, and the caller
+        // is told.
+        if matches!(path.try_exists(), Ok(false)) {
+            log::error!(
+                "ProductionFileTagger: not saving {:?}: it is no longer there",
+                path
+            );
+            return Saved {
+                gone: true,
+                ..not_saved()
+            };
+        }
         let new_file_name = snapshot.file_name();
         let new_path = path
             .parent()
@@ -250,6 +265,7 @@ impl ProductionFileTagger {
         Saved {
             path: new_path,
             points_in_comment,
+            gone: false,
         }
     }
 }
@@ -1381,6 +1397,30 @@ mod tests {
         assert_eq!(tagger.save_with(&snapshot, &path, ADOBE), path);
         let back = tagger.parse_with(&path, &FolderInfo::default(), ADOBE);
         assert_eq!(back.comment(), "C2", "the old text file came back (#509)");
+    }
+
+    /// #520: a clip renamed outside frename while open gets nothing written under its old
+    /// name: no comment text file, which would win over the comment of a clip that later comes
+    /// in under that name. The save says the clip is gone.
+    #[test]
+    fn a_clip_renamed_outside_while_open_gets_no_text_file_under_its_old_name() {
+        for storage in [ADOBE, TEXT] {
+            let tagger = ProductionFileTagger;
+            let path = clip_named("gone-while-open", "a.mov");
+            let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), storage);
+            std::fs::rename(&path, path.with_file_name("b.mov")).expect("renamed outside");
+
+            snapshot.set_comment("old note".to_string());
+            snapshot.set_tags(["pick"]);
+            let saved = tagger.save_reporting_with(&snapshot, &path, storage);
+            assert_eq!(saved.path, path, "{storage:?}");
+            assert!(saved.gone, "{storage:?}");
+            assert!(
+                !crate::comment::comment_path(&path).exists(),
+                "a text file for a clip that is not there ({storage:?})"
+            );
+            assert!(!path.with_file_name("pick.a.mov").exists(), "{storage:?}");
+        }
     }
 
     #[test]
