@@ -1,6 +1,10 @@
-# 0.243
+# 0.245
 ## Fixed
 - Prepare clips remembers the clips it did not reach, and its "Stop spending at" cap, after a restart even when you ran another batch action or described one clip in between. Before, any other run made it forget them, so it no longer offered **Check them**.
+
+# 0.243
+## Fixed
+- While another folder is still opening, `PgUp`, `PgDn`, the Previous and Next buttons, `Ctrl+Z` and `Ctrl+Y` no longer open a clip of the folder you are leaving, and a clip you drop on the window opens with its own folder. Before, a clip of the old folder opened, and what you changed on it was lost without a word when the new folder finished loading.
 
 # 0.242
 ## Fixed

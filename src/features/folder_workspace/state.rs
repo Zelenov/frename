@@ -1076,7 +1076,14 @@ impl FolderWorkspace {
     }
 
     fn open_file(&mut self, path: PathBuf) -> Task<Message> {
-        let Some(file) = self.directory.as_mut().and_then(|dir| dir.open_path(&path)) else {
+        // While another folder opens, the listing is the folder being left: opening the path
+        // there would be replaced when the scan lands, its edits unsaved (#507). Scan its folder.
+        let listed = if self.opening_folder() {
+            None
+        } else {
+            self.directory.as_mut().and_then(|dir| dir.open_path(&path))
+        };
+        let Some(file) = listed else {
             // Capture the open file's pending edits before resetting file_workspace (issue #21).
             // The reset itself stays immediate and unconditional, as before: a reopen of the
             // very same path (`Directory::open_path` returns `None` for the already-selected
@@ -1500,7 +1507,42 @@ impl FolderWorkspace {
     /// opens, no file is deleted or moved) and its clip in work is busy: it cannot be opened or
     /// edited until its item ends. Everything else goes on while the job runs (#249).
     fn is_blocked(&self, message: &Message) -> bool {
-        self.blocked_by_batch_mode(message) || self.job_holds(message).is_some()
+        self.blocked_by_batch_mode(message)
+            || self.steps_while_loading(message)
+            || self.job_holds(message).is_some()
+    }
+
+    /// While another folder opens (or waits for the video to let go before it does), the list
+    /// still holds the folder being left: a step, or an undo or redo of its history, would open
+    /// one of its clips, and the folder landing would drop that clip's edits unsaved (#507).
+    fn steps_while_loading(&self, message: &Message) -> bool {
+        self.opening_folder()
+            && (Self::steps_to_clip(message)
+                || matches!(
+                    message,
+                    Message::Undo
+                        | Message::Redo
+                        | Message::UndoUnlessTyping
+                        | Message::RedoUnlessTyping
+                ))
+    }
+
+    /// Another folder is on its way in: its scan runs, or waits for the video to unload.
+    fn opening_folder(&self) -> bool {
+        self.loading || self.pending_scan.is_some()
+    }
+
+    /// `message` opens another clip of the list: a click on its row, or a step to it.
+    fn steps_to_clip(message: &Message) -> bool {
+        matches!(
+            message,
+            Message::Folder(
+                folder::Message::SelectFile(_)
+                    | folder::Message::StartRename(_)
+                    | folder::Message::PreviousFile
+                    | folder::Message::NextFile
+            )
+        )
     }
 
     /// Messages that edit the open file: off in batch mode, which shows no open file.
@@ -1601,16 +1643,7 @@ impl FolderWorkspace {
         }
         // Another clip must not open while the job waits for the video to let go of this one:
         // the unload would meet the switch half way.
-        let steps = matches!(
-            message,
-            Message::Folder(
-                folder::Message::SelectFile(_)
-                    | folder::Message::StartRename(_)
-                    | folder::Message::PreviousFile
-                    | folder::Message::NextFile
-            )
-        );
-        if steps && self.batch_item_waits_for_unload.is_some() {
+        if Self::steps_to_clip(message) && self.batch_item_waits_for_unload.is_some() {
             return Some(Hold::Clip);
         }
         // The clip in work cannot be opened: the job is writing it. A step with the arrow keys
@@ -3801,6 +3834,10 @@ impl FolderWorkspace {
     }
 
     pub fn has_previous_next(&self) -> (bool, bool) {
+        // Steps are off while another folder opens (`steps_while_loading`).
+        if self.opening_folder() {
+            return (false, false);
+        }
         self.directory
             .as_ref()
             .map(|d| d.has_previous_next())
@@ -4984,6 +5021,78 @@ mod tests {
                 .is_some_and(|f| f.snapshot().has_tag("pick")),
             "the tag toggled just before closing must be saved, not lost"
         );
+    }
+
+    /// While another folder opens, the list still holds the folder being left: no step may open
+    /// one of its clips, whose edits the landing folder would drop unsaved (#507).
+    #[test]
+    fn no_clip_of_the_folder_being_left_opens_while_another_loads() {
+        let a = TestDirectory::new(2);
+        let b = TestDirectory::new(1);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: a.directory(),
+            target_file: Some(a.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.has_previous_next(), (false, true));
+
+        let _ = workspace.update(Message::ScanFolder(frename_core::FolderAndFile::new(
+            b.path().to_path_buf(),
+            None::<PathBuf>,
+        )));
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(workspace.is_loading());
+        assert_eq!(workspace.has_previous_next(), (false, false));
+        let selected = |workspace: &FolderWorkspace| {
+            workspace
+                .directory()
+                .and_then(|d| d.selected_file())
+                .map(|f| f.id())
+        };
+        let before = selected(&workspace);
+        for step in [
+            folder::Message::NextFile,
+            folder::Message::PreviousFile,
+            folder::Message::SelectFile(1),
+            folder::Message::StartRename(1),
+        ] {
+            let label = format!("{step:?}");
+            let _ = workspace.update(Message::Folder(step));
+            assert_eq!(
+                selected(&workspace),
+                before,
+                "{label} moved in the old folder"
+            );
+            assert!(
+                workspace.file_workspace().file().is_none(),
+                "{label} opened a clip"
+            );
+        }
+        // Its history is the folder being left's: an undo or redo would open one of its clips.
+        for step in [
+            Message::Undo,
+            Message::Redo,
+            Message::UndoUnlessTyping,
+            Message::RedoUnlessTyping,
+        ] {
+            assert!(workspace.is_blocked(&step), "{step:?} goes through");
+        }
+        // A path of the folder being left is opened by scanning its folder, not from the old list.
+        let _ = workspace.update(Message::OpenPath(a.file_path("file_1.mp4")));
+        assert_eq!(selected(&workspace), before, "opened from the old list");
+        assert!(workspace.file_workspace().file().is_none());
+
+        // Once the new folder is in, steps work again.
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: b.directory(),
+            target_file: Some(b.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        assert!(!workspace.is_loading());
+        assert!(workspace.file_workspace().file().is_some());
     }
 
     /// Regression test for issue #21: opening a different folder without switching files first
