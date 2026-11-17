@@ -1,3 +1,7 @@
+# 0.242
+## Fixed
+- With comments kept in the video, a clip that could not be renamed after a tag change (Premiere had it open, or the new name was too long) no longer gets its old comment back. Before, the next time you opened the folder it showed the comment from before, and leaving the clip wrote that old comment into the video over the new one.
+
 # 0.241
 ## Fixed
 - `Ctrl+Z` and `Ctrl+Y` while you type a time under the video, or in a one-line field of batch mode ("Extra line for this run" in Describe with AI, "Stop spending at" in Prepare clips), no longer undo or redo a change to a clip. Before, they could take back a turn, a marker or a tag, or go back to the previous clip and lose the typed time.
