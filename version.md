@@ -1,3 +1,7 @@
+# 0.247
+## Fixed
+- With comments kept in the video, a clip that still had a comment text file from before (`clip.mov.comment.txt`) and could not be renamed after a tag change (Premiere had it open) no longer shows its old comment again. Before, the old text file won over the new comment, and leaving the clip wrote the old one back into the video.
+
 # 0.244
 ## Fixed
 - Batch action "Markers ⇄ comment", either direction: a clip whose change could not be saved (the "Commented" tag would have renamed it to another clip's name, or the file could not be written) now shows as not done. Before, it said Done though nothing had changed.
