@@ -144,12 +144,14 @@ mod tests {
     fn running_again_replaces_the_text() {
         let file = clip("export-markers-again", &[marker(1_000, "One")]);
         run(&Run::default(), &file);
-        FileTagger::save_markers(
-            &file,
-            &[marker(1_000, "One"), marker(5_000, "Two")],
-            &HashSet::new(),
-        )
-        .expect("markers");
+        // The markers change: "One" is replaced, as the app does, by passing the GUIDs it read.
+        let known: HashSet<String> = FileTagger::load_markers(&file)
+            .expect("markers")
+            .into_iter()
+            .filter_map(|m| m.guid)
+            .collect();
+        FileTagger::save_markers(&file, &[marker(1_000, "One"), marker(5_000, "Two")], &known)
+            .expect("markers");
         assert_eq!(run(&Run::default(), &file).status, ItemStatus::Done);
         let text = std::fs::read_to_string(file.with_file_name("clip.markers.txt")).expect("text");
         assert_eq!(text.lines().count(), 2);

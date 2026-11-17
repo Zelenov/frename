@@ -1,3 +1,7 @@
+# 0.249
+## Fixed
+- Opening the clip you just stepped to again ("Open with", or dropping it on the window) no longer opens it from the folder being left. Before, in rare timing, that clip opened before its folder was read again, and an edit made on it just before was lost.
+
 # 0.248
 ## Fixed
 - While another folder is still opening, Run does nothing and a clip you stepped to just before no longer opens. Before, a batch action started then could keep the new folder from ever opening (`PgUp`, `PgDn` and `Ctrl+Z` stayed off until you opened a folder again), and that clip's edits were lost when the folder came in.

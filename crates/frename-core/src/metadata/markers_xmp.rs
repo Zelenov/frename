@@ -54,7 +54,7 @@ impl Rate {
 }
 
 /// A GUID as compared: without the `xmp:id:` prefix some writers add, in lower case.
-fn normalize_guid(guid: &str) -> String {
+pub(crate) fn normalize_guid(guid: &str) -> String {
     let guid = guid.trim();
     guid.strip_prefix("xmp:id:")
         .unwrap_or(guid)
