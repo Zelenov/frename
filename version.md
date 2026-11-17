@@ -1,6 +1,6 @@
 # 0.248
 ## Fixed
-- While another folder is still opening, a batch action no longer starts on the folder you are leaving, and a clip you clicked just before no longer opens in the moment the new folder loads. Before, the new folder could stay "opening" for good (PgUp, PgDn and `Ctrl+Z` stopped working until you opened a folder again), or that clip's edits were lost when the folder came in.
+- While another folder is still opening, Run does nothing and a clip you stepped to just before no longer opens. Before, a batch action started then could keep the new folder from ever opening (`PgUp`, `PgDn` and `Ctrl+Z` stayed off until you opened a folder again), and that clip's edits were lost when the folder came in.
 
 # 0.245
 ## Fixed
