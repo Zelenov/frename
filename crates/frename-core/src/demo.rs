@@ -49,6 +49,10 @@ pub struct DemoScenario {
     /// Type this text into the tag search (#418: a name a file name cannot hold).
     #[serde(default)]
     pub tag_filter: Option<String>,
+    /// Then check or uncheck the tag the keys are on, as `Enter` in the tag search does (#526:
+    /// a tag that would make a sidecar's name too long).
+    #[serde(default)]
+    pub toggle_tag: bool,
     /// Open **More** (the `⋯` button of the video controls), to show what a narrow pane folds
     /// into it.
     #[serde(default)]

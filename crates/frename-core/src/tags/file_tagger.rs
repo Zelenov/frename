@@ -383,11 +383,50 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
             .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
 }
 
+/// Whether the folder of `path` would refuse its file name as too long. Asked of the file
+/// system, not guessed from the operating system: ext4 and APFS count 255 bytes of UTF-8, but an
+/// exFAT card or an NTFS drive on Linux or macOS counts 255 UTF-16 units (a Cyrillic name fits
+/// there that ext4 refuses). Looking a name up has no side effect and fails with
+/// `ENAMETOOLONG` (`InvalidFilename`) only where the name really is too long. On Windows every
+/// volume (NTFS, exFAT, FAT32) takes 255 UTF-16 units, so the name is also counted there.
+fn name_too_long(path: &Path) -> bool {
+    #[cfg(windows)]
+    if path
+        .file_name()
+        .is_some_and(|name| std::os::windows::ffi::OsStrExt::encode_wide(name).count() > 255)
+    {
+        return true;
+    }
+    matches!(
+        std::fs::symlink_metadata(path),
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidFilename
+    )
+}
+
+/// The first sidecar of `old_path` (a screenshot, a subtitle file, the CAPT file or the saved
+/// transcript) whose name under `new_path` would be longer than a folder takes, or `None` when
+/// every one fits. Such a sidecar could not follow the clip: it would stay under the old name,
+/// lost to the clip (#526), so the clip keeps its name instead. Only sidecars that are there
+/// count. The comment file is not among them: a comment that cannot be written has its own
+/// notice (#416).
+pub(crate) fn sidecar_name_too_long(old_path: &Path, new_path: &Path) -> Option<PathBuf> {
+    if old_path == new_path {
+        return None;
+    }
+    let screenshots = super::production_file_tagger::screenshot_positions(old_path)
+        .into_iter()
+        .map(|ms| super::production_file_tagger::screenshot_path(new_path, ms));
+    let companions = crate::subtitles::companion_paths(old_path, new_path)
+        .filter(|(old, _)| old.is_file())
+        .map(|(_, new)| new);
+    screenshots.chain(companions).find(|p| name_too_long(p))
+}
+
 /// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
 /// screenshots) from the
 /// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and
 /// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
-/// guards.
+/// and `sidecar_name_too_long` guard.
 pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
     super::production_file_tagger::rename_screenshots(old_path, new_path);
     crate::comment::rename_comment_file(old_path, new_path);
@@ -440,6 +479,32 @@ mod tests {
         assert!(!target_name_taken(&old_path, &new_path));
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
         assert!(target_name_taken(&old_path, &new_path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #526: only a sidecar that is there counts, and only when its new name is too long for
+    /// the folder (ext4 here: 255 bytes). A missing one, or one whose new name fits, does not.
+    #[cfg(unix)]
+    #[test]
+    fn only_an_existing_sidecar_whose_new_name_is_too_long_counts() {
+        let dir = crate::test_support::fresh_dir("sidecar-too-long");
+        // 240 bytes: `.soniox.json` makes 252 of the old name, 257 with `.pick`.
+        let stem = "я".repeat(120);
+        let old_path = dir.join(format!("{stem}.mov"));
+        let new_path = dir.join(format!("{stem}.pick.mov"));
+        let short = dir.join("clip.pick.mov");
+        assert_eq!(
+            sidecar_name_too_long(&old_path, &new_path),
+            None,
+            "none there"
+        );
+
+        std::fs::write(crate::subtitles::transcript_path(&old_path), "{}").expect("transcript");
+        assert_eq!(
+            sidecar_name_too_long(&old_path, &new_path),
+            Some(crate::subtitles::transcript_path(&new_path))
+        );
+        assert_eq!(sidecar_name_too_long(&old_path, &short), None, "fits");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

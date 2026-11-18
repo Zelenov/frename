@@ -43,7 +43,10 @@ impl FileTaggerBackend for InMemoryFileTagger {
         // already at the target name must refuse the same way here, or this backend (meant to be
         // "always correct for tests and debug builds", see the module doc) would let a test's
         // directory of real files be silently clobbered where production would not.
-        if super::file_tagger::target_name_taken(path, &new_path) {
+        // A sidecar that could not follow keeps the name too (#526), as `save_reporting` says.
+        if super::file_tagger::target_name_taken(path, &new_path)
+            || super::file_tagger::sidecar_name_too_long(path, &new_path).is_some()
+        {
             return path.to_path_buf();
         }
         self.storage
@@ -56,6 +59,19 @@ impl FileTaggerBackend for InMemoryFileTagger {
             .expect("lock")
             .insert(new_path.clone(), on_disk);
         new_path
+    }
+
+    /// [`Self::save`], and whether a sidecar's name was too long for the new name (#526), as
+    /// production reports it.
+    fn save_reporting(&self, snapshot: &FileSnapshot, path: &Path) -> super::Saved {
+        let wanted = path.with_file_name(snapshot.file_name());
+        let name_too_long = super::file_tagger::sidecar_name_too_long(path, &wanted).is_some();
+        super::Saved {
+            path: self.save(snapshot, path),
+            points_in_comment: true,
+            gone: false,
+            name_too_long,
+        }
     }
 
     fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {

@@ -208,6 +208,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             crate::features::tag_panel::Message::SetFilter(text.clone()),
         ));
     }
+    if scenario.toggle_tag {
+        steps.push(folder_workspace::Message::TagPanel(
+            crate::features::tag_panel::Message::ToggleSelectedTag,
+        ));
+    }
     if scenario.more {
         steps.push(video(video::Message::ToggleMore));
     }
