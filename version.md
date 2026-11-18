@@ -1,4 +1,4 @@
-# 0.256
+# 0.255
 ## Fixed
 - In the file list, a row whose clip has a Chinese, Japanese or Korean tag no longer squeezes its tags past the row. Such a tag takes the room it is drawn in, and tags that do not fit go into the "+N" count as other tags do.
 
