@@ -183,6 +183,7 @@ impl ProductionFileTagger {
             path: path.to_path_buf(),
             points_in_comment: true,
             gone: false,
+            name_too_long: false,
         };
         // The clip was renamed, moved or deleted outside frename while it was open: its comment
         // text file would be left for a clip that is not there, and win over the comment of the
@@ -216,6 +217,19 @@ impl ProductionFileTagger {
             );
             return not_saved();
         }
+        // A sidecar whose new name would be too long could not follow the clip and would be
+        // lost to it under the old name (#526): the clip keeps its name, as when the rename
+        // fails (Premiere holds it), so its comment and points are still written; the caller
+        // is told why.
+        let too_long = super::file_tagger::sidecar_name_too_long(path, &new_path);
+        if let Some(sidecar) = &too_long {
+            log::error!(
+                "ProductionFileTagger: not renaming {:?}: the name of {:?} would be too long",
+                path,
+                sidecar
+            );
+        }
+        let name_too_long = too_long.is_some();
 
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);
@@ -228,7 +242,9 @@ impl ProductionFileTagger {
         // Where the clip is after the save: the new name, or the old one when it could not be
         // renamed (Premiere holds it). Its comment text file and file list line follow it.
         let mut new_path = new_path;
-        if new_path != path {
+        if name_too_long {
+            new_path = path.to_path_buf();
+        } else if new_path != path {
             // The video first: when it cannot be renamed, its comment and subtitle files must
             // stay with it rather than wait under the new name.
             // Its sidecars follow; a crash in between is finished at the next start (#377).
@@ -266,6 +282,7 @@ impl ProductionFileTagger {
             path: new_path,
             points_in_comment,
             gone: false,
+            name_too_long,
         }
     }
 }
@@ -1080,6 +1097,71 @@ mod tests {
         let short = clip_named("short-name-frame", "clip.mov");
         assert!(tagger.save_screenshot(&short, 10_936, b"jpeg").is_ok());
         assert!(screenshot_path(&short, 10_936).exists());
+    }
+
+    /// #526: a tag that leaves the clip's own name short enough (235 bytes) but would make its
+    /// frame's name too long for ext4 (257 bytes) keeps the clip's name, and says so; its comment
+    /// is still written. Before, the clip was renamed and the frame stayed under the old name, no
+    /// longer shown for it.
+    #[cfg(unix)]
+    #[test]
+    fn a_rename_that_would_leave_a_frame_behind_is_refused() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named(
+            "long-name-frame-rename",
+            &format!("{}.mov", "Б".repeat(113)),
+        );
+        tagger
+            .save_screenshot(&path, 5_000, b"jpeg")
+            .expect("the frame fits the old name");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_tags(["pick"]);
+        wanted.set_comment("Вода в кадре".to_string());
+        assert!(wanted.file_name().len() <= 255, "the clip's new name fits");
+
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+
+        assert!(report.name_too_long);
+        assert_eq!(report.path, path, "not renamed");
+        assert!(path.exists());
+        assert_eq!(
+            screenshot_positions(&path),
+            vec![5_000],
+            "the frame stays with it"
+        );
+        // The rest of the save is written, as when a rename fails.
+        let saved = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        assert_eq!(saved.comment(), "Вода в кадре");
+    }
+
+    /// #526: the same for the saved transcript (and the subtitle files next to it): a rename
+    /// that would leave `.soniox.json` behind is refused, so the clip is not transcribed and
+    /// paid for again. A name with room for it is renamed, and the transcript goes along.
+    #[test]
+    fn a_rename_that_would_leave_the_transcript_behind_is_refused() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("long-name-transcript", &format!("{}.mov", "A".repeat(240)));
+        let transcript = crate::subtitles::transcript_path(&path);
+        std::fs::write(&transcript, "{}").expect("transcript");
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_tags(["pick"]);
+
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+        assert!(report.name_too_long);
+        assert_eq!(report.path, path, "not renamed");
+        assert!(transcript.exists(), "kept with the clip");
+
+        let short = clip_named("short-name-transcript", "clip.mov");
+        std::fs::write(crate::subtitles::transcript_path(&short), "{}").expect("transcript");
+        let mut wanted = tagger.parse_with(&short, &FolderInfo::default(), TEXT);
+        wanted.set_tags(["pick"]);
+        let report = tagger.save_reporting_with(&wanted, &short, TEXT);
+        assert!(!report.name_too_long);
+        assert_ne!(report.path, short, "renamed");
+        assert!(
+            crate::subtitles::transcript_path(&report.path).exists(),
+            "went along"
+        );
     }
 
     /// #459, on Windows and macOS: a clip renamed in Explorer only in case (`A001.MOV` →
