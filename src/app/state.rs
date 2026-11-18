@@ -1258,7 +1258,7 @@ impl FrenameApp {
         Subscription::batch([
             self.drag_drop_state.subscription().map(Message::DragDrop),
             self.folder_workspace
-                .subscription()
+                .subscription(self.main_window)
                 .map(Message::FolderWorkspace),
             window::close_requests().map(Message::CloseRequested),
             paste_tags_sub,
