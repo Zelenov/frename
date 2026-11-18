@@ -1,3 +1,7 @@
+# 0.251
+## Fixed
+- With the Settings window in front, `F1`, `F2`, `F3`, `F12` and the other video keys no longer act on the clip behind it. Before, `F2` there added a marker to the open clip, `F12` saved a frame, and `Ctrl+F2` sent a paid AI request.
+
 # 0.250
 ## Fixed
 - When another program renames, moves or deletes the clip open in frename, leaving it now says the clip is no longer there and nothing was saved to it. Before, its comment went into a stray `.comment.txt` without a word, and could later replace the comment of a clip that came back under that name.

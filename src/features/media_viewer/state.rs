@@ -237,10 +237,11 @@ impl MediaViewerState {
         }
     }
 
-    /// Subscriptions: only the video player needs periodic ticks and keyboard shortcuts.
-    pub fn subscription(&self) -> Subscription<Message> {
+    /// Subscriptions: only the video player needs periodic ticks and keyboard shortcuts, the
+    /// latter from `main_window` only.
+    pub fn subscription(&self, main_window: iced::window::Id) -> Subscription<Message> {
         match self.active {
-            ActiveMedia::Video => self.video.subscription().map(Message::Video),
+            ActiveMedia::Video => self.video.subscription(main_window).map(Message::Video),
             ActiveMedia::Unsupported | ActiveMedia::None => Subscription::none(),
         }
     }

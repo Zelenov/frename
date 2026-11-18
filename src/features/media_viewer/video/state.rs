@@ -1559,7 +1559,7 @@ impl VideoPlayerState {
     }
 
     /// Subscriptions active while a video is loaded.
-    pub fn subscription(&self) -> Subscription<Message> {
+    pub fn subscription(&self, main_window: iced::window::Id) -> Subscription<Message> {
         if self.current_video.is_none() {
             return if self.loading {
                 time::every(SPINNER_TICK).map(|_| Message::LoadingTick)
@@ -1583,7 +1583,9 @@ impl VideoPlayerState {
         Subscription::batch([
             frame_tick,
             step_tick,
-            self.controls.subscription().map(Message::Controls),
+            self.controls
+                .subscription(main_window)
+                .map(Message::Controls),
         ])
     }
 }
