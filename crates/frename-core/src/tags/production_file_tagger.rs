@@ -221,15 +221,19 @@ impl ProductionFileTagger {
         // lost to it under the old name (#526): the clip keeps its name, as when the rename
         // fails (Premiere holds it), so its comment and points are still written; the caller
         // is told why.
-        let name_too_long = new_path != path
-            && super::file_tagger::sidecar_name_too_long(path, &new_path).is_some_and(|sidecar| {
-                log::error!(
-                    "ProductionFileTagger: not renaming {:?}: the name of {:?} would be too long",
-                    path,
-                    sidecar
-                );
-                true
-            });
+        let too_long = if new_path != path {
+            super::file_tagger::sidecar_name_too_long(path, &new_path)
+        } else {
+            None
+        };
+        if let Some(sidecar) = &too_long {
+            log::error!(
+                "ProductionFileTagger: not renaming {:?}: the name of {:?} would be too long",
+                path,
+                sidecar
+            );
+        }
+        let name_too_long = too_long.is_some();
 
         // XMP goes in before the rename: the metadata then travels with the file.
         let saved = metadata::save_to_xmp(path, snapshot, storage);

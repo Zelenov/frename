@@ -479,6 +479,32 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// #526: only a sidecar that is there counts, and only when its new name is too long for
+    /// the folder (ext4 here: 255 bytes). A missing one, or one whose new name fits, does not.
+    #[cfg(unix)]
+    #[test]
+    fn only_an_existing_sidecar_whose_new_name_is_too_long_counts() {
+        let dir = crate::test_support::fresh_dir("sidecar-too-long");
+        // 240 bytes: `.soniox.json` makes 252 of the old name, 257 with `.pick`.
+        let stem = "я".repeat(120);
+        let old_path = dir.join(format!("{stem}.mov"));
+        let new_path = dir.join(format!("{stem}.pick.mov"));
+        let short = dir.join("clip.pick.mov");
+        assert_eq!(
+            sidecar_name_too_long(&old_path, &new_path),
+            None,
+            "none there"
+        );
+
+        std::fs::write(crate::subtitles::transcript_path(&old_path), "{}").expect("transcript");
+        assert_eq!(
+            sidecar_name_too_long(&old_path, &new_path),
+            Some(crate::subtitles::transcript_path(&new_path))
+        );
+        assert_eq!(sidecar_name_too_long(&old_path, &short), None, "fits");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// #430: no captured frame writes no file and says why.
     #[test]
     fn an_empty_frame_is_not_saved() {
