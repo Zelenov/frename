@@ -1,6 +1,10 @@
-# 0.251
+# 0.253
 ## Fixed
 - With the Settings window in front, `F1`, `F2`, `F3`, `F12` and the other video keys no longer act on the clip behind it. Before, `F2` there added a marker to the open clip, `F12` saved a frame, and `Ctrl+F2` sent a paid AI request.
+
+# 0.251
+## Fixed
+- A folder from a drive or camera card that has been on a Mac no longer lists macOS's hidden `._` files (one next to every clip) as clips. Before, each showed as a clip that did not play, and tagging it renamed it.
 
 # 0.250
 ## Fixed
