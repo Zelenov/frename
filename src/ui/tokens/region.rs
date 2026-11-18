@@ -150,8 +150,6 @@ pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
 pub const CHIP_DRAG_LIFT: f32 = SPACE_TIGHT;
 /// The width a chip of the file name card is taken to have when the drop place is worked out.
 pub const CHIP_DROP_ESTIMATE_WIDTH: f32 = 64.0;
-/// A generous average width of one character of a chip's 13-px label, to size grid columns.
-pub const CHIP_CHAR_WIDTH: f32 = 7.5;
 /// The average width of one character of a mini chip's 12-px label: not generous, since the file
 /// list fits chips to the row by it and a generous guess hides chips that would fit.
 pub const CHIP_MINI_CHAR_WIDTH: f32 = BODY_CHAR_WIDTH * TEXT_CHIP_MINI / TEXT_BODY;

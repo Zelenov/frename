@@ -1,3 +1,7 @@
+# 0.255
+## Fixed
+- A Chinese, Japanese or Korean tag name no longer runs past its chip in the tag grid, over the star and into the next cell. The grid now measures tag names as they are drawn, so such a tag gets the room it needs, or is cut with "…" when it is very long.
+
 # 0.252
 ## Fixed
 - When Describe with AI or Prepare clips stops or a clip fails (a rejected key, no credit, no connection, an answer that cannot be read), Markers ⇄ comment cannot change a clip, or a key cannot be saved or removed in Settings, the reason is now in your language. Before, it was in English.

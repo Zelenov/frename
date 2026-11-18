@@ -33,7 +33,7 @@ pub fn grid_columns<S: StoredTagStore + Clone>(
     content_width(state).map_or(
         Columns {
             count: 1,
-            cell_width: layout::chip_width(0),
+            cell_width: layout::chip_width(0.0),
         },
         |width| layout::columns_for(tag_list, width),
     )
