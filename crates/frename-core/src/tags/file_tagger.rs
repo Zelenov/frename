@@ -70,7 +70,7 @@ impl FileTagger {
             tags.push(tag.to_string());
         }
         snapshot.set_tags(tags);
-        Self::renamed(Self::save(&snapshot, path), path)
+        Self::renamed(Self::save_reporting(&snapshot, path), path)
     }
 
     /// Put the tags in the file's name in the folder's tag order (the tag panel's order), as the
@@ -87,7 +87,7 @@ impl FileTagger {
             return MoveOutcome::NothingToMove;
         }
         snapshot.set_tags(sorted);
-        Self::renamed(Self::save(&snapshot, path), path)
+        Self::renamed(Self::save_reporting(&snapshot, path), path)
     }
 
     /// Rename the file at `path` to the tag spacing chosen now (see
@@ -101,7 +101,7 @@ impl FileTagger {
         if snapshot.file_name() == current {
             return MoveOutcome::NothingToMove;
         }
-        Self::renamed(Self::save(&snapshot, path), path)
+        Self::renamed(Self::save_reporting(&snapshot, path), path)
     }
 
     /// "Comment → markers": turn the lines of the file's comment that start with a time
@@ -226,7 +226,13 @@ impl FileTagger {
     /// that changed nothing is never reported as done (#503).
     fn saved_outcome(snapshot: &FileSnapshot, path: &Path) -> MoveOutcome {
         let (saved, read_back) = snapshot.save_and_reparse(path);
-        if crate::recovery::saved_what_was_wanted(snapshot, &read_back, saved.points_in_comment) {
+        if saved.name_too_long {
+            MoveOutcome::NameTooLong(saved.path)
+        } else if crate::recovery::saved_what_was_wanted(
+            snapshot,
+            &read_back,
+            saved.points_in_comment,
+        ) {
             MoveOutcome::Moved(saved.path)
         } else {
             log::warn!("markers: the comment of {path:?} was not saved");
@@ -234,9 +240,13 @@ impl FileTagger {
         }
     }
 
-    /// The outcome of a save that must rename `path`: a save that failed keeps the old path.
-    fn renamed(new_path: PathBuf, path: &Path) -> MoveOutcome {
-        if new_path == path {
+    /// The outcome of a save that must rename `path`: a save that failed keeps the old path, and
+    /// says so apart when a sidecar's name would have been too long (#533).
+    fn renamed(saved: Saved, path: &Path) -> MoveOutcome {
+        let new_path = saved.path;
+        if saved.name_too_long {
+            MoveOutcome::NameTooLong(new_path)
+        } else if new_path == path {
             MoveOutcome::Failed(new_path)
         } else {
             MoveOutcome::Moved(new_path)
@@ -783,6 +793,30 @@ AI: A walk.
             ),
             "removing the editor's text with the block kept removes the tag"
         );
+    }
+
+    /// #533: a batch rename that would leave the saved transcript behind under a name too long
+    /// for the folder keeps the clip's name and says why, apart from any other refusal.
+    #[test]
+    fn a_rename_a_sidecar_name_would_not_fit_in_says_so() {
+        let dir = crate::test_support::fresh_dir("sync-name-too-long");
+        let name = format!("{}.mov", "A".repeat(240));
+        let path = dir.join(&name);
+        std::fs::write(&path, b"clip").expect("clip");
+        std::fs::write(crate::subtitles::transcript_path(&path), "{}").expect("transcript");
+        let mut commented = FileSnapshot::parse(&name);
+        commented.set_comment("goat".to_string());
+        let path = FileTagger::save(&commented, &path);
+
+        assert_eq!(
+            FileTagger::sync_commented_tag(&path, "Commented"),
+            MoveOutcome::NameTooLong(path.clone())
+        );
+        assert!(
+            crate::subtitles::transcript_path(&path).exists(),
+            "kept with it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A move whose save is refused (the commented tag's new name is another clip's) changed

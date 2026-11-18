@@ -39,6 +39,9 @@ pub enum MoveOutcome {
     /// or the file could not be written or renamed; the details are in the log. The file's
     /// path afterwards.
     Failed(PathBuf),
+    /// The file kept its name: under the new one, a saved frame's, subtitle file's or
+    /// transcript's name would be too long for the folder (#526, #533). The file's path.
+    NameTooLong(PathBuf),
 }
 
 /// What one file keeps outside a storage, i.e. what moving it there would move.

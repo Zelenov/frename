@@ -542,6 +542,7 @@ batch-subtitles-unreadable = { $n ->
    *[other] { $n } illisibles
 } ({ $how_to })
 batch-subtitles-shared-name-reason = partage le nom de ses sous-titres avec une autre vidéo
+batch-name-too-long-reason = a gardé son nom : ses images enregistrées, sous-titres ou transcription auraient des noms trop longs
 batch-subtitles-unsupported-reason = format audio non pris en charge
 batch-subtitles-progress-transcribing = transcription…
 batch-subtitles-progress-extracting = extraction de l’audio { $percent } %

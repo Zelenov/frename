@@ -556,6 +556,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = { $n } не читается ({ $how_to })
 batch-subtitles-shared-name-reason = делит имя субтитров с другим видео
+batch-name-too-long-reason = сохранил прежнее имя: имена его сохранённых кадров, субтитров или расшифровки стали бы слишком длинными
 batch-subtitles-unsupported-reason = формат аудио не поддерживается
 batch-subtitles-progress-transcribing = распознавание…
 batch-subtitles-progress-extracting = извлечение звука { $percent } %

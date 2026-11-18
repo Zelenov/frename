@@ -468,6 +468,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = { $n } 个无法读取（{ $how_to }）
 batch-subtitles-shared-name-reason = 与其他视频的字幕同名
+batch-name-too-long-reason = 保留了原名称：其已保存的帧、字幕或转录文本的名称会过长
 batch-subtitles-unsupported-reason = 不支持该音频格式
 batch-subtitles-progress-transcribing = 正在转录…
 batch-subtitles-progress-extracting = 正在提取音频 { $percent }%
