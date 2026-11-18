@@ -15,7 +15,9 @@ use crate::ui::tokens::*;
 const CHIP_CHROME: f32 = 2.0 * SPACE_S + CHECK_SIZE + 2.0 * SPACE_TIGHT + CHIP_MARKS_WIDTH;
 
 /// How wide `name` draws on a chip, checked (SemiBold) or not, measured with the bundled font:
-/// a CJK character counts as the em it draws, not an average Latin letter (#528).
+/// a CJK character counts as the em it draws, not an average Latin letter (#528). A colour
+/// emoji draws a little wider than the em it counts as; the chip's clip keeps such a name
+/// inside it.
 pub fn label_width(name: &str) -> f32 {
     text::strong_width(name, TEXT_BODY)
 }
