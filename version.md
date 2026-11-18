@@ -1,3 +1,7 @@
+# 0.251
+## Fixed
+- A folder from a drive or camera card that has been on a Mac no longer lists macOS's hidden `._` files (one next to every clip) as clips. Before, each showed as a clip that did not play, and tagging it renamed it.
+
 # 0.250
 ## Fixed
 - When another program renames, moves or deletes the clip open in frename, leaving it now says the clip is no longer there and nothing was saved to it. Before, its comment went into a stray `.comment.txt` without a word, and could later replace the comment of a clip that came back under that name.
