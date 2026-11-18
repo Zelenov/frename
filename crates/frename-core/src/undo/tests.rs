@@ -1686,6 +1686,34 @@ mod tests {
         assert!(ctx.tag_list.get_tag(id).unwrap().is_checked(), "put back");
     }
 
+    /// #526: undo of a rename back to a longer name that a frame taken since would not fit is
+    /// refused, changing nothing, instead of leaving the frame behind under the short name.
+    #[cfg(unix)]
+    #[test]
+    fn undo_of_a_rename_refuses_to_leave_a_frame_behind() {
+        let long = format!("{}.pick.mov", "Б".repeat(113));
+        let short = format!("{}.mov", "Б".repeat(113));
+        let (dir_path, mut directory, cmd, _) = rename_fixture("undo-too-long", &long, &short);
+        write(&dir_path.join(&short), "clip");
+        let frame = dir_path.join(format!("{short}.snap.00-00-05-000.jpg"));
+        write(&frame, "jpeg");
+        let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+        let mut history = History::new(50);
+        history.push(Box::new(cmd));
+
+        let mut ctx = UndoContext {
+            directory: &mut directory,
+            tag_list: &mut tag_list,
+        };
+        let err = history.undo(&mut ctx).expect_err("must refuse");
+        assert!(
+            matches!(err, crate::undo::UndoError::NameTooLong(_)),
+            "{err}"
+        );
+        assert!(dir_path.join(&short).exists(), "not renamed");
+        assert!(frame.exists(), "the frame stays with it");
+    }
+
     #[test]
     fn undo_of_a_rename_refuses_to_overwrite_another_clip() {
         let (dir_path, mut directory, cmd, _) =

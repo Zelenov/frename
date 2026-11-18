@@ -1,0 +1,18 @@
+# #526: a tag that would make the name of the clip's transcript too long keeps the clip's name and says so.
+source = "../../tests/folder"
+open = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+seek = 2.0
+window = [1440, 720]
+panels = [800, 340]
+tag_filter = "pick"
+toggle_tag = true
+next_file = true
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+transcript = "{}"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0401.mp4"
