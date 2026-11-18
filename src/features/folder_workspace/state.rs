@@ -3788,7 +3788,8 @@ impl FolderWorkspace {
         ])
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
+    /// `main_window` is where the video keys count (not the settings window).
+    pub fn subscription(&self, main_window: iced::window::Id) -> Subscription<Message> {
         // The spinner only turns while something waits (rows loading their comments, a folder
         // opening, a job's file in work, a marker being described), so an idle list does not
         // redraw.
@@ -3822,7 +3823,9 @@ impl FolderWorkspace {
         };
         Subscription::batch([
             journal,
-            self.media_viewer.subscription().map(Message::MediaViewer),
+            self.media_viewer
+                .subscription(main_window)
+                .map(Message::MediaViewer),
             iced::event::listen_with(focus_may_move),
             job_progress,
             self.file_name_panel

@@ -1,7 +1,7 @@
 //! State for video controls feature
 
 use frename_core::{AppDatabase, AppStateStore, VideoSettings};
-use iced::{event, keyboard, Subscription};
+use iced::{event, keyboard, window, Subscription};
 
 use super::Message;
 
@@ -168,19 +168,34 @@ impl VideoControlsState {
     /// Keyboard shortcuts for video controls: F1 = 10s back, F3 = 10s forward, F12 = save the
     /// frame, F2 = add a marker (held, a range); with Shift, F1 / F3 = previous / next marker,
     /// F2 = delete the marker under the playhead; Ctrl+F2 = describe that marker with AI. They
-    /// work while a text field has focus, like the F-keys did.
-    pub fn subscription(&self) -> Subscription<Message> {
-        event::listen_with(|event, _status, _id| match event {
+    /// work while a text field has focus, like the F-keys did, but only in `main_window`: a key
+    /// pressed in the settings window does not reach the clip behind it (#527). The release of
+    /// `F2` is taken from any window, so a held marker still ends when the focus moved meanwhile.
+    pub fn subscription(&self, main_window: window::Id) -> Subscription<Message> {
+        let presses = event::listen_with(|event, _status, window| match event {
             iced::Event::Keyboard(keyboard::Event::KeyPressed {
                 key,
                 modifiers,
                 repeat,
                 ..
-            }) => shortcut(&key, modifiers, repeat),
-            iced::Event::Keyboard(keyboard::Event::KeyReleased { key, .. }) => released(&key),
+            }) => shortcut(&key, modifiers, repeat).map(|message| (window, message)),
             _ => None,
         })
+        .with(main_window)
+        .filter_map(from_main_window);
+        let releases = event::listen_with(|event, _status, _window| match event {
+            iced::Event::Keyboard(keyboard::Event::KeyReleased { key, .. }) => released(&key),
+            _ => None,
+        });
+        Subscription::batch([presses, releases])
     }
+}
+
+/// The message of a key pressed in the main window; `None` for one pressed in another window.
+fn from_main_window(
+    (main_window, (window, message)): (window::Id, (window::Id, Message)),
+) -> Option<Message> {
+    (window == main_window).then_some(message)
 }
 
 /// The controls message of a key release: only `F2`, which ends a held marker.
@@ -225,6 +240,19 @@ mod tests {
 
     fn key(named: Named, modifiers: keyboard::Modifiers) -> Option<Message> {
         shortcut(&keyboard::Key::Named(named), modifiers, false)
+    }
+
+    /// #527: a video key pressed in the settings window does not act on the clip in the main one.
+    #[test]
+    fn only_the_main_window_takes_the_video_keys() {
+        let main = window::Id::unique();
+        let settings = window::Id::unique();
+        assert!(matches!(
+            from_main_window((main, (main, Message::MarkerKeyPressed))),
+            Some(Message::MarkerKeyPressed)
+        ));
+        assert!(from_main_window((main, (settings, Message::MarkerKeyPressed))).is_none());
+        assert!(from_main_window((main, (settings, Message::TakeScreenshot))).is_none());
     }
 
     #[test]

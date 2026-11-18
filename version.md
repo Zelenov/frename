@@ -2,6 +2,10 @@
 ## Fixed
 - Tagging a clip with a long name no longer leaves its saved frames, subtitle files or transcript behind under the old name. When the new name would make their names too long for the folder, the clip keeps its name (its comment and in/out points are still saved), and a note says so. Before, the clip was renamed and they stayed under the old name: its frames no longer showed, its subtitles were lost, and Generate subtitles paid to transcribe it again.
 
+# 0.253
+## Fixed
+- With the Settings window in front, `F1`, `F2`, `F3`, `F12` and the other video keys no longer act on the clip behind it. Before, `F2` there added a marker to the open clip, `F12` saved a frame, and `Ctrl+F2` sent a paid AI request.
+
 # 0.252
 ## Fixed
 - When Describe with AI or Prepare clips stops or a clip fails (a rejected key, no credit, no connection, an answer that cannot be read), Markers ⇄ comment cannot change a clip, or a key cannot be saved or removed in Settings, the reason is now in your language. Before, it was in English.
