@@ -252,6 +252,11 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert(c)),
         ));
     }
+    if let Some(name) = &scenario.create_tag {
+        steps.push(folder_workspace::Message::TagPanel(
+            crate::features::tag_panel::Message::CreateTag(name.clone()),
+        ));
+    }
     if scenario.next_file {
         steps.push(folder_workspace::Message::Folder(folder::Message::NextFile));
     }

@@ -25,6 +25,10 @@ pub struct Saved {
     /// The clip was not at `path` (another program renamed, moved or deleted it while it was
     /// open): nothing was written (#520).
     pub gone: bool,
+    /// The new name was too long for one of the clip's sidecars (a screenshot, a subtitle file,
+    /// the transcript): the clip kept its name so they stay with it, and the rest was saved
+    /// (#526).
+    pub name_too_long: bool,
 }
 
 /// The interface that both InMemoryFileTagger and ProductionFileTagger implement.
@@ -44,6 +48,7 @@ pub trait FileTaggerBackend: Send + Sync {
             path: self.save(snapshot, path),
             points_in_comment: true,
             gone: false,
+            name_too_long: false,
         }
     }
 

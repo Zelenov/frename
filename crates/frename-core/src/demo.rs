@@ -125,6 +125,9 @@ pub struct DemoScenario {
     /// second it is in the recovery journal, so the file name card says so (#155). Demo only.
     #[serde(default)]
     pub type_in_comment: Option<String>,
+    /// A tag created in the tag panel, which puts it on the open clip, before `next_file` (#526).
+    #[serde(default)]
+    pub create_tag: Option<String>,
     /// Go on to the next file after the steps above, which saves the open one (#416: a comment
     /// that could not be saved says so).
     #[serde(default)]

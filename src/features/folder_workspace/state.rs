@@ -2401,6 +2401,13 @@ impl FolderWorkspace {
             // written, even what reads back as wanted (a cleared comment), and the reasons below
             // would send the editor looking elsewhere (#520). The clip's row keeps the edits.
             Self::long_notice(fl!("folder-clip-gone", name = short_file_name(&new_path)))
+        } else if report.name_too_long {
+            // The new tags would make a screenshot's or a subtitle file's name too long: the clip
+            // kept its name so they stay with it, and the rest was saved (#526).
+            Self::long_notice(fl!(
+                "folder-name-too-long",
+                name = short_file_name(&new_path)
+            ))
         } else if refused {
             // The marker description's own reading of the clip may be what holds the file.
             if self.marker_reading_clip() {

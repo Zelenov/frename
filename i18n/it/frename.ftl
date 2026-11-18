@@ -902,6 +902,7 @@ folder-frame-saved = Fotogramma salvato
 folder-frame-not-saved = Fotogramma non salvato: il nome del file è troppo lungo o la cartella è di sola lettura
 folder-frame-not-taken = Fotogramma non acquisito: ancora nessuna immagine. Riprovare tra un momento.
 folder-not-saved = Non salvato: esiste già un file con quel nome, oppure è di sola lettura o in uso
+folder-name-too-long = { $name } mantiene il suo nome: con questi tag i nomi dei suoi fotogrammi salvati o dei file di sottotitoli sarebbero troppo lunghi. Tutto il resto è stato salvato. Accorciare il nome, poi aggiungere di nuovo i tag.
 folder-clip-gone = { $name } non è più lì: un altro programma lo ha rinominato, spostato o eliminato, quindi non vi è stato salvato nulla. Se è stato rinominato, riaprire la cartella, trovarlo e rifare lì la modifica.
 folder-comment-not-saved = Il commento di { $name } non è stato salvato: non è stato possibile scrivere il suo file .comment.txt (il nome del file è troppo lungo o la cartella è di sola lettura). Accorciare il nome se è lungo, poi riscrivere il commento.
 folder-comment-or-points-not-saved = Il nuovo commento o i punti di attacco/stacco di { $name } non sono stati salvati: non è stato possibile scrivere il file che li contiene (il file o la sua cartella è di sola lettura, o è aperto in un altro programma). Risolvere il problema, poi ripetere la modifica.

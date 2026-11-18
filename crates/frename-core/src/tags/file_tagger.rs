@@ -356,7 +356,9 @@ impl FileTagger {
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
 /// transcript, CAPT, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
-/// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
+/// renaming onto an existing file (issue #84) or its sidecar would silently replace it. A new
+/// name too long for one of the clip's sidecars counts as taken too (#526): the clip keeps its
+/// name rather than leave that sidecar behind.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
 /// insensitive, case-preserving filesystem it is the same file being renamed, not another one,
@@ -369,18 +371,62 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
     if same_file_other_case {
         return false;
     }
-    [
-        new_path.to_path_buf(),
-        crate::comment::comment_path(new_path),
-        crate::subtitles::transcript_path(new_path),
-        crate::subtitles::capt_path(new_path),
-    ]
-    .iter()
-    .chain(crate::subtitles::subtitle_candidates(new_path).iter())
-    .any(|p| p.exists())
+    std::iter::once(new_path.to_path_buf())
+        .chain(file_sidecars(new_path))
+        .any(|p| p.exists())
         || super::production_file_tagger::screenshot_positions(old_path)
             .into_iter()
             .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
+        || sidecar_name_too_long(old_path, new_path)
+}
+
+/// The sidecars named after a clip at `path`, in one order whatever the path: comment,
+/// transcript, CAPT and the subtitle files.
+fn file_sidecars(path: &Path) -> Vec<PathBuf> {
+    let mut sidecars = vec![
+        crate::comment::comment_path(path),
+        crate::subtitles::transcript_path(path),
+        crate::subtitles::capt_path(path),
+    ];
+    sidecars.extend(crate::subtitles::subtitle_candidates(path));
+    sidecars
+}
+
+/// Whether a sidecar the clip at `old_path` has would get a name under `new_path` longer than
+/// a file name can be. Its rename would fail, and it would stay behind under the old name: the
+/// screenshots stop showing, the subtitles and the paid transcript are lost to the clip (#526).
+/// Sidecar names are longer than the clip's (a screenshot adds 24 bytes), so the video itself
+/// may still fit.
+pub(crate) fn sidecar_name_too_long(old_path: &Path, new_path: &Path) -> bool {
+    file_sidecars(old_path)
+        .into_iter()
+        .zip(file_sidecars(new_path))
+        .any(|(old, new)| old.exists() && file_name_too_long(&new))
+        || super::production_file_tagger::screenshot_positions(old_path)
+            .into_iter()
+            .any(|ms| {
+                file_name_too_long(&super::production_file_tagger::screenshot_path(
+                    new_path, ms,
+                ))
+            })
+}
+
+/// Whether the last part of `path` is longer than a file name may be: 255 UTF-16 units on
+/// Windows (NTFS, exFAT), 255 bytes elsewhere (ext4, APFS).
+pub(crate) fn file_name_too_long(path: &Path) -> bool {
+    const MAX: usize = 255;
+    let Some(name) = path.file_name() else {
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        name.encode_wide().count() > MAX
+    }
+    #[cfg(not(windows))]
+    {
+        name.len() > MAX
+    }
 }
 
 /// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
@@ -440,6 +486,35 @@ mod tests {
         assert!(!target_name_taken(&old_path, &new_path));
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
         assert!(target_name_taken(&old_path, &new_path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #526: a tag that makes a screenshot's or a transcript's name too long is refused, so the
+    /// clip keeps its name and its sidecars; a clip without sidecars can still take it.
+    #[test]
+    fn a_new_name_too_long_for_a_sidecar_is_taken() {
+        let dir = crate::test_support::fresh_dir("sidecar-too-long");
+        // 224 bytes: the video and its comment file still fit with a tag, a screenshot does not.
+        let old_path = dir.join(format!("{}.mov", "Б".repeat(110)));
+        let new_path = dir.join(format!("Interview.{}.mov", "Б".repeat(110)));
+        assert!(!file_name_too_long(&new_path));
+        assert!(!target_name_taken(&old_path, &new_path), "no sidecar yet");
+        let shot = super::super::production_file_tagger::screenshot_path(&old_path, 5_000);
+        std::fs::write(&shot, "jpeg").expect("screenshot");
+        assert!(
+            target_name_taken(&old_path, &new_path),
+            "the screenshot would stay behind"
+        );
+        std::fs::remove_file(&shot).expect("remove");
+        // 240 bytes: the transcript and Premiere subtitles (8-10 bytes more) would not fit.
+        let old_path = dir.join(format!("{}.mov", "A".repeat(236)));
+        let new_path = dir.join(format!("Interview.{}.mov", "A".repeat(236)));
+        assert!(!target_name_taken(&old_path, &new_path));
+        std::fs::write(crate::subtitles::transcript_path(&old_path), "{}").expect("transcript");
+        assert!(
+            target_name_taken(&old_path, &new_path),
+            "the transcript would stay behind"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -1,3 +1,7 @@
+# 0.254
+## Fixed
+- Adding tags to a clip with a long name no longer leaves its saved frames, subtitle files or transcript behind under the old name, where they stopped showing and the subtitles had to be paid for again. When the new name would be too long for them, the clip keeps its name, everything else is saved, and a note says why.
+
 # 0.251
 ## Fixed
 - A folder from a drive or camera card that has been on a Mac no longer lists macOS's hidden `._` files (one next to every clip) as clips. Before, each showed as a clip that did not play, and tagging it renamed it.

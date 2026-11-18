@@ -183,6 +183,7 @@ impl ProductionFileTagger {
             path: path.to_path_buf(),
             points_in_comment: true,
             gone: false,
+            name_too_long: false,
         };
         // The clip was renamed, moved or deleted outside frename while it was open: its comment
         // text file would be left for a clip that is not there, and win over the comment of the
@@ -199,10 +200,22 @@ impl ProductionFileTagger {
             };
         }
         let new_file_name = snapshot.file_name();
-        let new_path = path
+        let mut new_path = path
             .parent()
             .map(|p| p.join(&new_file_name))
             .unwrap_or_else(|| PathBuf::from(&new_file_name));
+        // A name too long for one of the clip's sidecars would leave it behind under the old
+        // name: the clip keeps its name, as when the rename fails, and the rest is saved (#526).
+        let name_too_long =
+            new_path != path && super::file_tagger::sidecar_name_too_long(path, &new_path);
+        if name_too_long {
+            log::warn!(
+                "ProductionFileTagger: not renaming {:?} to {:?}: a sidecar's name would be too long",
+                path,
+                new_path
+            );
+            new_path = path.to_path_buf();
+        }
 
         // Checked before any write: a rename onto an existing file (or its comment, subtitle or
         // transcript sidecar) would silently replace it — e.g. two clips that end up with the
@@ -227,7 +240,6 @@ impl ProductionFileTagger {
 
         // Where the clip is after the save: the new name, or the old one when it could not be
         // renamed (Premiere holds it). Its comment text file and file list line follow it.
-        let mut new_path = new_path;
         if new_path != path {
             // The video first: when it cannot be renamed, its comment and subtitle files must
             // stay with it rather than wait under the new name.
@@ -266,6 +278,7 @@ impl ProductionFileTagger {
             path: new_path,
             points_in_comment,
             gone: false,
+            name_too_long,
         }
     }
 }
@@ -389,6 +402,28 @@ mod tests {
 
     fn points(snapshot: &FileSnapshot) -> (Option<f32>, Option<f32>) {
         (snapshot.segment_start(), snapshot.segment_end())
+    }
+
+    /// #526: a tag that would leave a screenshot behind (its new name too long) is not put in
+    /// the name; the clip keeps its name and its screenshot, the comment is saved, and the save
+    /// says why.
+    #[test]
+    fn a_tag_that_would_strand_a_screenshot_keeps_the_name() {
+        let tagger = ProductionFileTagger;
+        let clip = clip_named("long-snaps", &format!("{}.mov", "Б".repeat(110)));
+        std::fs::write(screenshot_path(&clip, 5_000), "jpeg").expect("screenshot");
+        let mut snapshot = tagger.parse_with(&clip, &FolderInfo::default(), TEXT);
+        snapshot.set_comment("note".into());
+        snapshot.set_tags(["Interview"]);
+        let saved = tagger.save_reporting_with(&snapshot, &clip, TEXT);
+        assert!(saved.name_too_long);
+        assert_eq!(saved.path, clip, "not renamed");
+        assert_eq!(screenshot_positions(&saved.path), vec![5_000]);
+        assert_eq!(
+            crate::comment::load_comment(&saved.path),
+            "note",
+            "the rest is saved"
+        );
     }
 
     #[test]
