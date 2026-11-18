@@ -1,3 +1,7 @@
+# 0.251
+## Fixed
+- When Describe with AI or Prepare clips stops or a clip fails (a rejected key, no credit, no connection, an answer that cannot be read), Markers ⇄ comment cannot change a clip, or a key cannot be saved or removed in Settings, the reason is now in your language. Before, it was in English.
+
 # 0.250
 ## Fixed
 - When another program renames, moves or deletes the clip open in frename, leaving it now says the clip is no longer there and nothing was saved to it. Before, its comment went into a stray `.comment.txt` without a word, and could later replace the comment of a clip that came back under that name.

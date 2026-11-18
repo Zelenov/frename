@@ -960,15 +960,16 @@ pub fn run_clip(
         }
         Err(describe::Error::Ai(e)) => return ai_failed(e, options.model().provider),
         Err(describe::Error::BadAnswer { reason, usage }) => {
+            log::warn!("ai: the answer could not be read: {reason}");
             return ItemResult {
                 usage: Some(usage),
-                ..ItemResult::failed(reason)
-            }
+                ..ItemResult::failed(fl!("batch-ai-fail-bad-answer"))
+            };
         }
-        // The panel keeps a run with notes over the cap from starting; fail the item with the
-        // library's text if one gets here anyway.
+        // The panel keeps a run with notes over the cap from starting; fail the item if one
+        // gets here anyway.
         Err(e @ describe::Error::InstructionsTooLong { .. }) => {
-            return ItemResult::failed(e.to_string());
+            return ItemResult::failed(failure_reason(&e, path));
         }
     };
     progress.set(0.98, fl!("batch-ai-progress-saving"));
@@ -1146,10 +1147,37 @@ fn ai_failed(error: AiError, provider: clipscribe::Provider) -> ItemResult {
         usage_unknown: error == AiError::Timeout,
         out_of_credit: matches!(error, AiError::OutOfCredit(_)),
         key_rejected: matches!(error, AiError::KeyRejected(_)),
-        stop_job: error.stops_job(),
+        stop_job: ai_stop(&error),
         stop_if_repeated: offline
             .then(|| fl!("batch-ai-stop-offline", provider = provider.label())),
-        ..ItemResult::failed(error.reason())
+        ..ItemResult::failed(ai_reason(&error))
+    }
+}
+
+/// Why a request failed, in the user's language. clipscribe's own `AiError::reason` is English;
+/// a limit or a refusal keeps the provider's message, which is the only text there is (#525).
+fn ai_reason(error: &AiError) -> String {
+    match error {
+        AiError::KeyRejected(provider) => fl!("batch-ai-fail-key-rejected", provider = provider),
+        AiError::OutOfCredit(provider) => fl!("batch-ai-fail-no-credit", provider = provider),
+        AiError::Network(_) => fl!("batch-ai-fail-network"),
+        AiError::Timeout => fl!("batch-ai-fail-timeout"),
+        AiError::BadAnswer(_) => fl!("batch-ai-fail-bad-answer"),
+        AiError::Cancelled => fl!("batch-ai-fail-cancelled"),
+        AiError::LimitReached(message) | AiError::Rejected(message) => message.clone(),
+    }
+}
+
+/// The headline of a job this error stops, in the user's language; `None` when only the file
+/// fails. The same cases as clipscribe's `AiError::stops_job` (#525).
+fn ai_stop(error: &AiError) -> Option<String> {
+    match error {
+        AiError::KeyRejected(provider) => {
+            Some(fl!("batch-ai-stop-key-rejected", provider = provider))
+        }
+        AiError::OutOfCredit(provider) => Some(fl!("batch-ai-stop-no-credit", provider = provider)),
+        AiError::LimitReached(message) => Some(fl!("batch-ai-stop-limit", message = message)),
+        _ => None,
     }
 }
 
@@ -1203,10 +1231,20 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
             fl!("batch-ai-fail-unreadable")
         }
         describe::Error::TooLong(_) => fl!("batch-ai-fail-too-long"),
-        describe::Error::Ai(e) => e.reason(),
-        describe::Error::BadAnswer { reason, .. } => reason.clone(),
+        describe::Error::Ai(e) => ai_reason(e),
+        describe::Error::BadAnswer { reason, .. } => {
+            log::warn!(
+                "ai: the answer about {} could not be read: {reason}",
+                path.display()
+            );
+            fl!("batch-ai-fail-bad-answer")
+        }
         describe::Error::Cancelled => String::new(),
-        describe::Error::InstructionsTooLong { .. } => error.to_string(),
+        describe::Error::InstructionsTooLong { chars, max } => fl!(
+            "batch-ai-fail-instructions-too-long",
+            chars = chars,
+            max = max
+        ),
     }
 }
 
@@ -1229,6 +1267,70 @@ mod tests {
 
     use super::*;
     use std::time::SystemTime;
+
+    /// #525: every way a request fails reads from the translation files, not clipscribe's English.
+    #[test]
+    fn ai_failures_are_said_in_the_users_language() {
+        let anthropic = || "Anthropic".to_string();
+        let cases = [
+            (
+                AiError::KeyRejected(anthropic()),
+                fl!("batch-ai-fail-key-rejected", provider = "Anthropic"),
+                Some(fl!("batch-ai-stop-key-rejected", provider = "Anthropic")),
+            ),
+            (
+                AiError::OutOfCredit(anthropic()),
+                fl!("batch-ai-fail-no-credit", provider = "Anthropic"),
+                Some(fl!("batch-ai-stop-no-credit", provider = "Anthropic")),
+            ),
+            (
+                AiError::LimitReached("Monthly limit reached".into()),
+                "Monthly limit reached".to_string(),
+                Some(fl!(
+                    "batch-ai-stop-limit",
+                    message = "Monthly limit reached"
+                )),
+            ),
+            (
+                AiError::Network("reset".into()),
+                fl!("batch-ai-fail-network"),
+                None,
+            ),
+            (AiError::Timeout, fl!("batch-ai-fail-timeout"), None),
+            (
+                AiError::BadAnswer("not json".into()),
+                fl!("batch-ai-fail-bad-answer"),
+                None,
+            ),
+        ];
+        for (error, reason, stop) in cases {
+            let result = ai_failed(error.clone(), clipscribe::Provider::Anthropic);
+            assert_eq!(result.reason.as_deref(), Some(reason.as_str()), "{error:?}");
+            assert_eq!(result.stop_job, stop, "{error:?}");
+            // Only the cases clipscribe stops a job for stop it here too.
+            assert_eq!(result.stop_job.is_some(), error.stops_job().is_some());
+        }
+        let bad = describe::Error::BadAnswer {
+            reason: "not json".into(),
+            usage: Default::default(),
+        };
+        assert_eq!(
+            failure_reason(&bad, Path::new("clip.mp4")),
+            fl!("batch-ai-fail-bad-answer")
+        );
+        let long = describe::Error::InstructionsTooLong {
+            chars: 900,
+            max: 500,
+        };
+        assert_eq!(
+            failure_reason(&long, Path::new("clip.mp4")),
+            fl!(
+                "batch-ai-fail-instructions-too-long",
+                chars = 900,
+                max = 500
+            )
+        );
+    }
 
     /// A description kept in the cache is used again for nothing, and a clip over the cap is
     /// neither sent nor reached and stops the job.

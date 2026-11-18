@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use frename_core::FileTagger;
+use frename_core::{FileTagger, MarkersError};
 use iced::Element;
 
 use super::super::page::{self, Change};
@@ -137,8 +137,18 @@ pub fn run(direction: Direction, path: &Path) -> ItemResult {
         // read-only or open in Premiere): the comment is left as it was.
         Err(error) => {
             log::warn!("{LOG_LABEL}: {path:?} not changed: {error}");
-            ItemResult::failed(error.to_string())
+            ItemResult::failed(why_not_changed(&error))
         }
+    }
+}
+
+/// Why the markers of a file were not changed, in the user's language (#525). A failed write
+/// says what is likely; the system's own text goes to the log.
+fn why_not_changed(error: &MarkersError) -> String {
+    match error {
+        MarkersError::CannotHoldMarkers => fl!("batch-export-markers-cannot-hold"),
+        MarkersError::Damaged => fl!("batch-markers-damaged"),
+        MarkersError::WriteFailed(_) => fl!("batch-markers-in-use"),
     }
 }
 
@@ -147,6 +157,23 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
+
+    /// #525: a clip whose markers cannot change says why in the user's language.
+    #[test]
+    fn why_not_changed_reads_from_the_translation_files() {
+        assert_eq!(
+            why_not_changed(&MarkersError::CannotHoldMarkers),
+            fl!("batch-export-markers-cannot-hold")
+        );
+        assert_eq!(
+            why_not_changed(&MarkersError::Damaged),
+            fl!("batch-markers-damaged")
+        );
+        assert_eq!(
+            why_not_changed(&MarkersError::WriteFailed("Access is denied.".into())),
+            fl!("batch-markers-in-use")
+        );
+    }
 
     fn clip_with_duplicates(name: &str) -> std::path::PathBuf {
         let dir = frename_core::test_support::fresh_dir(name);
