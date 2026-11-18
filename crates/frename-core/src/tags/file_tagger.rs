@@ -383,6 +383,44 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
             .any(|ms| super::production_file_tagger::screenshot_path(new_path, ms).exists())
 }
 
+/// The longest file name a folder takes: 255 bytes of UTF-8 on ext4 and APFS, 255 UTF-16 units
+/// on NTFS and exFAT.
+const NAME_LIMIT: usize = 255;
+
+/// Whether the file name of `path` is longer than a folder takes ([`NAME_LIMIT`]).
+fn name_too_long(path: &Path) -> bool {
+    let Some(name) = path.file_name() else {
+        return false;
+    };
+    #[cfg(windows)]
+    let length = std::os::windows::ffi::OsStrExt::encode_wide(name).count();
+    #[cfg(not(windows))]
+    let length = name.as_encoded_bytes().len();
+    length > NAME_LIMIT
+}
+
+/// The first sidecar of `old_path` (a screenshot, a subtitle file, the CAPT file or the saved
+/// transcript) whose name under `new_path` would be longer than a folder takes, or `None` when
+/// every one fits. Such a sidecar could not follow the clip: it would stay under the old name,
+/// lost to the clip (#526), so the rename is refused instead. Only sidecars that are there
+/// count. The comment file is not among them: a comment that cannot be written has its own
+/// notice (#416).
+pub(crate) fn sidecar_name_too_long(old_path: &Path, new_path: &Path) -> Option<PathBuf> {
+    let screenshots = super::production_file_tagger::screenshot_positions(old_path)
+        .into_iter()
+        .map(|ms| super::production_file_tagger::screenshot_path(new_path, ms));
+    let companions = crate::subtitles::subtitle_candidates(old_path)
+        .into_iter()
+        .zip(crate::subtitles::subtitle_candidates(new_path))
+        .chain([(
+            crate::subtitles::transcript_path(old_path),
+            crate::subtitles::transcript_path(new_path),
+        )])
+        .filter(|(old, _)| old.is_file())
+        .map(|(_, new)| new);
+    screenshots.chain(companions).find(|p| name_too_long(p))
+}
+
 /// Move the sidecars that travel with a renamed clip (comment, subtitles, transcript,
 /// screenshots) from the
 /// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and

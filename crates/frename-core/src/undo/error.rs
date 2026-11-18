@@ -11,6 +11,10 @@ pub enum UndoError {
     /// A rename step would put a file on a name another file (or its comment, subtitle or
     /// transcript) already has; nothing was changed.
     NameTaken(PathBuf),
+    /// A rename step would make the name of a sidecar (a screenshot, a subtitle file or the
+    /// transcript) longer than a folder takes, so it could not follow; nothing was changed
+    /// (#526).
+    NameTooLong(PathBuf),
     /// A video could not be turned (back).
     Rotation(PathBuf, RotationError),
 }
@@ -22,6 +26,7 @@ impl fmt::Display for UndoError {
             UndoError::TagNotFound(id) => write!(f, "Tag not found: {:?}", id),
             UndoError::Io(e) => write!(f, "I/O: {}", e),
             UndoError::NameTaken(p) => write!(f, "Name already taken: {}", p.display()),
+            UndoError::NameTooLong(p) => write!(f, "Name too long: {}", p.display()),
             UndoError::Rotation(p, e) => write!(f, "{} not turned: {}", p.display(), e),
         }
     }

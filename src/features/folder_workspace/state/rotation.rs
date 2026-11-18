@@ -62,7 +62,7 @@ impl FolderWorkspace {
 
     /// Say why an undo or redo step did not happen, when the user can do something about it:
     /// a turn of a file that is read-only or open in another app, or a rename that would replace
-    /// another file.
+    /// another file or leave a sidecar behind under a name that is too long.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
             UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
@@ -73,6 +73,7 @@ impl FolderWorkspace {
                     .unwrap_or_default();
                 Self::notice(&fl!("undo-name-taken", name = name))
             }
+            UndoError::NameTooLong(_) => Self::notice(&fl!("undo-name-too-long")),
             _ => Task::none(),
         }
     }

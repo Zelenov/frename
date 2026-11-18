@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use super::super::traits::Undoable;
 use super::super::{UndoContext, UndoError};
 use crate::db::{AppStateStore, StoredTagStore};
-use crate::tags::target_name_taken;
+use crate::tags::{sidecar_name_too_long, target_name_taken};
 use crate::{FileId, FileSnapshot};
 
 /// Records a file navigation (next / previous / indexed) together with its deferred save.
@@ -22,11 +22,15 @@ pub struct NavigateFileCommand {
 }
 
 /// Rename `from` to `to` with the comment, subtitle and transcript files that travel with it.
-/// Refuses, changing nothing, when `to` or one of its sidecars exists: the same guard as the
-/// save that made the rename, so Ctrl+Z / Ctrl+Y never replace another clip.
+/// Refuses, changing nothing, when `to` or one of its sidecars exists, or a sidecar's name under
+/// `to` would be too long: the same guards as the save that made the rename, so Ctrl+Z / Ctrl+Y
+/// never replace another clip nor leave a sidecar behind (#526).
 fn rename_with_sidecars(from: &Path, to: &Path) -> Result<(), UndoError> {
     if target_name_taken(from, to) {
         return Err(UndoError::NameTaken(to.to_path_buf()));
+    }
+    if sidecar_name_too_long(from, to).is_some() {
+        return Err(UndoError::NameTooLong(to.to_path_buf()));
     }
     crate::recovery::rename_clip(from, to, false)?;
     Ok(())
