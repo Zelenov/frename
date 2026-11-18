@@ -813,9 +813,7 @@ impl FrenameApp {
                                     move || {
                                         api_key::save_key(which, &key).map_err(|e| {
                                             log::warn!("{which:?}: saving the key failed: {e}");
-                                            "The key could not be saved. The system keyring may \
-                                             be locked."
-                                                .to_string()
+                                            fl!("settings-key-save-failed")
                                         })
                                     },
                                 );
@@ -846,8 +844,7 @@ impl FrenameApp {
                         key_task(which, self.settings.begin_key_request(which), move || {
                             api_key::delete_key(which).map_err(|e| {
                                 log::warn!("{which:?}: removing the key failed: {e}");
-                                "The key could not be removed. The system keyring may be locked."
-                                    .to_string()
+                                fl!("settings-key-remove-failed")
                             })
                         })
                     }
