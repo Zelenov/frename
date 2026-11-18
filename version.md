@@ -1,6 +1,6 @@
 # 0.254
 ## Fixed
-- Tagging a clip with a long name no longer leaves its saved frames, subtitle files or transcript behind under the old name. When the new name would make their names too long for the folder, the clip keeps its name and tags (its comment and in/out points are still saved), and a note says so. Before, the clip was renamed and they stayed under the old name: its frames no longer showed, its subtitles were lost, and Generate subtitles paid to transcribe it again.
+- Tagging a clip with a long name no longer leaves its saved frames, subtitle files or transcript behind under the old name. When the new name would make their names too long for the folder, the clip keeps its name (its comment and in/out points are still saved), and a note says so. Before, the clip was renamed and they stayed under the old name: its frames no longer showed, its subtitles were lost, and Generate subtitles paid to transcribe it again.
 
 # 0.252
 ## Fixed
