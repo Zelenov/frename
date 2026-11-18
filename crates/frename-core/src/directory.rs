@@ -541,8 +541,17 @@ fn scan_files(directory: &Path) -> Result<Vec<File>, std::io::Error> {
     Ok(files)
 }
 
-/// Whether a file of this kind belongs in the folder list: videos only.
+/// Whether a file of this kind belongs in the folder list: videos only. macOS writes an
+/// AppleDouble `._clip.mov` (its metadata, not a video) next to every clip on exFAT and FAT drives
+/// and camera cards, so those never count as clips (#524).
 fn is_listed_kind(path: &Path) -> bool {
+    let apple_double = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("._"));
+    if apple_double {
+        return false;
+    }
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     FileKind::from_extension(ext) == FileKind::Video
 }
@@ -568,6 +577,8 @@ mod tests {
             "photo.HEIC",
             "clip.soniox.json",
             "noext",
+            "._clip.mov",
+            "._A001.MP4",
         ] {
             assert!(
                 !is_listed_kind(&Path::new(r"C:\shoot").join(name)),
@@ -648,6 +659,26 @@ mod tests {
             Some(secs(40))
         );
         assert_eq!(db.get_playback_position(&folder.join("gone.mp4")), None);
+    }
+
+    /// Issue #524: a drive that has been on a Mac has an AppleDouble `._A001.mov` next to every
+    /// clip. Opening the folder lists only the clip.
+    #[test]
+    fn apple_double_files_are_not_listed() {
+        let (db, folder) = database_and_folder("dir-apple-double");
+        std::fs::write(folder.join("A001.mov"), b"").expect("clip");
+        std::fs::write(folder.join("._A001.mov"), vec![0u8; 4096]).expect("apple double");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("runtime");
+        let dir = runtime
+            .block_on(Directory::open(&folder, db))
+            .expect("open");
+        let names: Vec<_> = dir
+            .all_files()
+            .map(|f| f.file_path().file_name().expect("name").to_owned())
+            .collect();
+        assert_eq!(names, ["A001.mov"]);
     }
 
     /// Directory of `file_0.mp4` … `file_n.mp4`, all without tags.
