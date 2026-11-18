@@ -410,6 +410,9 @@ fn name_too_long(path: &Path) -> bool {
 /// count. The comment file is not among them: a comment that cannot be written has its own
 /// notice (#416).
 pub(crate) fn sidecar_name_too_long(old_path: &Path, new_path: &Path) -> Option<PathBuf> {
+    if old_path == new_path {
+        return None;
+    }
     let screenshots = super::production_file_tagger::screenshot_positions(old_path)
         .into_iter()
         .map(|ms| super::production_file_tagger::screenshot_path(new_path, ms));

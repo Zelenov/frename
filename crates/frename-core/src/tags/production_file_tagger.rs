@@ -221,11 +221,7 @@ impl ProductionFileTagger {
         // lost to it under the old name (#526): the clip keeps its name, as when the rename
         // fails (Premiere holds it), so its comment and points are still written; the caller
         // is told why.
-        let too_long = if new_path != path {
-            super::file_tagger::sidecar_name_too_long(path, &new_path)
-        } else {
-            None
-        };
+        let too_long = super::file_tagger::sidecar_name_too_long(path, &new_path);
         if let Some(sidecar) = &too_long {
             log::error!(
                 "ProductionFileTagger: not renaming {:?}: the name of {:?} would be too long",
