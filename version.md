@@ -1,3 +1,7 @@
+# 0.252
+## Fixed
+- When Describe with AI or Prepare clips stops or a clip fails (a rejected key, no credit, no connection, an answer that cannot be read), Markers ⇄ comment cannot change a clip, or a key cannot be saved or removed in Settings, the reason is now in your language. Before, it was in English.
+
 # 0.251
 ## Fixed
 - A folder from a drive or camera card that has been on a Mac no longer lists macOS's hidden `._` files (one next to every clip) as clips. Before, each showed as a clip that did not play, and tagging it renamed it.

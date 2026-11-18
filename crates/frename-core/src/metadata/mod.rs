@@ -425,7 +425,8 @@ impl std::fmt::Display for MarkersError {
             Self::CannotHoldMarkers => write!(f, "this format cannot hold markers"),
             Self::Damaged => write!(
                 f,
-                "the file is damaged: its content is not a video (a download or copy that did                  not finish?)"
+                "the file is damaged: its content is not a video (a download or copy that did \
+                 not finish?)"
             ),
             Self::WriteFailed(reason) => write!(f, "{reason}"),
         }
@@ -566,6 +567,14 @@ mod tests {
     use super::*;
     use crate::comment::comment_path;
     use std::path::PathBuf;
+
+    /// #525: the damaged-file text reads as one sentence, without a run of spaces in it.
+    #[test]
+    fn the_damaged_text_has_no_run_of_spaces() {
+        let text = super::MarkersError::Damaged.to_string();
+        assert!(!text.contains("  "), "{text:?}");
+        assert!(text.contains("did not finish"), "{text:?}");
+    }
 
     const XMP_BOTH: MetadataStorage = MetadataStorage {
         comment: CommentStorage::InVideo,
