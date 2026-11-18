@@ -137,6 +137,15 @@ fn inter() -> Option<&'static ttf_parser::Face<'static>> {
         .as_ref()
 }
 
+/// The bundled Inter SemiBold ([`strong`] text), parsed once.
+fn inter_semibold() -> Option<&'static ttf_parser::Face<'static>> {
+    use std::sync::OnceLock;
+    static INTER_SEMIBOLD: OnceLock<Option<ttf_parser::Face<'static>>> = OnceLock::new();
+    INTER_SEMIBOLD
+        .get_or_init(|| ttf_parser::Face::parse(FONT_FILES[1], 0).ok())
+        .as_ref()
+}
+
 /// How wide `c` is in Inter at `size` px; a character Inter does not have (CJK, Hangul, kana)
 /// counts as one em, as the CJK fonts draw it.
 fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
@@ -150,6 +159,13 @@ fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
 /// How wide `line` is in Inter at `size` px, from the font's own advances (see [`char_width`]).
 pub fn text_width(line: &str, size: f32) -> f32 {
     let face = inter();
+    line.chars().map(|c| char_width(face, c, size)).sum()
+}
+
+/// How wide `line` is in [`strong`] text (Inter SemiBold) at `size` px: a little wider than
+/// [`text_width`], most of all in narrow letters (`still`, about 7 %).
+pub fn strong_width(line: &str, size: f32) -> f32 {
+    let face = inter_semibold();
     line.chars().map(|c| char_width(face, c, size)).sum()
 }
 
@@ -168,16 +184,37 @@ pub fn fit_caption(line: &str, width: f32) -> Cow<'_, str> {
 /// One pass that stops as soon as the line is known not to fit, so a long comment costs what
 /// its row shows, not its whole length (it runs for every row on every view).
 fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
-    match measured_cut(line, width, size) {
+    fit_in(inter(), line, width, size)
+}
+
+/// `line` cut with "…" so it is at most `width` px wide in [`strong`] text at `size` px, which
+/// is never narrower than body text: for a label that is SemiBold or Regular as its state
+/// changes (a checked tag), so checking it never pushes it past its room.
+pub fn fit_strong_or_body(line: &str, width: f32, size: f32) -> Cow<'_, str> {
+    fit_in(inter_semibold(), line, width, size)
+}
+
+/// [`fit_measured`] in `face`.
+fn fit_in<'a>(
+    face: Option<&ttf_parser::Face<'_>>,
+    line: &'a str,
+    width: f32,
+    size: f32,
+) -> Cow<'a, str> {
+    match measured_cut(face, line, width, size) {
         Some(end) => Cow::Owned(format!("{}…", line[..end].trim_end())),
         None => Cow::Borrowed(line),
     }
 }
 
-/// Where `line` in Inter at `size` px must stop to end in "…" within `width` px: the byte index
+/// Where `line` in `face` at `size` px must stop to end in "…" within `width` px: the byte index
 /// the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
-fn measured_cut(line: &str, width: f32, size: f32) -> Option<usize> {
-    let face = inter();
+fn measured_cut(
+    face: Option<&ttf_parser::Face<'_>>,
+    line: &str,
+    width: f32,
+    size: f32,
+) -> Option<usize> {
     let room = width - char_width(face, '…', size);
     let mut used = 0.0;
     // Where the text stops if it gets a "…": the last char that fits in `room`.
@@ -236,7 +273,7 @@ pub fn caption_marked<'a, M: 'a>(
     width: f32,
 ) -> Element<'a, M> {
     // Measured like `fit_caption`, so Cyrillic or CJK keeps its "…" (#408).
-    let cut = measured_cut(line, width, TEXT_CAPTION);
+    let cut = measured_cut(inter(), line, width, TEXT_CAPTION);
     let too_long = cut.is_some();
     let end = cut.unwrap_or(line.len());
     let shown = &line[..end];
@@ -367,7 +404,7 @@ mod tests {
             "Съёмка на набережной: закат и огни",
             "夕方の港の空撮。ロケ地は函館の港",
         ] {
-            let end = measured_cut(line, 90.0, TEXT_CAPTION).expect("too long for 90 px");
+            let end = measured_cut(inter(), line, 90.0, TEXT_CAPTION).expect("too long for 90 px");
             let shown = format!("{}…", &line[..end]);
             assert!(text_width(&shown, TEXT_CAPTION) <= 90.0, "{shown}");
             assert_eq!(

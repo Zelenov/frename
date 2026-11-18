@@ -14,14 +14,10 @@ use crate::ui::tokens::*;
 /// What a chip takes besides its label: its padding, the checkbox, the gaps, the marks.
 const CHIP_CHROME: f32 = 2.0 * SPACE_S + CHECK_SIZE + 2.0 * SPACE_TIGHT + CHIP_MARKS_WIDTH;
 
-/// A checked tag's label is SemiBold, a little wider than the Regular face
-/// [`text::text_width`] measures: room for it, so checking a tag never pushes its name out.
-const SEMIBOLD_ALLOWANCE: f32 = 1.05;
-
-/// How wide `name` draws on a chip, checked or not, measured with the bundled font: a CJK
-/// character counts as the em it draws, not an average Latin letter (#528).
+/// How wide `name` draws on a chip, checked (SemiBold) or not, measured with the bundled font:
+/// a CJK character counts as the em it draws, not an average Latin letter (#528).
 pub fn label_width(name: &str) -> f32 {
-    text::text_width(name, TEXT_BODY) * SEMIBOLD_ALLOWANCE
+    text::strong_width(name, TEXT_BODY)
 }
 
 /// The width of a chip whose label is `label_width` px wide (see [`label_width`]).
@@ -34,8 +30,8 @@ pub fn chip_width(label_width: f32) -> f32 {
 pub fn fit_label(name: &str, chip_width: f32) -> Cow<'_, str> {
     // A hair over, so a chip sized by `chip_width(label_width(name))` keeps `name` whole
     // despite float rounding.
-    let room = (chip_width - CHIP_CHROME).max(0.0) / SEMIBOLD_ALLOWANCE + 0.01;
-    text::fit_body(name, room)
+    let room = (chip_width - CHIP_CHROME).max(0.0) + 0.01;
+    text::fit_strong_or_body(name, room, TEXT_BODY)
 }
 
 /// The grid's columns: how many, and how wide each cell is (the chip plus room for the ring).
@@ -112,6 +108,19 @@ mod tests {
         let cut = fit_label(long, room);
         assert!(cut.ends_with('…'), "{cut}");
         assert!(label_width(&cut) <= room - CHIP_CHROME + 0.1, "{cut}");
+    }
+
+    /// A checked label is SemiBold, wider than Regular most of all in narrow letters: its chip
+    /// has room for that, so checking the widest tag never pushes its marks.
+    #[test]
+    fn a_chip_has_room_for_its_label_in_semibold() {
+        for name in ["still", "fill-light", "lit"] {
+            assert!(
+                label_width(name) > text::text_width(name, TEXT_BODY),
+                "{name}"
+            );
+            assert_eq!(fit_label(name, chip_width(label_width(name))), name);
+        }
     }
 
     /// #528: a CJK name draws about twice as wide as a Latin name of as many characters. Its
