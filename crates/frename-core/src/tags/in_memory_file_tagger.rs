@@ -43,6 +43,8 @@ impl FileTaggerBackend for InMemoryFileTagger {
         // already at the target name must refuse the same way here, or this backend (meant to be
         // "always correct for tests and debug builds", see the module doc) would let a test's
         // directory of real files be silently clobbered where production would not.
+        // Refuses like production, but only the path tells: `save_reporting` keeps its
+        // default, so `Saved::name_too_long` is never set here.
         if super::file_tagger::target_name_taken(path, &new_path)
             || (new_path != path
                 && super::file_tagger::sidecar_name_too_long(path, &new_path).is_some())

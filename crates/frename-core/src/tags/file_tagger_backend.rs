@@ -26,8 +26,8 @@ pub struct Saved {
     /// open): nothing was written (#520).
     pub gone: bool,
     /// The new name would make a screenshot's, subtitle file's or transcript's name longer than
-    /// a folder takes: nothing was written, so they are not left behind under the old name
-    /// (#526).
+    /// the folder takes: the clip kept its name, so they are not left behind under the old one
+    /// (#526). The rest of the save (comment, points, XMP) was written, as when a rename fails.
     pub name_too_long: bool,
 }
 
