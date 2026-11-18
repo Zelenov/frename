@@ -564,6 +564,10 @@ pub(crate) fn save_comment_text_file(path: &Path, comment: &str, saved_to_xmp: b
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::comment::comment_path;
+    use std::path::PathBuf;
+
     /// #525: the damaged-file text reads as one sentence, without a run of spaces in it.
     #[test]
     fn the_damaged_text_has_no_run_of_spaces() {
@@ -571,10 +575,6 @@ mod tests {
         assert!(!text.contains("  "), "{text:?}");
         assert!(text.contains("did not finish"), "{text:?}");
     }
-
-    use super::*;
-    use crate::comment::comment_path;
-    use std::path::PathBuf;
 
     const XMP_BOTH: MetadataStorage = MetadataStorage {
         comment: CommentStorage::InVideo,

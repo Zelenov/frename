@@ -1169,16 +1169,16 @@ fn ai_reason(error: &AiError) -> String {
 }
 
 /// The headline of a job this error stops, in the user's language; `None` when only the file
-/// fails. The same cases as clipscribe's `AiError::stops_job` (#525).
+/// fails. clipscribe decides which errors stop a job (`AiError::stops_job`); frename only words
+/// it (#525).
 fn ai_stop(error: &AiError) -> Option<String> {
-    match error {
-        AiError::KeyRejected(provider) => {
-            Some(fl!("batch-ai-stop-key-rejected", provider = provider))
-        }
-        AiError::OutOfCredit(provider) => Some(fl!("batch-ai-stop-no-credit", provider = provider)),
-        AiError::LimitReached(message) => Some(fl!("batch-ai-stop-limit", message = message)),
-        _ => None,
-    }
+    error.stops_job()?;
+    Some(match error {
+        AiError::KeyRejected(provider) => fl!("batch-ai-stop-key-rejected", provider = provider),
+        AiError::OutOfCredit(provider) => fl!("batch-ai-stop-no-credit", provider = provider),
+        AiError::LimitReached(message) => fl!("batch-ai-stop-limit", message = message),
+        other => fl!("batch-ai-stop-limit", message = ai_reason(other)),
+    })
 }
 
 /// What a request about one clip sends besides its frames: the same for a batch run and for
@@ -1232,13 +1232,8 @@ pub fn failure_reason(error: &describe::Error, path: &Path) -> String {
         }
         describe::Error::TooLong(_) => fl!("batch-ai-fail-too-long"),
         describe::Error::Ai(e) => ai_reason(e),
-        describe::Error::BadAnswer { reason, .. } => {
-            log::warn!(
-                "ai: the answer about {} could not be read: {reason}",
-                path.display()
-            );
-            fl!("batch-ai-fail-bad-answer")
-        }
+        // Its details are the callers' to log.
+        describe::Error::BadAnswer { .. } => fl!("batch-ai-fail-bad-answer"),
         describe::Error::Cancelled => String::new(),
         describe::Error::InstructionsTooLong { chars, max } => fl!(
             "batch-ai-fail-instructions-too-long",
