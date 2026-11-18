@@ -14,12 +14,24 @@ use crate::ui::tokens::*;
 /// What a chip takes besides its label: its padding, the checkbox, the gaps, the marks.
 const CHIP_CHROME: f32 = 2.0 * SPACE_S + CHECK_SIZE + 2.0 * SPACE_TIGHT + CHIP_MARKS_WIDTH;
 
-/// How wide `name` draws on a chip, checked (SemiBold) or not, measured with the bundled font:
-/// a CJK character counts as the em it draws, not an average Latin letter (#528). A colour
-/// emoji draws a little wider than the em it counts as; the chip's clip keeps such a name
-/// inside it.
+/// How wide `name` draws on a chip, checked (strong) or not, in the UI language's font, measured
+/// with the bundled fonts: a CJK character counts as the em it draws, not an average Latin letter
+/// (#528). A colour emoji draws a little wider than the em it counts as; the chip's clip keeps
+/// such a name inside it.
+///
+/// Remembered by name and UI font: every view sizes the grid by the widest of all the tags.
 pub fn label_width(name: &str) -> f32 {
-    text::strong_width(name, TEXT_BODY)
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    thread_local! {
+        static MEASURED: RefCell<HashMap<(usize, String), f32>> = RefCell::default();
+    }
+    let font = crate::ui::tokens::cjk_files().map_or(0, |files| files[0].as_ptr() as usize);
+    MEASURED.with_borrow_mut(|measured| {
+        *measured
+            .entry((font, name.to_owned()))
+            .or_insert_with(|| text::any_style_width(name, TEXT_BODY))
+    })
 }
 
 /// The width of a chip whose label is `label_width` px wide (see [`label_width`]).
@@ -33,7 +45,7 @@ pub fn fit_label(name: &str, chip_width: f32) -> Cow<'_, str> {
     // A hair over, so a chip sized by `chip_width(label_width(name))` keeps `name` whole
     // despite float rounding.
     let room = (chip_width - CHIP_CHROME).max(0.0) + 0.01;
-    text::fit_strong_or_body(name, room, TEXT_BODY)
+    text::fit_any_style(name, room, TEXT_BODY)
 }
 
 /// The grid's columns: how many, and how wide each cell is (the chip plus room for the ring).

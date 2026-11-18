@@ -162,11 +162,46 @@ pub fn text_width(line: &str, size: f32) -> f32 {
     line.chars().map(|c| char_width(face, c, size)).sum()
 }
 
-/// How wide `line` is in [`strong`] text (Inter SemiBold) at `size` px: a little wider than
-/// [`text_width`], most of all in narrow letters (`still`, about 7 %).
-pub fn strong_width(line: &str, size: f32) -> f32 {
-    let face = inter_semibold();
-    line.chars().map(|c| char_width(face, c, size)).sum()
+/// The bundled CJK files' faces, parsed once each (by the file's address), for the UI language
+/// that draws in them.
+fn cjk_faces() -> [Option<&'static ttf_parser::Face<'static>>; 2] {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    type Faces = HashMap<usize, Option<&'static ttf_parser::Face<'static>>>;
+    static PARSED: OnceLock<Mutex<Faces>> = OnceLock::new();
+    let Some(files) = crate::ui::tokens::cjk_files() else {
+        return [None, None];
+    };
+    let mut parsed = PARSED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    files.map(|file| {
+        *parsed.entry(file.as_ptr() as usize).or_insert_with(|| {
+            ttf_parser::Face::parse(file, 0)
+                .ok()
+                .map(|face| &*Box::leak(Box::new(face)))
+        })
+    })
+}
+
+/// How wide `c` is at `size` px in the widest face a UI label can be drawn in, Regular or strong:
+/// Inter Regular and SemiBold, and the CJK family's Regular and Bold when the UI language uses
+/// it. No face is narrower everywhere (Inter SemiBold's space is narrower than Regular's, a CJK
+/// font's digits wider than Inter's), so the widest of them is taken a character at a time.
+fn any_style_advance(cjk: &[Option<&ttf_parser::Face<'_>>; 2], c: char, size: f32) -> f32 {
+    let inter = char_width(inter(), c, size).max(char_width(inter_semibold(), c, size));
+    cjk.iter()
+        .flatten()
+        .map(|face| char_width(Some(face), c, size))
+        .fold(inter, f32::max)
+}
+
+/// How wide `line` is at most at `size` px in the UI's text styles, Regular or strong, in the UI
+/// language's font: room for a label that is either, as its state changes (a checked tag, #528).
+pub fn any_style_width(line: &str, size: f32) -> f32 {
+    let cjk = cjk_faces();
+    line.chars().map(|c| any_style_advance(&cjk, c, size)).sum()
 }
 
 /// `line` in body text cut with "…" so it is at most `width` px wide, measured with
@@ -184,43 +219,40 @@ pub fn fit_caption(line: &str, width: f32) -> Cow<'_, str> {
 /// One pass that stops as soon as the line is known not to fit, so a long comment costs what
 /// its row shows, not its whole length (it runs for every row on every view).
 fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
-    fit_in(inter(), line, width, size)
+    let face = inter();
+    cut_with_ellipsis(
+        line,
+        measured_cut(line, width, |c| char_width(face, c, size)),
+    )
 }
 
-/// `line` cut with "…" so it is at most `width` px wide in [`strong`] text at `size` px, which
-/// is never narrower than body text: for a label that is SemiBold or Regular as its state
-/// changes (a checked tag), so checking it never pushes it past its room.
-pub fn fit_strong_or_body(line: &str, width: f32, size: f32) -> Cow<'_, str> {
-    fit_in(inter_semibold(), line, width, size)
+/// `line` cut with "…" so it is at most `width` px wide at `size` px measured as
+/// [`any_style_width`]: it fits whether it is drawn Regular or strong (#528).
+pub fn fit_any_style(line: &str, width: f32, size: f32) -> Cow<'_, str> {
+    let cjk = cjk_faces();
+    cut_with_ellipsis(
+        line,
+        measured_cut(line, width, |c| any_style_advance(&cjk, c, size)),
+    )
 }
 
-/// [`fit_measured`] in `face`.
-fn fit_in<'a>(
-    face: Option<&ttf_parser::Face<'_>>,
-    line: &'a str,
-    width: f32,
-    size: f32,
-) -> Cow<'a, str> {
-    match measured_cut(face, line, width, size) {
+/// `line` up to `end` with "…" after it, or whole when `end` is `None`.
+fn cut_with_ellipsis(line: &str, end: Option<usize>) -> Cow<'_, str> {
+    match end {
         Some(end) => Cow::Owned(format!("{}…", line[..end].trim_end())),
         None => Cow::Borrowed(line),
     }
 }
 
-/// Where `line` in `face` at `size` px must stop to end in "…" within `width` px: the byte index
-/// the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
-fn measured_cut(
-    face: Option<&ttf_parser::Face<'_>>,
-    line: &str,
-    width: f32,
-    size: f32,
-) -> Option<usize> {
-    let room = width - char_width(face, '…', size);
+/// Where `line` must stop to end in "…" within `width` px, each character `advance(c)` wide: the
+/// byte index the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
+fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option<usize> {
+    let room = width - advance('…');
     let mut used = 0.0;
     // Where the text stops if it gets a "…": the last char that fits in `room`.
     let mut cut = None;
     for (at, c) in line.char_indices() {
-        used += char_width(face, c, size);
+        used += advance(c);
         if cut.is_none() && used > room {
             cut = Some(at);
         }
@@ -273,7 +305,7 @@ pub fn caption_marked<'a, M: 'a>(
     width: f32,
 ) -> Element<'a, M> {
     // Measured like `fit_caption`, so Cyrillic or CJK keeps its "…" (#408).
-    let cut = measured_cut(inter(), line, width, TEXT_CAPTION);
+    let cut = measured_cut(line, width, caption_advance);
     let too_long = cut.is_some();
     let end = cut.unwrap_or(line.len());
     let shown = &line[..end];
@@ -348,6 +380,26 @@ pub fn body_marked<'a, M: 'a>(
 mod tests {
     use super::*;
 
+    /// #528: a label is measured at least as wide as it draws in every face it can be drawn in,
+    /// Regular or strong, Inter or a CJK family: digits draw wider in Noto Sans CJK than in Inter
+    /// SemiBold, and Inter SemiBold's space is narrower than Regular's.
+    #[test]
+    fn a_label_is_measured_as_wide_as_its_widest_face() {
+        let parse = |file: &'static [u8]| ttf_parser::Face::parse(file, 0).ok();
+        let files: Vec<&'static [u8]> = crate::ui::tokens::cjk_font_files().collect();
+        let (jp_regular, jp_bold) = (parse(files[0]), parse(files[1]));
+        assert!(jp_regular.is_some() && jp_bold.is_some());
+        let cjk = [jp_regular.as_ref(), jp_bold.as_ref()];
+        let faces = [inter(), inter_semibold(), cjk[0], cjk[1]];
+        for name in ["take11", "1111111", "U U U U U U", "still", "記者会見"] {
+            let measured: f32 = name.chars().map(|c| any_style_advance(&cjk, c, 13.0)).sum();
+            for face in faces {
+                let drawn: f32 = name.chars().map(|c| char_width(face, c, 13.0)).sum();
+                assert!(drawn <= measured + 0.001, "{name}: {drawn} > {measured}");
+            }
+        }
+    }
+
     /// Issue #391: a measured cut is never wider than its room, in Latin, Cyrillic or CJK, and
     /// a line that fits is left whole.
     #[test]
@@ -404,7 +456,7 @@ mod tests {
             "Съёмка на набережной: закат и огни",
             "夕方の港の空撮。ロケ地は函館の港",
         ] {
-            let end = measured_cut(inter(), line, 90.0, TEXT_CAPTION).expect("too long for 90 px");
+            let end = measured_cut(line, 90.0, caption_advance).expect("too long for 90 px");
             let shown = format!("{}…", &line[..end]);
             assert!(text_width(&shown, TEXT_CAPTION) <= 90.0, "{shown}");
             assert_eq!(
