@@ -1,0 +1,14 @@
+# #562: a running job on a page just over 440 px with a long clip name (`--batch --ai --lang ru`): the name is cut, the step beside it keeps its width.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1365, 720]
+panels = [400, 260]
+subtitles_stage = "transcribing"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.sunset.MVI_0404_long_take_from_the_hill.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
