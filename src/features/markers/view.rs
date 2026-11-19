@@ -62,13 +62,19 @@ fn clamped_comment(comment: &str) -> Cow<'_, str> {
             kept.push(format!("{}…", line[..cut].trim_end()));
             return Cow::Owned(kept.join("\n"));
         }
-        kept.push(line.to_string());
         left -= estimate.rows;
-        if left == 0 && kept.len() < all {
-            let last = kept.pop().unwrap_or_default();
-            kept.push(format!("{}…", last.trim_end()));
+        if left == 0 && kept.len() + 1 < all {
+            // More lines follow: this one ends in "…", within the rows it had. A line that
+            // filled them leaves no room for it, so it is cut (#557).
+            let with = format!("{}…", line.trim_end());
+            let fit = text::wrap_estimate(&with, NAME_ROOM, NAME_CHAR_ADVANCE, estimate.rows);
+            kept.push(match fit.cut {
+                Some(cut) => format!("{}…", with[..cut].trim_end()),
+                None => with,
+            });
             return Cow::Owned(kept.join("\n"));
         }
+        kept.push(line.to_string());
     }
     Cow::Borrowed(comment)
 }
@@ -973,6 +979,17 @@ mod tests {
         );
         let many = "one\ntwo\nthree\nfour";
         assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
+        // #557: lines that fill the three rows exactly, with more after them: the "…" takes
+        // the place of the last characters, not a fourth row.
+        let full = format!("{}\nmore", "x".repeat(per_line * COMMENT_LINES));
+        let cut = clamped_comment(&full);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert!(!cut.contains("more"), "{cut}");
+        let rows: usize = cut
+            .lines()
+            .map(|line| text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, usize::MAX).rows)
+            .sum();
+        assert_eq!(rows, COMMENT_LINES, "{cut}");
     }
 
     #[test]
