@@ -47,30 +47,40 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// Characters of a row's text that fit on one line.
-fn chars_per_line() -> usize {
-    (NAME_ROOM / NAME_CHAR_ADVANCE) as usize
+/// How wide `c` counts in a row's text: the generous Latin average, or the measured width of a
+/// character much wider than that, a CJK one's em (#548), so a Japanese comment is not taken for
+/// half its lines while a Latin one keeps the estimate it had.
+fn advance(c: char) -> f32 {
+    text::wide_body_advance(c, NAME_CHAR_ADVANCE)
 }
 
 /// How many lines one line of text (without a line break) wraps to.
 fn line_rows(line: &str) -> usize {
-    line.chars().count().div_ceil(chars_per_line()).max(1)
+    let width: f32 = line.chars().map(advance).sum();
+    ((width / NAME_ROOM).ceil() as usize).max(1)
 }
 
 /// A comment shows at most this many lines in a row that is not open.
 const COMMENT_LINES: usize = 3;
 
-/// `comment` cut to [`COMMENT_LINES`] lines of a row (by an estimate of the characters per line), ending
-/// in "…" when cut.
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (by an estimate of each character's width),
+/// ending in "…" when cut.
 fn clamped_comment(comment: &str) -> Cow<'_, str> {
-    let per_line = chars_per_line();
     let all = comment.lines().count();
     let mut left = COMMENT_LINES;
     let mut kept: Vec<String> = Vec::new();
     for line in comment.lines() {
         let lines = line_rows(line);
         if lines > left {
-            let cut: String = line.chars().take(left * per_line - 1).collect();
+            let room = left as f32 * NAME_ROOM - advance('…');
+            let mut used = 0.0;
+            let cut: String = line
+                .chars()
+                .take_while(|&c| {
+                    used += advance(c);
+                    used <= room
+                })
+                .collect();
             kept.push(format!("{}…", cut.trim_end()));
             return Cow::Owned(kept.join("\n"));
         }
@@ -939,6 +949,25 @@ mod tests {
             all,
             "no markers to copy or export"
         );
+    }
+
+    /// #548: a Japanese character draws about twice as wide as the Latin average. A long Japanese
+    /// comment is cut to as many characters as fit in three lines, not twice that.
+    #[test]
+    fn a_long_japanese_comment_is_cut_to_three_lines() {
+        let line =
+            "夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。";
+        let long = line.repeat(4);
+        let cut = clamped_comment(&long);
+        assert!(cut.ends_with('…'), "{cut}");
+        // Each character is at least one em of body text wide.
+        let ems = cut.chars().count() as f32 * TEXT_BODY;
+        assert!(
+            ems <= COMMENT_LINES as f32 * NAME_ROOM,
+            "{} chars",
+            cut.chars().count()
+        );
+        assert_eq!(cut.lines().map(line_rows).sum::<usize>(), COMMENT_LINES);
     }
 
     #[test]

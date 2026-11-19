@@ -280,6 +280,18 @@ pub fn fit_mono(line: &str, width: f32) -> Cow<'_, str> {
     cut_with_ellipsis(line, measured_cut(line, width, mono_advance))
 }
 
+/// How wide `c` counts in body text for an estimate of how many lines a wrapped text takes:
+/// `average`, the caller's per-character estimate, unless `c` is a full em wide, as a character
+/// Inter does not have (CJK, Hangul, kana) is drawn by the CJK font; then one em (#548).
+pub fn wide_body_advance(c: char, average: f32) -> f32 {
+    let measured = char_width(inter(), c, TEXT_BODY);
+    if measured >= TEXT_BODY {
+        measured
+    } else {
+        average
+    }
+}
+
 /// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
 /// `TEXT_CAPTION`, for cuts that are not from the end of a line (a path cut from its front,
 /// #408). Not the `CAPTION_CHAR_WIDTH` average.

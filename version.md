@@ -1,3 +1,7 @@
+# 0.262
+## Fixed
+- In the marker list, a long Chinese, Japanese or Korean comment now stops at three lines with "…", like other comments. Before, it showed five lines.
+
 # 0.259
 ## Fixed
 - When the batch panel is narrow, its close button, the result's figures and the buttons at the bottom no longer get squeezed or run past its edge. They move onto a second line, and so does the note that says why an action cannot start yet.
