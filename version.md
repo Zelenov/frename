@@ -2,6 +2,10 @@
 ## Fixed
 - In the marker list, a comment of several lines whose first lines fill the row's three lines no longer gets a fourth line for its "…".
 
+# 0.263
+## Fixed
+- In the file list, a Japanese or Korean clip name copied from a Mac is no longer cut with "…" when the whole name fits.
+
 # 0.262
 ## Fixed
 - In the marker list, a long Chinese, Japanese or Korean comment now stops at three lines with "…", like other comments. Before, it showed five lines.
