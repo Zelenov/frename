@@ -955,15 +955,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         }
     }
 
-    /// Characters of the longest tag name in the whole list, whatever the filter: the tag grid
-    /// is sized by it, so it does not reflow while a search narrows the list.
-    pub fn longest_tag_name_chars(&self) -> usize {
+    /// How wide the widest tag name of the whole list is, by `width`, whatever the filter: the
+    /// tag grid is sized by it, so it does not reflow while a search narrows the list. The UI
+    /// measures with its font, so a CJK name counts for what it draws (#528). 0 with no tags.
+    pub fn widest_tag_name(&self, width: impl Fn(&str) -> f32) -> f32 {
         self.display_tag_ids
             .iter()
             .filter_map(|(id, _, _)| self.tags_by_id.get(id))
-            .map(|t| t.tag().chars().count())
-            .max()
-            .unwrap_or_default()
+            .map(|t| width(t.tag()))
+            .fold(0.0, f32::max)
     }
 
     /// Whether the list has any tag at all, whatever the filter.
@@ -1816,7 +1816,8 @@ mod tests {
         let snapshot = FileSnapshot::new(vec![], "name", "mp4", "name.mp4");
         let mut list = TagList::new(store, snapshot);
         list.set_filter("wide");
-        assert_eq!(list.longest_tag_name_chars(), "golden-hour".len());
+        let chars = |name: &str| name.chars().count() as f32;
+        assert_eq!(list.widest_tag_name(chars), "golden-hour".len() as f32);
         assert!(list.has_tags());
         list.set_filter("nothing like it");
         assert!(list.has_tags());

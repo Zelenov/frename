@@ -94,10 +94,12 @@ fn chip<'a>(tag: &'a Tag, color: Color, cursor: bool, width: f32) -> Element<'a,
     let content = row![check, label, marks]
         .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center);
+    // Clipped: a label the measure misjudges still never draws past the chip (#528).
     let body = container(content)
         .padding(CHIP_PADDING)
         .height(CHIP_HEIGHT)
-        .center_y(CHIP_HEIGHT);
+        .center_y(CHIP_HEIGHT)
+        .clip(true);
     let (body, hover) = if stored {
         (body.style(style::badge(color)), CHIP_HOVER)
     } else {

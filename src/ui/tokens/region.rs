@@ -147,8 +147,6 @@ pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
 pub const CHIP_DRAG_LIFT: f32 = SPACE_TIGHT;
 /// The width a chip of the file name card is taken to have when the drop place is worked out.
 pub const CHIP_DROP_ESTIMATE_WIDTH: f32 = 64.0;
-/// A generous average width of one character of a chip's 13-px label, to size grid columns.
-pub const CHIP_CHAR_WIDTH: f32 = 7.5;
 /// The chip's marks at its right end: the star and the action, 14 px each, 4 px apart.
 pub const CHIP_MARKS_WIDTH: f32 = 2.0 * ICON_MARK + SPACE_XS;
 /// Between the chip and the cursor ring drawn outside it.
