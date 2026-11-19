@@ -263,8 +263,13 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 /// character the font has; nothing for one it draws with no advance, a combining accent as in a
 /// name copied from a Mac (NFD, #547); one em for one it does not have (CJK, Hangul, kana), as
 /// the CJK fonts draw it (#538). Without the font every character counts as one em, so a name
-/// errs wide.
+/// errs wide. A decomposed Japanese or Korean name (NFD, from a Mac) is drawn composed, so its
+/// marks take no room: a dakuten or handakuten, and a Hangul syllable's vowel and final jamo,
+/// count as nothing, its initial jamo as the syllable's em (#551).
 fn mono_advance(c: char) -> f32 {
+    if is_composing_cjk_mark(c) {
+        return 0.0;
+    }
     let Some(face) = mono_face() else {
         return TEXT_MONO;
     };
@@ -273,6 +278,12 @@ fn mono_advance(c: char) -> f32 {
         Some(_) => MONO_CHAR_WIDTH,
         None => TEXT_MONO,
     }
+}
+
+/// A combining kana voicing mark (U+3099, U+309A), or a conjoining Hangul vowel or final jamo
+/// (U+1160–U+11FF, U+D7B0–U+D7FF): drawn as part of the character or syllable before it.
+fn is_composing_cjk_mark(c: char) -> bool {
+    matches!(c, '\u{3099}' | '\u{309A}' | '\u{1160}'..='\u{11FF}' | '\u{D7B0}'..='\u{D7FF}')
 }
 
 /// How wide `line` is in `mono` text, each character [`mono_advance`] wide.
@@ -578,6 +589,23 @@ mod tests {
         let nfd = "Сцена_и\u{306}_е\u{308}_cafe\u{301}.mov";
         assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01);
         assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd);
+    }
+
+    /// #551: a Japanese or Korean name in NFD measures as its composed form: a voiced kana is
+    /// one em, not two, and a Hangul syllable of two or three jamo is one em, not three.
+    #[test]
+    fn a_decomposed_japanese_or_korean_name_measures_as_composed() {
+        for (nfc, nfd) in [
+            ("がぱ.mov", "か\u{3099}は\u{309A}.mov"),
+            (
+                "한국.mov",
+                "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}.mov",
+            ),
+            ("가.mov", "\u{1100}\u{1161}.mov"),
+        ] {
+            assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01, "{nfc}");
+            assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd, "{nfc}");
+        }
     }
 
     #[test]
