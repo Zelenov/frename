@@ -1,6 +1,6 @@
 # 0.258
 ## Fixed
-- In the file list, a clip whose name is in Chinese, Japanese or Korean is now cut with "…" when the row is too narrow for it. Before, the name was cut off at a random character with no "…", and its extension did not show.
+- In the file list, a clip whose name is in Chinese, Japanese or Korean now ends in "…" when the row is too narrow for it, instead of being cut off partway through the name or its extension.
 
 # 0.256
 ## Fixed

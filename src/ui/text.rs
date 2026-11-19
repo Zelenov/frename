@@ -259,12 +259,13 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
         .as_ref()
 }
 
-/// How wide `c` is in `mono` text: `MONO_CHAR_WIDTH` for a character JetBrains Mono has, one em
-/// for one it does not (CJK, Hangul, kana), which a CJK font draws about that wide (#538).
-pub fn mono_advance(c: char) -> f32 {
+/// How wide `c` is in `mono` text: `MONO_CHAR_WIDTH` (JetBrains Mono's fixed advance) for a
+/// character the font has; one em for one it does not (CJK, Hangul, kana), as the CJK fonts
+/// draw it (#538). Without the font every character counts as one em, so a name errs wide.
+fn mono_advance(c: char) -> f32 {
     match mono_face() {
-        Some(face) if face.glyph_index(c).is_none() => TEXT_MONO,
-        _ => MONO_CHAR_WIDTH,
+        Some(face) if face.glyph_index(c).is_some() => MONO_CHAR_WIDTH,
+        _ => TEXT_MONO,
     }
 }
 
