@@ -1,0 +1,20 @@
+# #563: runs waiting behind a job at the batch panel's 320-px minimum (`--batch --ai`, e.g. `--lang uk`): each name keeps its line, the action and Remove go under it.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1024, 900]
+panels = [428, 256]
+ai_retry_wait_s = 8
+close_batch_panel = false
+queue_waiting = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.sunrise.MVI_0412.mp4"

@@ -1,3 +1,7 @@
+# 0.267
+## Fixed
+- When the batch panel is narrow, the clips waiting behind a running job keep their names, and their Remove buttons fit. Before, a name could disappear and the button's text ran out of it.
+
 # 0.266
 ## Fixed
 - In the batch panel, the step of the clip a running job is working on (for example "transcribing… about 1 min left") is no longer squeezed to a word a line by a long clip name. The name is cut instead.
