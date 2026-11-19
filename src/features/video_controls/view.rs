@@ -461,22 +461,15 @@ pub struct MarkerLabel<'a> {
 
 /// Room the label's padding, edge and pencil take besides the name, and its margins.
 const LABEL_CHROME: f32 = 2.0 * SPACE_S + SPACE_TIGHT + ICON_S + 2.0 * RING + 2.0 * SPACE_XS;
-/// A generous average advance of a character of the label's 12 px text.
-const LABEL_CHAR_ADVANCE: f32 = 6.8;
-/// A name is never cut shorter than this many characters.
-const LABEL_MIN_CHARS: usize = 12;
 /// The label's edge in its marker's color: a little heavier than a line, so the color reads.
 const LABEL_EDGE: f32 = LINE * 1.5;
 
-/// `name`, cut with "…" so the label fits a player `width` px wide.
+/// `name`, cut with "…" so the label fits a player `width` px wide. The name is measured with the
+/// fonts it is drawn in, so a Chinese or Japanese name (about twice as wide a character as a
+/// Latin one) is cut where it really ends (#546).
 fn fit_label(name: &str, width: f32) -> String {
-    let fits = ((width - LABEL_CHROME) / LABEL_CHAR_ADVANCE).max(1.0) as usize;
-    let room = fits.max(LABEL_MIN_CHARS);
-    if name.chars().count() <= room {
-        return name.to_string();
-    }
-    let cut: String = name.chars().take(room.saturating_sub(1)).collect();
-    format!("{}…", cut.trim_end())
+    let room = (width - LABEL_CHROME).max(MARKER_LABEL_MIN_NAME_WIDTH);
+    text::fit_any_style(name, room, TEXT_TOOLTIP).into_owned()
 }
 
 const LABEL_PADDING: Padding = Padding {
@@ -592,13 +585,27 @@ mod tests {
         let long = "Close-up of the blue Turkish Airlines sign hanging from the ceiling";
         let fitted = fit_label(long, 300.0);
         assert!(fitted.ends_with('…'), "{fitted}");
-        assert!(fitted.chars().count() as f32 * LABEL_CHAR_ADVANCE + LABEL_CHROME <= 300.0);
+        assert!(text::any_style_width(&fitted, TEXT_TOOLTIP) + LABEL_CHROME <= 300.0);
+    }
+
+    /// #546: a Japanese name draws about twice as wide a character as a Latin one. It is cut so
+    /// the label fits the player, where a Latin average let it run past the player's edge.
+    #[test]
+    fn a_japanese_marker_name_is_cut_to_the_player() {
+        let name =
+            "夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす";
+        let fitted = fit_label(name, 440.0);
+        assert!(fitted.ends_with('…'), "{fitted}");
+        assert!(text::any_style_width(&fitted, TEXT_TOOLTIP) + LABEL_CHROME <= 440.0);
     }
 
     #[test]
-    fn a_name_keeps_at_least_twelve_characters() {
+    fn a_name_keeps_its_minimum_room_in_a_tiny_player() {
         let fitted = fit_label("Close-up of the blue sign", 10.0);
-        assert_eq!(fitted.chars().count(), LABEL_MIN_CHARS);
+        assert!(fitted.ends_with('…'), "{fitted}");
+        let width = text::any_style_width(&fitted, TEXT_TOOLTIP);
+        assert!(width <= MARKER_LABEL_MIN_NAME_WIDTH, "{fitted}: {width}");
+        assert!(fitted.chars().count() >= 10, "{fitted}");
     }
 
     #[test]

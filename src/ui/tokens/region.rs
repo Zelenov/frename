@@ -165,6 +165,10 @@ pub const GRID_GROUP_GAP: f32 = SPACE_S;
 /// Columns of the tag grid: never fewer, however narrow the area.
 pub const GRID_MIN_COLUMNS: u32 = 2;
 
+/// The marker label over the video never cuts its name shorter than this: about 12 Latin letters
+/// of its text (#546).
+pub const MARKER_LABEL_MIN_NAME_WIDTH: f32 = 82.0;
+
 // Batch panel (§13.6).
 pub const BATCH_HEADER_HEIGHT: f32 = 48.0;
 pub const ACTION_LIST_WIDTH: f32 = 232.0;

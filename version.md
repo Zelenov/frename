@@ -1,3 +1,7 @@
+# 0.261
+## Fixed
+- A Chinese, Japanese or Korean marker name over the video is now cut with "…" when it is longer than the player. Before, it ran past the player's edge and lost its pencil.
+
 # 0.258
 ## Fixed
 - In the file list, a clip whose name is in Chinese, Japanese or Korean now ends in "…" when the row is too narrow for it, instead of being cut off partway through the name or its extension.
