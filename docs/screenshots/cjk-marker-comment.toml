@@ -1,0 +1,16 @@
+# #548: the marker list with a long Japanese and a long English comment; both stop at 3 lines (render with --lang ja).
+source = "../../tests/folder"
+open = "MVI_0410.mp4"
+seek = 1.0
+window = [1024, 640]
+panels = [440, 240]
+marker_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0410.mp4"
+markers = [
+  "0:02 — 夜 — 夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。",
+  "0:06 — Lights — Lights come on along the coast as the night moves in from the east. Lights come on along the coast as the night moves in from the east. Lights come on along the coast as the night moves in from the east. Lights come on along the coast as the night moves in from the east.",
+  "0:10 — 三番",
+]

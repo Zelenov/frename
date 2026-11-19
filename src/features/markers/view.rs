@@ -47,35 +47,23 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// Characters of a row's text that fit on one line.
-fn chars_per_line() -> usize {
-    (NAME_ROOM / NAME_CHAR_ADVANCE) as usize
-}
-
-/// How many lines one line of text (without a line break) wraps to.
-fn line_rows(line: &str) -> usize {
-    line.chars().count().div_ceil(chars_per_line()).max(1)
-}
-
 /// A comment shows at most this many lines in a row that is not open.
 const COMMENT_LINES: usize = 3;
 
-/// `comment` cut to [`COMMENT_LINES`] lines of a row (by an estimate of the characters per line), ending
-/// in "…" when cut.
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (by [`text::wrap_estimate`]), ending in
+/// "…" when cut.
 fn clamped_comment(comment: &str) -> Cow<'_, str> {
-    let per_line = chars_per_line();
     let all = comment.lines().count();
     let mut left = COMMENT_LINES;
     let mut kept: Vec<String> = Vec::new();
     for line in comment.lines() {
-        let lines = line_rows(line);
-        if lines > left {
-            let cut: String = line.chars().take(left * per_line - 1).collect();
-            kept.push(format!("{}…", cut.trim_end()));
+        let estimate = text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, left);
+        if let Some(cut) = estimate.cut {
+            kept.push(format!("{}…", line[..cut].trim_end()));
             return Cow::Owned(kept.join("\n"));
         }
         kept.push(line.to_string());
-        left -= lines;
+        left -= estimate.rows;
         if left == 0 && kept.len() < all {
             let last = kept.pop().unwrap_or_default();
             kept.push(format!("{}…", last.trim_end()));
@@ -941,6 +929,32 @@ mod tests {
         );
     }
 
+    /// #548: a Japanese character draws about twice as wide as the Latin average. A long Japanese
+    /// comment is cut to as many characters as fit in three lines, not twice that.
+    #[test]
+    fn a_long_japanese_comment_is_cut_to_three_lines() {
+        let line =
+            "夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす。";
+        let long = line.repeat(4);
+        let cut = clamped_comment(&long);
+        assert!(cut.ends_with('…'), "{cut}");
+        // Each character is at least one em of body text wide.
+        let ems = cut.chars().count() as f32 * TEXT_BODY;
+        assert!(
+            ems <= COMMENT_LINES as f32 * NAME_ROOM,
+            "{} chars",
+            cut.chars().count()
+        );
+        assert_eq!(
+            cut.lines()
+                .map(
+                    |line| text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, usize::MAX).rows
+                )
+                .sum::<usize>(),
+            COMMENT_LINES
+        );
+    }
+
     #[test]
     fn a_long_comment_shows_three_lines_and_an_ellipsis() {
         let per_line = (NAME_ROOM / NAME_CHAR_ADVANCE) as usize;
@@ -949,7 +963,14 @@ mod tests {
         let long = "x".repeat(per_line * 5);
         let cut = clamped_comment(&long);
         assert!(cut.ends_with('…'), "{cut}");
-        assert_eq!(cut.lines().map(line_rows).sum::<usize>(), COMMENT_LINES);
+        assert_eq!(
+            cut.lines()
+                .map(
+                    |line| text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, usize::MAX).rows
+                )
+                .sum::<usize>(),
+            COMMENT_LINES
+        );
         let many = "one\ntwo\nthree\nfour";
         assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
     }
