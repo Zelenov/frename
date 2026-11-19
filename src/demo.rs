@@ -879,8 +879,13 @@ mod tests {
                     file.from
                 );
                 // These stage tags the folder does not have, on purpose: the mono scenario for
-                // tags it does not know, the other for an unsaved tag's "+" (#216).
-                if name == "mono.toml" || name == "unsaved-tag-plus.toml" {
+                // tags it does not know, the others for an unsaved tag's "+" (#216) and a CJK
+                // tag's width in the tag grid (#528) and in a file list row (#535).
+                if name == "mono.toml"
+                    || name == "unsaved-tag-plus.toml"
+                    || name == "cjk-tag.toml"
+                    || name == "cjk-mini-chip.toml"
+                {
                     continue;
                 }
                 for tag in frename_core::FileSnapshot::parse(&file.name).tags() {

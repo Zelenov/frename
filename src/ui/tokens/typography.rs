@@ -112,6 +112,16 @@ pub fn set_language(language: &str) {
     }
 }
 
+/// The Regular and Bold files of the UI language's CJK family, `None` for the languages Inter
+/// covers: what text measured for the UI is drawn in then (#528).
+pub fn cjk_files() -> Option<[&'static [u8]; 2]> {
+    let current = family()?;
+    CJK_FONTS
+        .iter()
+        .find(|(_, family, _)| *family == current)
+        .map(|(_, _, files)| *files)
+}
+
 fn family() -> Option<&'static str> {
     match CJK_FAMILY.read() {
         Ok(current) => *current,

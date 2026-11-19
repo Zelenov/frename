@@ -3,10 +3,7 @@
 
 use super::size::*;
 use super::space::*;
-use super::typography::{
-    BODY_CHAR_WIDTH, LINE_BODY, LINE_CAPTION, LINE_SUBTITLE, LINE_TOOLTIP, TEXT_BODY,
-    TEXT_CHIP_MINI,
-};
+use super::typography::{LINE_BODY, LINE_CAPTION, LINE_SUBTITLE, LINE_TOOLTIP};
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
 pub const WINDOW_MIN_WIDTH: f32 = 900.0;
@@ -150,11 +147,6 @@ pub const COMMENT_MAX_HEIGHT: f32 = 600.0;
 pub const CHIP_DRAG_LIFT: f32 = SPACE_TIGHT;
 /// The width a chip of the file name card is taken to have when the drop place is worked out.
 pub const CHIP_DROP_ESTIMATE_WIDTH: f32 = 64.0;
-/// A generous average width of one character of a chip's 13-px label, to size grid columns.
-pub const CHIP_CHAR_WIDTH: f32 = 7.5;
-/// The average width of one character of a mini chip's 12-px label: not generous, since the file
-/// list fits chips to the row by it and a generous guess hides chips that would fit.
-pub const CHIP_MINI_CHAR_WIDTH: f32 = BODY_CHAR_WIDTH * TEXT_CHIP_MINI / TEXT_BODY;
 /// The chip's marks at its right end: the star and the action, 14 px each, 4 px apart.
 pub const CHIP_MARKS_WIDTH: f32 = 2.0 * ICON_MARK + SPACE_XS;
 /// Between the chip and the cursor ring drawn outside it.

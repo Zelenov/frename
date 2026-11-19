@@ -8,26 +8,44 @@ use std::borrow::Cow;
 use frename_core::{StoredTagStore, TagList};
 
 use crate::features::tag_panel::{GRID_CELL_INSET, GRID_GAP};
+use crate::ui::text;
 use crate::ui::tokens::*;
 
 /// What a chip takes besides its label: its padding, the checkbox, the gaps, the marks.
 const CHIP_CHROME: f32 = 2.0 * SPACE_S + CHECK_SIZE + 2.0 * SPACE_TIGHT + CHIP_MARKS_WIDTH;
 
-/// Estimated width of a chip whose label has `chars` characters.
-pub fn chip_width(chars: usize) -> f32 {
-    CHIP_CHROME + CHIP_CHAR_WIDTH * chars as f32
+/// How wide `name` draws on a chip, checked (strong) or not, in the UI language's font, measured
+/// with the bundled fonts: a CJK character counts as the em it draws, not an average Latin letter
+/// (#528). A colour emoji draws a little wider than the em it counts as; the chip's clip keeps
+/// such a name inside it.
+///
+/// Remembered by name and UI font: every view sizes the grid by the widest of all the tags.
+pub fn label_width(name: &str) -> f32 {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    thread_local! {
+        static MEASURED: RefCell<HashMap<(usize, String), f32>> = RefCell::default();
+    }
+    let font = crate::ui::tokens::cjk_files().map_or(0, |files| files[0].as_ptr() as usize);
+    MEASURED.with_borrow_mut(|measured| {
+        *measured
+            .entry((font, name.to_owned()))
+            .or_insert_with(|| text::any_style_width(name, TEXT_BODY))
+    })
 }
 
-/// `name` cut with "…" so its chip fits `chip_width`; unchanged when it fits.
+/// The width of a chip whose label is `label_width` px wide (see [`label_width`]).
+pub fn chip_width(label_width: f32) -> f32 {
+    CHIP_CHROME + label_width
+}
+
+/// `name` cut with "…" so its chip fits `chip_width`; unchanged when it fits. Measured like
+/// [`label_width`], so a CJK name is cut where it really ends (#528).
 pub fn fit_label(name: &str, chip_width: f32) -> Cow<'_, str> {
-    let room = ((chip_width - CHIP_CHROME) / CHIP_CHAR_WIDTH)
-        .floor()
-        .max(1.0) as usize;
-    if name.chars().count() <= room {
-        return Cow::Borrowed(name);
-    }
-    let cut: String = name.chars().take(room.saturating_sub(1)).collect();
-    Cow::Owned(format!("{}…", cut.trim_end()))
+    // A hair over, so a chip sized by `chip_width(label_width(name))` keeps `name` whole
+    // despite float rounding.
+    let room = (chip_width - CHIP_CHROME).max(0.0) + 0.01;
+    text::fit_any_style(name, room, TEXT_BODY)
 }
 
 /// The grid's columns: how many, and how wide each cell is (the chip plus room for the ring).
@@ -44,10 +62,10 @@ impl Columns {
     }
 }
 
-/// The columns of an area `area_width` wide whose longest tag name has `widest_chars`
-/// characters.
-pub fn columns(area_width: f32, widest_chars: usize) -> Columns {
-    let widest_cell = chip_width(widest_chars).min(CHIP_MAX_WIDTH) + 2.0 * GRID_CELL_INSET;
+/// The columns of an area `area_width` wide whose widest tag name is `widest_label` px wide
+/// (see [`label_width`]).
+pub fn columns(area_width: f32, widest_label: f32) -> Columns {
+    let widest_cell = chip_width(widest_label).min(CHIP_MAX_WIDTH) + 2.0 * GRID_CELL_INSET;
     let fit = ((area_width + GRID_GAP) / (widest_cell + GRID_GAP)).floor();
     if fit >= GRID_MIN_COLUMNS as f32 {
         return Columns {
@@ -63,10 +81,10 @@ pub fn columns(area_width: f32, widest_chars: usize) -> Columns {
     }
 }
 
-/// The columns for `tag_list` in an area `area_width` wide, sized by its longest tag name, so
+/// The columns for `tag_list` in an area `area_width` wide, sized by its widest tag name, so
 /// the grid does not reflow while a search narrows it.
 pub fn columns_for<S: StoredTagStore + Clone>(tag_list: &TagList<S>, area_width: f32) -> Columns {
-    columns(area_width, tag_list.longest_tag_name_chars())
+    columns(area_width, tag_list.widest_tag_name(label_width))
 }
 
 #[cfg(test)]
@@ -75,31 +93,63 @@ mod tests {
 
     #[test]
     fn a_wide_area_fits_many_columns_of_the_widest_chip() {
-        let c = columns(1000.0, 6);
+        let widest = label_width("golden");
+        let c = columns(1000.0, widest);
         assert!(c.count > 2, "{c:?}");
-        assert_eq!(c.cell_width, chip_width(6) + 2.0 * GRID_CELL_INSET);
+        assert_eq!(c.cell_width, chip_width(widest) + 2.0 * GRID_CELL_INSET);
         let used = c.count as f32 * c.cell_width + (c.count - 1) as f32 * GRID_GAP;
         assert!(used <= 1000.0);
     }
 
     #[test]
     fn a_narrow_area_still_has_two_columns_that_fit_it() {
-        let c = columns(280.0, 30);
+        let c = columns(280.0, label_width("a tag name of thirty letters!!"));
         assert_eq!(c.count, 2);
         assert!(2.0 * c.cell_width + GRID_GAP <= 280.0);
     }
 
     #[test]
     fn a_long_name_is_capped_at_the_widest_chip() {
-        let c = columns(2000.0, 200);
+        let c = columns(2000.0, label_width(&"a".repeat(200)));
         assert_eq!(c.chip_width(), CHIP_MAX_WIDTH);
     }
 
     #[test]
     fn a_name_is_cut_only_when_it_does_not_fit() {
-        assert_eq!(fit_label("pick", chip_width(4)), "pick");
+        assert_eq!(fit_label("pick", chip_width(label_width("pick"))), "pick");
         let long = "a very long tag name that goes on";
-        let cut = fit_label(long, chip_width(10));
-        assert!(cut.ends_with('…') && cut.chars().count() <= 10, "{cut}");
+        let room = chip_width(label_width("a very lon"));
+        let cut = fit_label(long, room);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert!(label_width(&cut) <= room - CHIP_CHROME + 0.1, "{cut}");
+    }
+
+    /// A checked label is SemiBold, wider than Regular most of all in narrow letters: its chip
+    /// has room for that, so checking the widest tag never pushes its marks.
+    #[test]
+    fn a_chip_has_room_for_its_label_in_semibold() {
+        for name in ["still", "fill-light", "lit"] {
+            assert!(
+                label_width(name) > text::text_width(name, TEXT_BODY),
+                "{name}"
+            );
+            assert_eq!(fit_label(name, chip_width(label_width(name))), name);
+        }
+    }
+
+    /// #528: a CJK name draws about twice as wide as a Latin name of as many characters. Its
+    /// chip is as wide as it draws, and in a narrower chip it is cut so it ends inside it.
+    #[test]
+    fn a_cjk_name_gets_the_room_it_draws_in() {
+        let cjk = "記者会見の様子";
+        assert!(label_width(cjk) >= 7.0 * TEXT_BODY, "{}", label_width(cjk));
+        assert!(label_width(cjk) > 1.5 * label_width("abcdefg"));
+        let c = columns(1000.0, label_width(cjk));
+        assert_eq!(fit_label(cjk, c.chip_width()), cjk, "fits its own column");
+
+        let narrow = chip_width(label_width("abcdefg"));
+        let cut = fit_label(cjk, narrow);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert!(label_width(&cut) <= narrow - CHIP_CHROME + 0.1, "{cut}");
     }
 }

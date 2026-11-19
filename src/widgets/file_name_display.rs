@@ -31,9 +31,10 @@ struct Fit<'a> {
     name: Cow<'a, str>,
 }
 
-/// A mini chip's width for a tag of `chars` characters.
-fn chip_width(chars: usize) -> f32 {
-    2.0 * SPACE_TIGHT + CHIP_MINI_CHAR_WIDTH * chars as f32
+/// A mini chip's width for `tag`, its label measured with the bundled font: a CJK character
+/// counts as the em it draws, not an average Latin letter (#535).
+fn chip_width(tag: &str) -> f32 {
+    2.0 * SPACE_TIGHT + text::text_width(tag, TEXT_CHIP_MINI)
 }
 
 /// The `·` between two parts, with the row's spacing on both sides.
@@ -66,7 +67,7 @@ fn fit<'a>(tags: &[String], name: &'a str, width: f32) -> Fit<'a> {
             0.0
         };
         let before_name = if name.is_empty() { 0.0 } else { separator() };
-        let need = gap + chip_width(tag.chars().count());
+        let need = gap + chip_width(tag);
         if used + need + badge + before_name + name_keeps > width {
             break;
         }
@@ -188,6 +189,20 @@ mod tests {
         assert_eq!(shown.chips, 0);
         assert_eq!(shown.hidden, 1);
         assert!(shown.name.ends_with('…'), "{shown:?}");
+    }
+
+    /// #535: a CJK tag draws about twice as wide as a Latin tag of as many characters. A row
+    /// with room for the Latin one does not take the CJK one, which then goes into `+N`.
+    #[test]
+    fn a_cjk_chip_is_fitted_at_the_width_it_draws() {
+        let latin = "abcdefghijkl";
+        let cjk = "記者会見の様子を撮影した";
+        assert!(chip_width(cjk) > 1.5 * chip_width(latin));
+        let room = chip_width(latin) + separator() + NAME_MIN_WIDTH;
+        let shown = fit(&tags(&[latin]), "MVI_0410.mp4", room);
+        assert_eq!(shown.chips, 1, "{shown:?}");
+        let shown = fit(&tags(&[cjk]), "MVI_0410.mp4", room);
+        assert_eq!((shown.chips, shown.hidden), (0, 1), "{shown:?}");
     }
 
     #[test]

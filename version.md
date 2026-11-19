@@ -2,6 +2,14 @@
 ## Fixed
 - "Tag commented videos", "Markers ⇄ comment" and the other batch actions that rename clips now say why a clip kept its name when the new name would make the names of its saved frames, subtitles or transcript too long. Before, they only said "Done with problems".
 
+# 0.256
+## Fixed
+- A Chinese, Japanese or Korean tag name no longer runs past its chip in the tag grid, over the star and into the next cell. The grid now measures tag names as they are drawn, so such a tag gets the room it needs, or is cut with "…" when it is very long.
+
+# 0.255
+## Fixed
+- In the file list, a row whose clip has a Chinese, Japanese or Korean tag no longer squeezes its tags past the row. Such a tag takes the room it is drawn in, and tags that do not fit go into the "+N" count as other tags do.
+
 # 0.254
 ## Fixed
 - Tagging a clip with a long name no longer leaves its saved frames, subtitle files or transcript behind under the old name. When the new name would make their names too long for the folder, the clip keeps its name (its comment and in/out points are still saved), and a note says so. Before, the clip was renamed and they stayed under the old name: its frames no longer showed, its subtitles were lost, and Generate subtitles paid to transcribe it again.
