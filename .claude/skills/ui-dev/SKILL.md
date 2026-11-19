@@ -280,8 +280,9 @@ the first look. Read it before any UI change.
   it; a link is only a side trip. Say a fact once: a notice and a row never both say it (the
   batch hint repeated the plan's time, with an unfilled `{ $duration }`).
 - **Narrow places put the label above the control** (`layout::stacked_row`): batch pages are
-  always under 440 px, so their option rows are stacked (`batch::page::option_row`); a label
-  column there left a wide empty gap.
+  mostly under 440 px, so their option rows are always stacked (`batch::page::option_row`); a
+  label column there left a wide empty gap. A batch page under 440 also stacks its button bar
+  (`layout::button_bar_stacked`, #545).
 - **Every string in en and ru**, in the feature's `##` section of both `.ftl` files. A Russian
   plural uses exactly `one`/`few`/`many` (the i18n test checks CLDR categories).
 - **Remove what nothing uses** (clippy runs with `-D warnings`): no speculative tokens or
