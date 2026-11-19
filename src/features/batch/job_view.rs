@@ -226,11 +226,17 @@ fn running<'a>(
         container(text::mono(name).wrapping(iced::widget::text::Wrapping::None)).clip(true)
     });
     let step = (!step.is_empty()).then(|| text::secondary(step));
-    // On a narrow page the step goes under the name, where it can wrap (#552).
+    // On a narrow page the step goes under the name, where it can wrap (#552). Beside it, the
+    // name takes what the step leaves (a `Fill` child is laid out last), so a long name is cut
+    // instead of squeezing the step (#562).
     let current: Element<'a, Message> = if narrow {
         Column::new().push(name).push(step).spacing(SPACE_XS).into()
     } else {
-        row![].push(name).push(step).spacing(SPACE_S).into()
+        row![]
+            .push(name.map(|name| name.width(iced::Length::Fill)))
+            .push(step)
+            .spacing(SPACE_S)
+            .into()
     };
     let body = column![
         heading(action, fl!("batch-job-running")),
