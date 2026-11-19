@@ -6,13 +6,10 @@
 ## Fixed
 - In the batch panel, the step of the clip a running job is working on (for example "transcribing… about 1 min left") is no longer squeezed to a word a line by a long clip name. The name is cut instead.
 
-<<<<<<< HEAD
-=======
 # 0.265
 ## Fixed
 - In the marker list, a comment of several lines whose first lines fill the row's three lines no longer gets a fourth line for its "…".
 
->>>>>>> origin/main
 # 0.264
 ## Fixed
 - When the batch panel is narrow, a running job's counts and the step of the clip in work no longer run past the panel's edge. The times and the step move onto their own lines.
