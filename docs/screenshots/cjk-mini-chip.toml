@@ -1,0 +1,14 @@
+# #535: a row of the file list with a Japanese tag keeps its chips inside the row.
+source = "../../tests/folder"
+open = "pick.wide.MVI_0401.mp4"
+seek = 2.0
+window = [1440, 720]
+panels = [800, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "記者会見の様子を撮影した.pick.wide.MVI_0402.mov"
