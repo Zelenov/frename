@@ -65,20 +65,23 @@ pub fn view<'a>(
     progress: Progress,
     directory: Option<&'a Directory>,
     waiting: Vec<(Action, FileId)>,
+    narrow: bool,
 ) -> Element<'a, Message> {
     let action = state.job_action().unwrap_or(state.action());
     if progress.running {
-        running(state, action, progress, directory, waiting)
+        running(state, action, progress, directory, waiting, narrow)
     } else {
-        result(state, action, progress, directory)
+        result(state, action, progress, directory, narrow)
     }
 }
 
-/// The action's name as the page's heading, with the job's state after it.
+/// The action's name as the page's heading, with the job's state after it, or under it when
+/// the page is too narrow for both (#545).
 fn heading<'a>(action: Action, state_word: String) -> Element<'a, Message> {
     row![text::heading(action.label()), text::secondary(state_word)]
         .spacing(SPACE_S)
         .align_y(Alignment::Center)
+        .wrap()
         .into()
 }
 
@@ -173,6 +176,7 @@ fn running<'a>(
     progress: Progress,
     directory: Option<&'a Directory>,
     waiting: Vec<(Action, FileId)>,
+    narrow: bool,
 ) -> Element<'a, Message> {
     let (item_fraction, step) = state.item_now();
     let time_left = match progress.time_left() {
@@ -222,8 +226,9 @@ fn running<'a>(
     };
     with_button_bar(
         page_body(body),
-        text::secondary(fl!("batch-runs-in-background")).into(),
+        Some(text::secondary(fl!("batch-runs-in-background")).into()),
         [cancel.into()],
+        narrow,
     )
 }
 
@@ -267,6 +272,7 @@ fn result<'a>(
     action: Action,
     progress: Progress,
     directory: Option<&'a Directory>,
+    narrow: bool,
 ) -> Element<'a, Message> {
     let outcome = Outcome::of(&progress, state.stopped());
     let mut body = Column::new()
@@ -301,8 +307,9 @@ fn result<'a>(
         .into();
     with_button_bar(
         page_body(body),
-        text::secondary("").into(),
+        None,
         again.into_iter().chain([close]),
+        narrow,
     )
 }
 
@@ -425,7 +432,8 @@ fn figures<'a>(action: Action, progress: &Progress) -> Element<'a, Message> {
             TEXT_SECONDARY,
         ));
     }
-    figures.into()
+    // A narrow page takes the figures onto a second line instead of past its edge (#545).
+    figures.wrap().vertical_spacing(SPACE_L).into()
 }
 
 fn figure<'a>(count: usize, word: String, color: Color) -> Element<'a, Message> {

@@ -2,6 +2,10 @@
 ## Fixed
 - In the file list, a clip name with accents written as separate marks, as names copied from a Mac often are, is no longer cut with "…" when the whole name fits.
 
+# 0.259
+## Fixed
+- When the batch panel is narrow, its close button, the result's figures and the buttons at the bottom no longer get squeezed or run past its edge. They move onto a second line, and so does the note that says why an action cannot start yet.
+
 # 0.258
 ## Fixed
 - In the file list, a clip whose name is in Chinese, Japanese or Korean now ends in "…" when the row is too narrow for it, instead of being cut off partway through the name or its extension.

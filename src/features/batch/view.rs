@@ -47,6 +47,21 @@ impl ListForm {
             ListForm::Dropdown
         }
     }
+
+    /// How wide the page is in a panel `width` px wide with the list in this form.
+    fn page_width(self, width: f32) -> f32 {
+        match self {
+            ListForm::Full => width - ACTION_LIST_WIDTH - LINE,
+            ListForm::Icons => width - ACTION_LIST_ICONS_WIDTH - LINE,
+            ListForm::Dropdown => width,
+        }
+    }
+}
+
+/// Whether the page of a panel `panel_width` px wide is under `BATCH_PAGE_NARROW_BELOW`, so its
+/// button bar is stacked (§13.9).
+fn page_is_narrow(panel_width: f32) -> bool {
+    ListForm::for_width(panel_width).page_width(panel_width) < BATCH_PAGE_NARROW_BELOW
 }
 
 /// Render the batch panel. `directory` names the files of the job and lists the files the
@@ -58,11 +73,13 @@ pub fn view<'a>(
     waiting: Vec<(Action, FileId)>,
 ) -> Element<'a, Message> {
     let body = responsive(move |size| {
+        let form = ListForm::for_width(size.width);
+        let narrow = page_is_narrow(size.width);
         let page = match state.progress() {
-            Some(progress) => job_view::view(state, progress, directory, waiting.clone()),
-            None => action_page(state, directory, spinner_frame),
+            Some(progress) => job_view::view(state, progress, directory, waiting.clone(), narrow),
+            None => action_page(state, directory, spinner_frame, narrow),
         };
-        match ListForm::for_width(size.width) {
+        match form {
             ListForm::Full => row![action_list(state), layout::vertical_line(), page].into(),
             ListForm::Icons => row![icon_list(state), layout::vertical_line(), page].into(),
             ListForm::Dropdown => column![action_dropdown(state), page].into(),
@@ -84,25 +101,32 @@ fn header(state: &BatchState) -> Element<'_, Message> {
             Position::Left,
         )
         .on_press(Message::SetActive(false));
+    // The title and the count take what the close button leaves (a `Fill` child is laid out
+    // last), and the count goes under the title when both do not fit, instead of squeezing the
+    // button (#545).
+    let title = row![
+        text::heading(fl!("batch-title")),
+        text::secondary(fl!(
+            "batch-checked-count",
+            count = (state.checked_count() as i64)
+        )),
+    ]
+    .spacing(SPACE_S)
+    .align_y(Alignment::Center)
+    .wrap();
     container(
-        row![
-            text::heading(fl!("batch-title")),
-            text::secondary(fl!(
-                "batch-checked-count",
-                count = (state.checked_count() as i64)
-            )),
-            iced::widget::space::horizontal(),
-            back,
-        ]
-        .spacing(SPACE_S)
-        .align_y(Alignment::Center),
+        row![container(title).width(Length::Fill), back]
+            .spacing(SPACE_S)
+            .align_y(Alignment::Center),
     )
     .padding(Padding {
+        top: BATCH_HEADER_PADDING_Y,
+        bottom: BATCH_HEADER_PADDING_Y,
         left: SPACE_L,
         right: SPACE_S,
-        ..Padding::ZERO
     })
-    .center_y(BATCH_HEADER_HEIGHT)
+    .width(Length::Fill)
+    .align_y(Alignment::Center)
     .into()
 }
 
@@ -226,18 +250,26 @@ pub(super) fn page_body<'a>(content: impl Into<Element<'a, Message>>) -> Element
 }
 
 /// The page, then the button bar, as every page of the panel has them. `lead` is on the bar's
-/// left: a hint, or a hint with an icon before it.
+/// left: a hint, or a hint with an icon before it. On a `narrow` page (under
+/// `BATCH_PAGE_NARROW_BELOW`, §13.9) the lead gets its own line above the buttons, and the
+/// buttons wrap instead of running past the edge (#545).
 pub(super) fn with_button_bar<'a>(
     body: Element<'a, Message>,
-    lead: Element<'a, Message>,
+    lead: Option<Element<'a, Message>>,
     buttons: impl IntoIterator<Item = Element<'a, Message>>,
+    narrow: bool,
 ) -> Element<'a, Message> {
-    column![
-        container(body).height(Length::Fill),
-        layout::button_bar_with(lead, buttons)
-    ]
-    .width(Length::Fill)
-    .into()
+    let bar = if narrow {
+        layout::button_bar_stacked(lead, buttons)
+    } else {
+        layout::button_bar_with(
+            lead.unwrap_or_else(|| iced::widget::space().into()),
+            buttons,
+        )
+    };
+    column![container(body).height(Length::Fill), bar]
+        .width(Length::Fill)
+        .into()
 }
 
 /// The chosen action's page for the checked files, and its button bar: why Run is off (with
@@ -246,6 +278,7 @@ fn action_page<'a>(
     state: &'a BatchState,
     directory: Option<&'a Directory>,
     spinner_frame: usize,
+    narrow: bool,
 ) -> Element<'a, Message> {
     let checked: Vec<&File> = directory.map_or_else(Vec::new, |dir| {
         dir.all_files()
@@ -285,8 +318,9 @@ fn action_page<'a>(
         .align_y(Alignment::Center);
         return with_button_bar(
             page_body(panel.page.map(Message::Action)),
-            waiting.into(),
+            Some(waiting.into()),
             [cancel],
+            narrow,
         );
     }
     let run = button::primary(panel.run)
@@ -294,14 +328,27 @@ fn action_page<'a>(
         .into();
     with_button_bar(
         page_body(panel.page.map(Message::Action)),
-        text::secondary(reason.unwrap_or_default()).into(),
+        reason.map(|reason| text::secondary(reason).into()),
         check_all.into_iter().chain([run]),
+        narrow,
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #545: a page under `BATCH_PAGE_NARROW_BELOW` takes the narrow button bar (§13.9). The
+    /// panel's 320 minimum always does; the full list leaves a page of 367 at 600, also narrow.
+    #[test]
+    fn a_page_under_440_is_narrow() {
+        let narrow = page_is_narrow;
+        assert!(narrow(320.0));
+        assert!(narrow(439.0));
+        assert!(narrow(BATCH_PANEL_WIDTH));
+        assert!(!narrow(560.0));
+        assert!(!narrow(ACTION_LIST_WIDTH + LINE + BATCH_PAGE_NARROW_BELOW));
+    }
 
     #[test]
     fn the_action_list_folds_as_the_panel_narrows() {
