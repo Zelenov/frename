@@ -1,3 +1,7 @@
+# 0.264
+## Fixed
+- When the batch panel is narrow, a running job's counts and the step of the clip in work no longer run past the panel's edge. The times and the step move onto their own lines.
+
 # 0.263
 ## Fixed
 - In the file list, a Japanese or Korean clip name copied from a Mac is no longer cut with "…" when the whole name fits.
