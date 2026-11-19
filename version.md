@@ -1,3 +1,7 @@
+# 0.268
+## Fixed
+- A clip name made of emoji, such as 🎉🎉🎉.mp4, is cut with "…" when it does not fit a narrow file list row. Before, it could be cut at the row's edge with no "…".
+
 # 0.267
 ## Fixed
 - When the batch panel is narrow, the clips waiting behind a running job keep their names, and their Remove buttons fit. Before, a name could disappear and the button's text ran out of it.

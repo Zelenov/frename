@@ -265,19 +265,36 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 /// the CJK fonts draw it (#538). Without the font every character counts as one em, so a name
 /// errs wide. A decomposed Japanese or Korean name (NFD, from a Mac) is drawn composed, so its
 /// marks take no room: a dakuten or handakuten, and a Hangul syllable's vowel and final jamo,
-/// count as nothing, its initial jamo as the syllable's em (#551).
+/// count as nothing, its initial jamo as the syllable's em (#551). A colour emoji the font does
+/// not have counts as [`EMOJI_EM`] em, as the emoji fonts draw it (#544).
 fn mono_advance(c: char) -> f32 {
     if is_composing_cjk_mark(c) {
         return 0.0;
     }
     let Some(face) = mono_face() else {
-        return TEXT_MONO;
+        return if is_colour_emoji(c) {
+            EMOJI_EM * TEXT_MONO
+        } else {
+            TEXT_MONO
+        };
     };
     match face.glyph_index(c) {
         Some(glyph) if face.glyph_hor_advance(glyph) == Some(0) => 0.0,
         Some(_) => MONO_CHAR_WIDTH,
+        None if is_colour_emoji(c) => EMOJI_EM * TEXT_MONO,
         None => TEXT_MONO,
     }
+}
+
+/// How many em a colour emoji takes: Noto Color Emoji draws one about 1.25 em wide, Segoe UI
+/// Emoji a little less, so a name of emoji errs wide rather than short (#544).
+const EMOJI_EM: f32 = 1.25;
+
+/// A character in the pictograph blocks that is drawn as a colour emoji: emoticons, symbols and
+/// pictographs, transport, the supplemental and extended-A pictographs, and the regional
+/// indicators that make flags (U+1F1E6–U+1F1FF, U+1F300–U+1FAFF).
+fn is_colour_emoji(c: char) -> bool {
+    matches!(c, '\u{1F1E6}'..='\u{1F1FF}' | '\u{1F300}'..='\u{1FAFF}')
 }
 
 /// A combining kana voicing mark (U+3099, U+309A), or a conjoining Hangul vowel or final jamo
@@ -606,6 +623,17 @@ mod tests {
             assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01, "{nfc}");
             assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd, "{nfc}");
         }
+    }
+
+    #[test]
+    fn a_colour_emoji_counts_wider_than_one_em_in_mono() {
+        let name = "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉.mp4";
+        let emoji = 10.0 * EMOJI_EM * TEXT_MONO;
+        assert!(mono_width(name) >= emoji, "{}", mono_width(name));
+        // A row as wide as ten one-em emoji and the extension: the name no longer fits whole.
+        let row = 10.0 * TEXT_MONO + mono_width(".mp4");
+        assert!(fit_mono(name, row).ends_with('…'), "{}", fit_mono(name, row));
+        assert_eq!(fit_mono(name, mono_width(name)), name);
     }
 
     #[test]
