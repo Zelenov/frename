@@ -58,6 +58,12 @@ impl ListForm {
     }
 }
 
+/// Whether the page of a panel `panel_width` px wide is under `BATCH_PAGE_NARROW_BELOW`, so its
+/// button bar is stacked (§13.9).
+fn page_is_narrow(panel_width: f32) -> bool {
+    ListForm::for_width(panel_width).page_width(panel_width) < BATCH_PAGE_NARROW_BELOW
+}
+
 /// Render the batch panel. `directory` names the files of the job and lists the files the
 /// panel can check; `spinner_frame` turns the loader of a run waiting to start.
 pub fn view<'a>(
@@ -68,7 +74,7 @@ pub fn view<'a>(
 ) -> Element<'a, Message> {
     let body = responsive(move |size| {
         let form = ListForm::for_width(size.width);
-        let narrow = form.page_width(size.width) < BATCH_PAGE_NARROW_BELOW;
+        let narrow = page_is_narrow(size.width);
         let page = match state.progress() {
             Some(progress) => job_view::view(state, progress, directory, waiting.clone(), narrow),
             None => action_page(state, directory, spinner_frame, narrow),
@@ -96,7 +102,8 @@ fn header(state: &BatchState) -> Element<'_, Message> {
         )
         .on_press(Message::SetActive(false));
     // The title and the count take what the close button leaves (a `Fill` child is laid out
-    // last), so a long count wraps instead of squeezing the button (#545).
+    // last), and the count goes under the title when both do not fit, instead of squeezing the
+    // button (#545).
     let title = row![
         text::heading(fl!("batch-title")),
         text::secondary(fl!(
@@ -105,18 +112,23 @@ fn header(state: &BatchState) -> Element<'_, Message> {
         )),
     ]
     .spacing(SPACE_S)
-    .align_y(Alignment::Center);
+    .align_y(Alignment::Center)
+    .wrap();
     container(
-        row![container(title).width(Length::Fill).clip(true), back]
+        row![container(title).width(Length::Fill), back]
             .spacing(SPACE_S)
             .align_y(Alignment::Center),
     )
+    // One line makes the header `BATCH_HEADER_HEIGHT` high; the count under the title makes it
+    // taller instead of crowding the line below.
     .padding(Padding {
+        top: (BATCH_HEADER_HEIGHT - LINE_HEADING) / 2.0,
+        bottom: (BATCH_HEADER_HEIGHT - LINE_HEADING) / 2.0,
         left: SPACE_L,
         right: SPACE_S,
-        ..Padding::ZERO
     })
-    .center_y(BATCH_HEADER_HEIGHT)
+    .width(Length::Fill)
+    .align_y(Alignment::Center)
     .into()
 }
 
@@ -250,33 +262,7 @@ pub(super) fn with_button_bar<'a>(
     narrow: bool,
 ) -> Element<'a, Message> {
     let bar = if narrow {
-        let buttons = row(buttons)
-            .spacing(SPACE_S)
-            .wrap()
-            .vertical_spacing(SPACE_S)
-            .align_x(Alignment::End);
-        column![
-            layout::horizontal_line(),
-            container(
-                Column::new()
-                    .push(lead)
-                    .push(
-                        container(buttons)
-                            .width(Length::Fill)
-                            .align_x(Alignment::End),
-                    )
-                    .spacing(SPACE_S),
-            )
-            .width(Length::Fill)
-            .padding(Padding {
-                top: SPACE_S,
-                bottom: SPACE_S,
-                left: SPACE_L,
-                right: SPACE_L,
-            })
-            .style(style::window),
-        ]
-        .into()
+        layout::button_bar_stacked(lead, buttons)
     } else {
         layout::button_bar_with(
             lead.unwrap_or_else(|| iced::widget::space().into()),
@@ -358,8 +344,7 @@ mod tests {
     /// panel's 320 minimum always does; the full list leaves a page of 367 at 600, also narrow.
     #[test]
     fn a_page_under_440_is_narrow() {
-        let narrow =
-            |width: f32| ListForm::for_width(width).page_width(width) < BATCH_PAGE_NARROW_BELOW;
+        let narrow = page_is_narrow;
         assert!(narrow(320.0));
         assert!(narrow(439.0));
         assert!(narrow(BATCH_PANEL_WIDTH));

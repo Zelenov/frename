@@ -1,6 +1,6 @@
 # 0.259
 ## Fixed
-- When the batch panel is narrow, its close button, the result's figures and the buttons at the bottom no longer get squeezed or run past the panel's edge. The figures and the buttons move onto a second line, and the reason Run is off gets its own line above the buttons.
+- When the batch panel is narrow, its close button, the result's figures and the buttons at the bottom no longer get squeezed or run past its edge. They move onto a second line, and so does the note that says why an action cannot start yet.
 
 # 0.258
 ## Fixed

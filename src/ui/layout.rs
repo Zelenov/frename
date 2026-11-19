@@ -243,6 +243,15 @@ pub fn button_bar<'a, M: 'a>(
     button_bar_with(text::secondary(hint).into(), buttons)
 }
 
+/// Inside the button bar: one line of controls makes the bar `BUTTON_BAR_HEIGHT` high, and a
+/// lead that wraps makes it taller instead of being cut (#545).
+const BUTTON_BAR_PADDING: Padding = Padding {
+    top: (BUTTON_BAR_HEIGHT - LINE - CONTROL_HEIGHT) / 2.0,
+    bottom: (BUTTON_BAR_HEIGHT - LINE - CONTROL_HEIGHT) / 2.0,
+    left: SPACE_L,
+    right: SPACE_L,
+};
+
 /// [`button_bar`] with `lead` on the left instead of a hint: a hint with an icon before it.
 pub fn button_bar_with<'a, M: 'a>(
     lead: Element<'a, M>,
@@ -254,15 +263,38 @@ pub fn button_bar_with<'a, M: 'a>(
         .extend(buttons)
         .spacing(SPACE_S)
         .align_y(Alignment::Center);
+    bar_frame(bar.into())
+}
+
+/// The button bar of a narrow page (§13.9, under 440): `lead` on its own line, then the buttons,
+/// right-aligned, wrapping onto a second line rather than running past the edge (#545).
+pub fn button_bar_stacked<'a, M: 'a>(
+    lead: Option<Element<'a, M>>,
+    buttons: impl IntoIterator<Item = Element<'a, M>>,
+) -> Element<'a, M> {
+    let buttons = row(buttons)
+        .spacing(SPACE_S)
+        .wrap()
+        .vertical_spacing(SPACE_S)
+        .align_x(Alignment::End);
+    let content = Column::new()
+        .push(lead)
+        .push(
+            container(buttons)
+                .width(Length::Fill)
+                .align_x(Alignment::End),
+        )
+        .spacing(SPACE_S);
+    bar_frame(content.into())
+}
+
+/// The line above a button bar, its inset and its background.
+fn bar_frame<'a, M: 'a>(content: Element<'a, M>) -> Element<'a, M> {
     column![
         horizontal_line(),
-        container(bar)
-            .padding(Padding {
-                left: SPACE_L,
-                right: SPACE_L,
-                ..Padding::ZERO
-            })
-            .center_y(BUTTON_BAR_HEIGHT - LINE)
+        container(content)
+            .width(Length::Fill)
+            .padding(BUTTON_BAR_PADDING)
             .style(style::window),
     ]
     .into()

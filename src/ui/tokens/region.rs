@@ -174,8 +174,10 @@ pub const BATCH_PANEL_WIDTH: f32 = 600.0;
 /// than `BATCH_ICON_LIST_FROM` it becomes a dropdown over the page (§13.9).
 pub const ACTION_LIST_ICONS_WIDTH: f32 = 48.0;
 pub const BATCH_ICON_LIST_FROM: f32 = 440.0;
-/// A batch page narrower than this puts the reason Run is off on its own line above the button
-/// bar, and the bar's buttons wrap (§13.9).
+/// A batch *page* (the panel's width less the action list, `batch::view::ListForm::page_width`)
+/// narrower than this stacks its button bar: the reason Run is off on its own line, the buttons
+/// wrapping under it (§13.9). Not the same width as `BATCH_ICON_LIST_FROM`, which is the
+/// *panel's*.
 pub const BATCH_PAGE_NARROW_BELOW: f32 = 440.0;
 /// The failed files' table scrolls after this many rows.
 pub const FAILED_ROWS_SHOWN: f32 = 8.0;
