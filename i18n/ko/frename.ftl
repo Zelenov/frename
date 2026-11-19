@@ -468,6 +468,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = { $n }개는 읽을 수 없음 ({ $how_to })
 batch-subtitles-shared-name-reason = 다른 비디오와 자막 이름이 같음
+batch-name-too-long-reason = 이름을 유지함: 저장한 프레임, 자막 또는 변환 결과의 이름이 너무 길어집니다
 batch-subtitles-unsupported-reason = 지원하지 않는 오디오 형식
 batch-subtitles-progress-transcribing = 텍스트 변환 중…
 batch-subtitles-progress-extracting = 오디오 추출 중 { $percent } %

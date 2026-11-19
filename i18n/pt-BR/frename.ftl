@@ -542,6 +542,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = Ilegíveis: { $n } ({ $how_to })
 batch-subtitles-shared-name-reason = compartilha o nome da legenda com outro vídeo
+batch-name-too-long-reason = manteve o nome: os quadros salvos, legendas ou transcrição ficariam com nomes longos demais
 batch-subtitles-unsupported-reason = formato de áudio não suportado
 batch-subtitles-progress-transcribing = transcrevendo…
 batch-subtitles-progress-extracting = extraindo o áudio { $percent }%

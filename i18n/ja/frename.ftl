@@ -468,6 +468,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = { $n } 件は読み取り不可（{ $how_to }）
 batch-subtitles-shared-name-reason = 字幕名が別のビデオと重複
+batch-name-too-long-reason = 名前を変更しませんでした: 保存したフレーム、字幕、文字起こしの名前が長すぎます
 batch-subtitles-unsupported-reason = 音声形式は非対応
 batch-subtitles-progress-transcribing = 文字起こし中…
 batch-subtitles-progress-extracting = 音声を抽出中 { $percent } %

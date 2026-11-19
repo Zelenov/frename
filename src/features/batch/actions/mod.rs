@@ -846,6 +846,11 @@ fn item_result(outcome: MoveOutcome) -> ItemResult {
         MoveOutcome::Failed(new_path) => {
             ItemResult::new(ItemStatus::Failed, Some(reparsed(new_path)))
         }
+        // Said in the failed list, as the open clip's save says it (#526, #533).
+        MoveOutcome::NameTooLong(path) => ItemResult {
+            reason: Some(fl!("batch-name-too-long-reason")),
+            ..ItemResult::new(ItemStatus::Failed, Some(reparsed(path)))
+        },
     }
 }
 
@@ -857,6 +862,19 @@ fn reparsed(path: PathBuf) -> (PathBuf, FileSnapshot) {
 
 #[cfg(test)]
 mod tests {
+    /// #533: a file that kept its name because a sidecar's would be too long fails with that
+    /// reason in the list, not a bare "Failed".
+    #[test]
+    fn a_name_too_long_fails_with_its_reason() {
+        let path = std::path::PathBuf::from("clip.mov");
+        let result = super::item_result(super::MoveOutcome::NameTooLong(path.clone()));
+        assert_eq!(result.status, super::ItemStatus::Failed);
+        assert_eq!(result.reason, Some(fl!("batch-name-too-long-reason")));
+        assert_eq!(result.update.map(|(p, _)| p), Some(path));
+        let failed = super::item_result(super::MoveOutcome::Failed("clip.mov".into()));
+        assert_eq!(failed.reason, None, "other refusals keep no reason");
+    }
+
     /// Prepare clips never redoes a described clip, whatever Describe with AI remembers: a run
     /// again costs nothing for what is done.
     #[test]
