@@ -1,0 +1,14 @@
+# #546: a long Japanese marker name over the video is cut with "…" to the player (render with --lang ja).
+source = "../../tests/folder"
+open = "MVI_0410.mp4"
+seek = 6.1
+window = [1024, 640]
+panels = [440, 240]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0410.mp4"
+markers = [
+  "0:02 — Night",
+  "0:06 — 夜が東から近づくにつれて海岸沿いの街の明かりが次々と灯り始め港の船も明かりをともす",
+]

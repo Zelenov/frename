@@ -1,3 +1,7 @@
+# 0.261
+## Fixed
+- A Chinese, Japanese or Korean marker name over the video is now cut with "…" when it is longer than the player. Before, it ran past the player's edge and lost its pencil.
+
 # 0.260
 ## Fixed
 - In the file list, a clip name with accents written as separate marks, as names copied from a Mac often are, is no longer cut with "…" when the whole name fits.
