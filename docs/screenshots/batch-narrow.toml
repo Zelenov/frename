@@ -1,0 +1,19 @@
+# #545: the batch panel at its 320 px minimum; the figures and the buttons wrap, the close × keeps its size.
+source = "../../tests/folder"
+open = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+seek = 2.0
+window = [1024, 640]
+panels = [428, 256]
+batch_action = "Tag commented videos"
+batch_run = true
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+comment = "Вода в кадре"
+transcript = "{}"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0401.mp4"
+comment = "Good take"

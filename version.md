@@ -1,3 +1,7 @@
+# 0.259
+## Fixed
+- When the batch panel is narrow, its close button, the result's figures and the buttons at the bottom no longer get squeezed or run past the panel's edge. The figures and the buttons move onto a second line, and the reason Run is off gets its own line above the buttons.
+
 # 0.258
 ## Fixed
 - In the file list, a clip whose name is in Chinese, Japanese or Korean now ends in "…" when the row is too narrow for it, instead of being cut off partway through the name or its extension.
