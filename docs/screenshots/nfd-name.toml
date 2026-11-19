@@ -1,0 +1,26 @@
+# #547: names with combining accents (NFD, as from a Mac) next to the same names composed (NFC).
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+seek = 2.0
+window = [1024, 640]
+panels = [471, 213]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "ёлка_йод_ёж_ёж.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "ёлка_йод_ёж_ёж.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "ёлка_йод_ёж_ёж_ёж.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "ёлка_йод_ёж_ёж_ёж.mov"
