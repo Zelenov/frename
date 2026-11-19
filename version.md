@@ -2,6 +2,10 @@
 ## Fixed
 - In the file list, a clip whose name is in Chinese, Japanese or Korean now ends in "…" when the row is too narrow for it, instead of being cut off partway through the name or its extension.
 
+# 0.257
+## Fixed
+- "Tag commented videos", "Markers ⇄ comment" and the other batch actions that rename clips now say why a clip kept its name when the new name would make the names of its saved frames, subtitles or transcript too long. Before, they only said "Done with problems".
+
 # 0.256
 ## Fixed
 - A Chinese, Japanese or Korean tag name no longer runs past its chip in the tag grid, over the star and into the next cell. The grid now measures tag names as they are drawn, so such a tag gets the room it needs, or is cut with "…" when it is very long.

@@ -548,6 +548,7 @@ batch-subtitles-shared-name = { $n ->
 }
 batch-subtitles-unreadable = Не може се прочитати: { $n } ({ $how_to })
 batch-subtitles-shared-name-reason = дели назив титла са другим снимком
+batch-name-too-long-reason = задржао је назив: називи његових сачуваних кадрова, титлова или транскрипта били би предугачки
 batch-subtitles-unsupported-reason = формат звука није подржан
 batch-subtitles-progress-transcribing = транскрипција…
 batch-subtitles-progress-extracting = издвајање звука { $percent } %

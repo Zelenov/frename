@@ -1,0 +1,19 @@
+# #533: "Tag commented videos" says why a clip kept its name when its transcript's would be too long.
+source = "../../tests/folder"
+open = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+seek = 2.0
+window = [1440, 720]
+panels = [640, 360]
+batch_action = "Tag commented videos"
+batch_run = true
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя.mov"
+comment = "Вода в кадре"
+transcript = "{}"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0401.mp4"
+comment = "Good take"
