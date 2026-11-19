@@ -1,0 +1,14 @@
+# #552: a running job at the batch panel's 320-px minimum (`--batch --ai`, e.g. `--lang de`): the times and the step go on their own lines.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1024, 640]
+panels = [428, 256]
+subtitles_stage = "uploading"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

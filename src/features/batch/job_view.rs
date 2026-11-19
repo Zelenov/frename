@@ -183,21 +183,37 @@ fn running<'a>(
         Some(left) => fl!("batch-time-left", time = duration_text(left.as_secs_f64())),
         None => fl!("batch-time-estimating"),
     };
-    let counts = row![
-        text::strong(fl!(
-            "batch-progress-files",
-            finished = (progress.finished as i64),
-            total = (progress.total as i64)
-        )),
-        iced::widget::space::horizontal(),
-        text::secondary(time_left),
-        text::secondary(fl!(
-            "batch-time-spent",
-            time = duration_text(progress.elapsed.as_secs_f64())
-        )),
-    ]
-    .spacing(SPACE_M)
-    .align_y(Alignment::Center);
+    let files = text::strong(fl!(
+        "batch-progress-files",
+        finished = (progress.finished as i64),
+        total = (progress.total as i64)
+    ));
+    let spent = text::secondary(fl!(
+        "batch-time-spent",
+        time = duration_text(progress.elapsed.as_secs_f64())
+    ));
+    // A narrow page (under 440, §13.9) puts the times under the count, wrapping, instead of
+    // squeezing them a word a line beside it (#552).
+    let counts: Element<'a, Message> = if narrow {
+        column![
+            files,
+            row![text::secondary(time_left), spent]
+                .spacing(SPACE_M)
+                .wrap()
+        ]
+        .spacing(SPACE_XS)
+        .into()
+    } else {
+        row![
+            files,
+            iced::widget::space::horizontal(),
+            text::secondary(time_left),
+            spent,
+        ]
+        .spacing(SPACE_M)
+        .align_y(Alignment::Center)
+        .into()
+    };
     let bar = progress_bar(
         0.0..=progress.total.max(1) as f32,
         progress.finished as f32 + item_fraction,
@@ -206,12 +222,16 @@ fn running<'a>(
     .style(style::progress);
     let current = state.current().map(|id| file_name(directory, id));
     // A long name is cut at the page's edge instead of running past it.
-    let current = row![]
-        .push(current.map(|name| {
-            container(text::mono(name).wrapping(iced::widget::text::Wrapping::None)).clip(true)
-        }))
-        .push((!step.is_empty()).then(|| text::secondary(step)))
-        .spacing(SPACE_S);
+    let name = current.map(|name| {
+        container(text::mono(name).wrapping(iced::widget::text::Wrapping::None)).clip(true)
+    });
+    let step = (!step.is_empty()).then(|| text::secondary(step));
+    // On a narrow page the step goes under the name, where it can wrap (#552).
+    let current: Element<'a, Message> = if narrow {
+        Column::new().push(name).push(step).spacing(SPACE_XS).into()
+    } else {
+        row![].push(name).push(step).spacing(SPACE_S).into()
+    };
     let body = column![
         heading(action, fl!("batch-job-running")),
         column![counts, bar, current].spacing(SPACE_S),

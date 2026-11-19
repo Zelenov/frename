@@ -1,3 +1,7 @@
+# 0.264
+## Fixed
+- When the batch panel is narrow, a running job's counts and the step of the clip in work no longer run past the panel's edge. The times and the step move onto their own lines.
+
 # 0.261
 ## Fixed
 - A Chinese, Japanese or Korean marker name over the video is now cut with "…" when it is longer than the player. Before, it ran past the player's edge and lost its pencil.
