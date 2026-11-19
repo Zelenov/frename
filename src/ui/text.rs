@@ -115,19 +115,6 @@ pub fn tooltip<'a>(content: impl IntoFragment<'a>) -> Text<'a> {
     styled(content, TEXT_TOOLTIP, LINE_TOOLTIP, font(), TEXT).wrapping(Wrapping::WordOrGlyph)
 }
 
-/// `line` cut with "…" at the end to at most `width` px, at `char_width` px a character: for
-/// `mono` text (`MONO_CHAR_WIDTH`), where it is exact. Inter text uses [`fit_body`] or
-/// [`fit_caption`], which measure the font. iced cannot cut text itself; a clipping
-/// container behind it keeps an estimate that is short from drawing past its background.
-pub fn fit(line: &str, width: f32, char_width: f32) -> Cow<'_, str> {
-    let room = (width / char_width).floor().max(0.0) as usize;
-    if line.chars().count() <= room {
-        return Cow::Borrowed(line);
-    }
-    let kept: String = line.chars().take(room.saturating_sub(1)).collect();
-    Cow::Owned(format!("{}…", kept.trim_end()))
-}
-
 /// The bundled Inter Regular, parsed once.
 fn inter() -> Option<&'static ttf_parser::Face<'static>> {
     use std::sync::OnceLock;
@@ -205,8 +192,9 @@ pub fn any_style_width(line: &str, size: f32) -> f32 {
 }
 
 /// `line` in body text cut with "…" so it is at most `width` px wide, measured with
-/// [`text_width`] (unlike [`fit`], which takes an average width a character and can run past
-/// its room in Cyrillic or CJK, #391).
+/// [`text_width`] (an average width a character can run past its room in Cyrillic or CJK,
+/// #391). iced cannot cut text itself; a clipping container behind it keeps a misjudged line
+/// from drawing past its background.
 pub fn fit_body(line: &str, width: f32) -> Cow<'_, str> {
     fit_measured(line, width, TEXT_BODY)
 }
@@ -261,6 +249,35 @@ fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option
         }
     }
     None
+}
+
+/// The bundled JetBrains Mono, parsed once.
+fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
+    use std::sync::OnceLock;
+    static MONO: OnceLock<Option<ttf_parser::Face<'static>>> = OnceLock::new();
+    MONO.get_or_init(|| ttf_parser::Face::parse(FONT_FILES[2], 0).ok())
+        .as_ref()
+}
+
+/// How wide `c` is in `mono` text: `MONO_CHAR_WIDTH` (JetBrains Mono's fixed advance) for a
+/// character the font has; one em for one it does not (CJK, Hangul, kana), as the CJK fonts
+/// draw it (#538). Without the font every character counts as one em, so a name errs wide.
+fn mono_advance(c: char) -> f32 {
+    match mono_face() {
+        Some(face) if face.glyph_index(c).is_some() => MONO_CHAR_WIDTH,
+        _ => TEXT_MONO,
+    }
+}
+
+/// How wide `line` is in `mono` text, each character [`mono_advance`] wide.
+pub fn mono_width(line: &str) -> f32 {
+    line.chars().map(mono_advance).sum()
+}
+
+/// `line` in `mono` text cut with "…" so it is at most `width` px wide, each character
+/// [`mono_advance`] wide: a CJK name is cut where it really ends, not at half its width (#538).
+pub fn fit_mono(line: &str, width: f32) -> Cow<'_, str> {
+    cut_with_ellipsis(line, measured_cut(line, width, mono_advance))
 }
 
 /// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
@@ -467,9 +484,9 @@ mod tests {
     }
 
     #[test]
-    fn a_line_longer_than_its_room_ends_in_an_ellipsis() {
-        assert_eq!(fit("short", 100.0, 10.0), "short");
-        let cut = fit("a very long comment line", 100.0, 10.0);
+    fn a_mono_line_longer_than_its_room_ends_in_an_ellipsis() {
+        assert_eq!(fit_mono("short", 100.0), "short");
+        let cut = fit_mono("a very long comment line", 10.0 * MONO_CHAR_WIDTH);
         assert!(cut.ends_with('…'));
         assert!(cut.chars().count() <= 10, "{cut}");
     }
