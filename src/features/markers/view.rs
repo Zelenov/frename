@@ -47,45 +47,23 @@ const FIELD_INSET: Padding = Padding {
     right: SPACE_S,
 };
 
-/// How wide `c` counts in a row's text: the generous Latin average, or the measured width of a
-/// character much wider than that, a CJK one's em (#548), so a Japanese comment is not taken for
-/// half its lines while a Latin one keeps the estimate it had.
-fn advance(c: char) -> f32 {
-    text::wide_body_advance(c, NAME_CHAR_ADVANCE)
-}
-
-/// How many lines one line of text (without a line break) wraps to.
-fn line_rows(line: &str) -> usize {
-    let width: f32 = line.chars().map(advance).sum();
-    ((width / NAME_ROOM).ceil() as usize).max(1)
-}
-
 /// A comment shows at most this many lines in a row that is not open.
 const COMMENT_LINES: usize = 3;
 
-/// `comment` cut to [`COMMENT_LINES`] lines of a row (by an estimate of each character's width),
-/// ending in "…" when cut.
+/// `comment` cut to [`COMMENT_LINES`] lines of a row (by [`text::wrap_estimate`]), ending in
+/// "…" when cut.
 fn clamped_comment(comment: &str) -> Cow<'_, str> {
     let all = comment.lines().count();
     let mut left = COMMENT_LINES;
     let mut kept: Vec<String> = Vec::new();
     for line in comment.lines() {
-        let lines = line_rows(line);
-        if lines > left {
-            let room = left as f32 * NAME_ROOM - advance('…');
-            let mut used = 0.0;
-            let cut: String = line
-                .chars()
-                .take_while(|&c| {
-                    used += advance(c);
-                    used <= room
-                })
-                .collect();
-            kept.push(format!("{}…", cut.trim_end()));
+        let estimate = text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, left);
+        if let Some(cut) = estimate.cut {
+            kept.push(format!("{}…", line[..cut].trim_end()));
             return Cow::Owned(kept.join("\n"));
         }
         kept.push(line.to_string());
-        left -= lines;
+        left -= estimate.rows;
         if left == 0 && kept.len() < all {
             let last = kept.pop().unwrap_or_default();
             kept.push(format!("{}…", last.trim_end()));
@@ -967,7 +945,14 @@ mod tests {
             "{} chars",
             cut.chars().count()
         );
-        assert_eq!(cut.lines().map(line_rows).sum::<usize>(), COMMENT_LINES);
+        assert_eq!(
+            cut.lines()
+                .map(
+                    |line| text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, usize::MAX).rows
+                )
+                .sum::<usize>(),
+            COMMENT_LINES
+        );
     }
 
     #[test]
@@ -978,7 +963,14 @@ mod tests {
         let long = "x".repeat(per_line * 5);
         let cut = clamped_comment(&long);
         assert!(cut.ends_with('…'), "{cut}");
-        assert_eq!(cut.lines().map(line_rows).sum::<usize>(), COMMENT_LINES);
+        assert_eq!(
+            cut.lines()
+                .map(
+                    |line| text::wrap_estimate(line, NAME_ROOM, NAME_CHAR_ADVANCE, usize::MAX).rows
+                )
+                .sum::<usize>(),
+            COMMENT_LINES
+        );
         let many = "one\ntwo\nthree\nfour";
         assert_eq!(clamped_comment(many), "one\ntwo\nthree…");
     }

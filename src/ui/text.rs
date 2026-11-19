@@ -280,16 +280,64 @@ pub fn fit_mono(line: &str, width: f32) -> Cow<'_, str> {
     cut_with_ellipsis(line, measured_cut(line, width, mono_advance))
 }
 
-/// How wide `c` counts in body text for an estimate of how many lines a wrapped text takes:
-/// `average`, the caller's per-character estimate, unless `c` is a full em wide, as a character
-/// Inter does not have (CJK, Hangul, kana) is drawn by the CJK font; then one em (#548).
-pub fn wide_body_advance(c: char, average: f32) -> f32 {
-    let measured = char_width(inter(), c, TEXT_BODY);
-    if measured >= TEXT_BODY {
-        measured
-    } else {
-        average
+/// How wide `c` counts in a wrapped-line estimate of body text: `average`, the caller's
+/// per-character estimate, or one em for a character Inter does not have (CJK, Hangul, kana),
+/// which the CJK font draws that wide (#548).
+fn estimated_body_advance(c: char, average: f32) -> f32 {
+    match inter() {
+        Some(face) if face.glyph_index(c).is_none() => TEXT_BODY,
+        None => TEXT_BODY,
+        Some(_) => average,
     }
+}
+
+/// How a line of body text wraps in rows `width` px wide, by [`wrap_estimate`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WrapEstimate {
+    /// The rows it takes, or `max_rows + 1` when it takes more.
+    pub rows: usize,
+    /// When it takes more than `max_rows`: the byte index to cut it at so that it ends with "…"
+    /// within `max_rows` rows.
+    pub cut: Option<usize>,
+}
+
+/// An estimate of how `line` (no line break in it) wraps in rows `width` px wide, each
+/// character `average` wide or one em ([`estimated_body_advance`]). It wraps row by row as the
+/// text does: a CJK line breaks between any two characters, so the room a character leaves at
+/// a row's end is lost, and a row holding one keeps an em more for the line-break rules that
+/// move a character to the next row (#548). A Latin row fills to `width`, as the old estimate.
+pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> WrapEstimate {
+    let ellipsis = estimated_body_advance('…', average);
+    let limit = |wide: bool| if wide { width - TEXT_BODY } else { width };
+    let mut rows = 1;
+    let mut used = 0.0;
+    let mut wide = false;
+    // Where the "…" would go, while on the last row allowed.
+    let mut cut = 0;
+    for (at, c) in line.char_indices() {
+        let advance = estimated_body_advance(c, average);
+        let row_wide = wide || advance > average;
+        if used > 0.0 && used + advance > limit(row_wide) {
+            if rows == max_rows {
+                return WrapEstimate {
+                    rows: rows + 1,
+                    cut: Some(cut),
+                };
+            }
+            rows += 1;
+            used = 0.0;
+            wide = false;
+            if rows == max_rows {
+                cut = at;
+            }
+        }
+        used += advance;
+        wide = wide || advance > average;
+        if rows == max_rows && used + ellipsis <= limit(wide) {
+            cut = at + c.len_utf8();
+        }
+    }
+    WrapEstimate { rows, cut: None }
 }
 
 /// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
@@ -493,6 +541,27 @@ mod tests {
                 format!("{}…", line[..end].trim_end())
             );
         }
+    }
+
+    /// #548: a Latin row fills to its width at the caller's average; a CJK row holds whole
+    /// characters, one em each, with one em kept for the line-break rules.
+    #[test]
+    fn a_wrap_estimate_fills_latin_rows_and_keeps_cjk_rows_whole() {
+        let room = 46.0 * 7.0;
+        assert_eq!(wrap_estimate(&"x".repeat(46), room, 7.0, 9).rows, 1);
+        assert_eq!(wrap_estimate(&"x".repeat(47), room, 7.0, 9).rows, 2);
+        let per_row = ((room - TEXT_BODY) / TEXT_BODY).floor() as usize;
+        assert_eq!(wrap_estimate(&"夜".repeat(per_row), room, 7.0, 9).rows, 1);
+        assert_eq!(
+            wrap_estimate(&"夜".repeat(per_row + 1), room, 7.0, 9).rows,
+            2
+        );
+        let long = "夜".repeat(per_row * 5);
+        let estimate = wrap_estimate(&long, room, 7.0, 3);
+        assert_eq!(estimate.rows, 4);
+        let kept = long[..estimate.cut.unwrap()].chars().count();
+        assert!(kept <= 3 * per_row, "{kept}");
+        assert!(kept >= 3 * per_row - 2, "{kept}");
     }
 
     #[test]
