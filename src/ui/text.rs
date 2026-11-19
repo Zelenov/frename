@@ -260,12 +260,18 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 }
 
 /// How wide `c` is in `mono` text: `MONO_CHAR_WIDTH` (JetBrains Mono's fixed advance) for a
-/// character the font has; one em for one it does not (CJK, Hangul, kana), as the CJK fonts
-/// draw it (#538). Without the font every character counts as one em, so a name errs wide.
+/// character the font has; nothing for one it draws with no advance, a combining accent as in a
+/// name copied from a Mac (NFD, #547); one em for one it does not have (CJK, Hangul, kana), as
+/// the CJK fonts draw it (#538). Without the font every character counts as one em, so a name
+/// errs wide.
 fn mono_advance(c: char) -> f32 {
-    match mono_face() {
-        Some(face) if face.glyph_index(c).is_some() => MONO_CHAR_WIDTH,
-        _ => TEXT_MONO,
+    let Some(face) = mono_face() else {
+        return TEXT_MONO;
+    };
+    match face.glyph_index(c) {
+        Some(glyph) if face.glyph_hor_advance(glyph) == Some(0) => 0.0,
+        Some(_) => MONO_CHAR_WIDTH,
+        None => TEXT_MONO,
     }
 }
 
@@ -562,6 +568,16 @@ mod tests {
         let kept = long[..estimate.cut.unwrap()].chars().count();
         assert!(kept <= 3 * per_row, "{kept}");
         assert!(kept >= 3 * per_row - 2, "{kept}");
+    }
+
+    /// #547: a combining accent draws with no advance in JetBrains Mono, so a name in NFD (as
+    /// from a Mac) measures as wide as the same name in NFC, and is not cut where it fits.
+    #[test]
+    fn a_name_with_combining_accents_measures_as_its_composed_form() {
+        let nfc = "Сцена_й_ё_café.mov";
+        let nfd = "Сцена_и\u{306}_е\u{308}_cafe\u{301}.mov";
+        assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01);
+        assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd);
     }
 
     #[test]
