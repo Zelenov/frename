@@ -39,12 +39,10 @@ fn in_out_ms(start: Option<f32>, end: Option<f32>) -> Option<(u64, u64)> {
 /// How tall the side list's row of a cue with `text` is, as an estimate good enough to scroll a
 /// row into view: rows take their natural height, so short cues leave no holes.
 fn cue_row_height(text: &str) -> f32 {
-    let per_line = (CUE_TEXT_WIDTH / BODY_CHAR_WIDTH).max(1.0) as usize;
-    let lines: usize = text
-        .lines()
-        .map(|line| line.chars().count().div_ceil(per_line).max(1))
-        .sum::<usize>()
-        .max(1);
+    // A CJK line wraps by whole characters, one em each, not the Latin average (#548).
+    let line_rows =
+        |line: &str| text::wrap_estimate(line, CUE_TEXT_WIDTH, BODY_CHAR_WIDTH, usize::MAX).rows;
+    let lines: usize = text.lines().map(line_rows).sum::<usize>().max(1);
     CUE_ROW_CHROME + LINE_BODY * lines as f32
 }
 
