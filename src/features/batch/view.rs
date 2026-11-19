@@ -119,11 +119,9 @@ fn header(state: &BatchState) -> Element<'_, Message> {
             .spacing(SPACE_S)
             .align_y(Alignment::Center),
     )
-    // One line makes the header `BATCH_HEADER_HEIGHT` high; the count under the title makes it
-    // taller instead of crowding the line below.
     .padding(Padding {
-        top: (BATCH_HEADER_HEIGHT - LINE_HEADING) / 2.0,
-        bottom: (BATCH_HEADER_HEIGHT - LINE_HEADING) / 2.0,
+        top: BATCH_HEADER_PADDING_Y,
+        bottom: BATCH_HEADER_PADDING_Y,
         left: SPACE_L,
         right: SPACE_S,
     })
