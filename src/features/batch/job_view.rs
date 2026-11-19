@@ -243,7 +243,7 @@ fn running<'a>(
         column![counts, bar, current].spacing(SPACE_S),
         figures(action, &progress),
     ]
-    .push(waiting_runs(waiting, directory))
+    .push(waiting_runs(waiting, directory, narrow))
     .spacing(SPACE_XL);
     let cancel = if progress.cancelled {
         button::secondary(fl!("batch-stopping"))
@@ -259,28 +259,41 @@ fn running<'a>(
 }
 
 /// The runs of one clip waiting behind the job, each with a button that takes it out of the line.
+/// On a narrow page the action and its button go on a line under the clip's name, which would
+/// otherwise be squeezed to nothing (#563).
 fn waiting_runs<'a>(
     waiting: Vec<(Action, FileId)>,
     directory: Option<&'a Directory>,
+    narrow: bool,
 ) -> Option<Element<'a, Message>> {
     if waiting.is_empty() {
         return None;
     }
     let count = waiting.len();
     let rows = Column::with_children(waiting.into_iter().map(|(action, clip)| {
-        row![
-            container(
-                text::mono(file_name(directory, clip)).wrapping(iced::widget::text::Wrapping::None)
-            )
-            .clip(true)
-            .width(iced::Length::Fill),
-            text::secondary(action.label()),
-            button::secondary(fl!("batch-waiting-remove"))
-                .on_press(Message::Withdraw(action, clip)),
-        ]
-        .spacing(SPACE_M)
-        .align_y(Alignment::Center)
-        .into()
+        let name = container(
+            text::mono(file_name(directory, clip)).wrapping(iced::widget::text::Wrapping::None),
+        )
+        .clip(true)
+        .width(iced::Length::Fill);
+        let label = text::secondary(action.label());
+        let remove = button::secondary(fl!("batch-waiting-remove"))
+            .on_press(Message::Withdraw(action, clip));
+        if narrow {
+            column![
+                name,
+                row![container(label).width(iced::Length::Fill), remove]
+                    .spacing(SPACE_M)
+                    .align_y(Alignment::Center)
+            ]
+            .spacing(SPACE_XS)
+            .into()
+        } else {
+            row![name, label, remove]
+                .spacing(SPACE_M)
+                .align_y(Alignment::Center)
+                .into()
+        }
     }))
     .spacing(SPACE_S);
     Some(
