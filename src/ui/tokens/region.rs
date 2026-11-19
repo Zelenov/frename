@@ -3,7 +3,7 @@
 
 use super::size::*;
 use super::space::*;
-use super::typography::{LINE_BODY, LINE_CAPTION, LINE_SUBTITLE, LINE_TOOLTIP};
+use super::typography::{LINE_BODY, LINE_CAPTION, LINE_HEADING, LINE_SUBTITLE, LINE_TOOLTIP};
 
 // The main window (§13.9): the minimum fits a 1280×680 work area with room to spare.
 pub const WINDOW_MIN_WIDTH: f32 = 900.0;
@@ -167,6 +167,9 @@ pub const GRID_MIN_COLUMNS: u32 = 2;
 
 // Batch panel (§13.6).
 pub const BATCH_HEADER_HEIGHT: f32 = 48.0;
+/// Above and below the header's title: one line makes the header `BATCH_HEADER_HEIGHT` high, the
+/// count wrapped under the title makes it taller (#545).
+pub const BATCH_HEADER_PADDING_Y: f32 = (BATCH_HEADER_HEIGHT - LINE_HEADING) / 2.0;
 pub const ACTION_LIST_WIDTH: f32 = 232.0;
 /// The panel's width on entering batch mode: the whole action list and a page.
 pub const BATCH_PANEL_WIDTH: f32 = 600.0;
@@ -174,6 +177,11 @@ pub const BATCH_PANEL_WIDTH: f32 = 600.0;
 /// than `BATCH_ICON_LIST_FROM` it becomes a dropdown over the page (§13.9).
 pub const ACTION_LIST_ICONS_WIDTH: f32 = 48.0;
 pub const BATCH_ICON_LIST_FROM: f32 = 440.0;
+/// A batch *page* (the panel's width less the action list, `batch::view::ListForm::page_width`)
+/// narrower than this stacks its button bar: the reason Run is off on its own line, the buttons
+/// wrapping under it (§13.9). Not the same width as `BATCH_ICON_LIST_FROM`, which is the
+/// *panel's*.
+pub const BATCH_PAGE_NARROW_BELOW: f32 = 440.0;
 /// The failed files' table scrolls after this many rows.
 pub const FAILED_ROWS_SHOWN: f32 = 8.0;
 /// A job's progress bar.
