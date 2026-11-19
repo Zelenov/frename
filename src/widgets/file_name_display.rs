@@ -4,7 +4,8 @@
 //!
 //! Fitting: chips are never cut in the middle. Those that do not fit become a `+N` badge before
 //! the name, and chips give way before the name, which keeps at least `NAME_MIN_WIDTH`. The name
-//! is cut with "…" at the end: mono text has a fixed width, so the cut is exact.
+//! is cut with "…" at the end, measured per character: a character JetBrains Mono lacks (CJK)
+//! counts as the em its fallback font draws.
 
 use std::borrow::Cow;
 
@@ -47,14 +48,15 @@ fn hidden_badge_width(hidden: usize) -> f32 {
     2.0 * SPACE_TIGHT + CAPTION_CHAR_WIDTH * (hidden.to_string().len() + 1) as f32
 }
 
-/// `name` cut with "…" to at most `width` px of mono text.
+/// `name` cut with "…" to at most `width` px of mono text, measured per character: a CJK
+/// character draws one em wide, not `MONO_CHAR_WIDTH` (#538).
 fn fit_name(name: &str, width: f32) -> Cow<'_, str> {
-    text::fit(name, width, MONO_CHAR_WIDTH)
+    text::fit_mono(name, width)
 }
 
 /// How `tags` and `name` share `width` px.
 fn fit<'a>(tags: &[String], name: &'a str, width: f32) -> Fit<'a> {
-    let name_width = MONO_CHAR_WIDTH * name.chars().count() as f32;
+    let name_width = text::mono_width(name);
     let name_keeps = name_width.min(NAME_MIN_WIDTH);
     let mut used = 0.0;
     let mut chips = 0;
@@ -212,5 +214,20 @@ mod tests {
         assert_eq!(cut.chars().count(), 10);
         assert!(cut.ends_with('…'));
         assert_eq!(fit_name("short.mp4", 400.0), "short.mp4");
+    }
+
+    /// #538: CJK characters are not in JetBrains Mono and draw about one em wide. A CJK name
+    /// is measured at that width, so in a narrow row it is cut with "…" within its room.
+    #[test]
+    fn a_cjk_name_is_cut_with_an_ellipsis_where_it_draws() {
+        let name = "記者会見の様子を撮影した.mov";
+        assert!(text::mono_width(name) > 11.5 * TEXT_MONO + 4.0 * MONO_CHAR_WIDTH);
+        let room = 10.0 * MONO_CHAR_WIDTH;
+        let cut = fit_name(name, room);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert!(text::mono_width(&cut) <= room, "{cut}");
+        // Latin and Cyrillic are in the font, so they keep the exact mono width.
+        assert!((text::mono_width("MVI_0410.mp4") - 12.0 * MONO_CHAR_WIDTH).abs() < 0.01);
+        assert!((text::mono_width("Съёмка") - 6.0 * MONO_CHAR_WIDTH).abs() < 0.01);
     }
 }

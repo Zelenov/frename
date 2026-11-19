@@ -1,0 +1,14 @@
+# #538: an untagged clip with a Japanese name in a narrow file list is cut with "…".
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+seek = 2.0
+window = [1440, 720]
+panels = [800, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "記者会見の様子を撮影したインタビュー.mov"

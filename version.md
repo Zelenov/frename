@@ -1,3 +1,7 @@
+# 0.258
+## Fixed
+- In the file list, a clip whose name is in Chinese, Japanese or Korean is now cut with "…" when the row is too narrow for it. Before, the name was cut off at a random character with no "…", and its extension did not show.
+
 # 0.256
 ## Fixed
 - A Chinese, Japanese or Korean tag name no longer runs past its chip in the tag grid, over the star and into the next cell. The grid now measures tag names as they are drawn, so such a tag gets the room it needs, or is cut with "…" when it is very long.
