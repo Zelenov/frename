@@ -1,0 +1,26 @@
+# #551: Japanese and Korean names in NFD (as from a Mac) next to the same names composed (NFC).
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+seek = 2.0
+window = [1024, 640]
+panels = [471, 213]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "한국어_인터뷰_촬영.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "한국어_인터뷰_촬영.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "がぞう_ぱんだ_撮影.mov"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "がぞう_ぱんだ_撮影.mov"

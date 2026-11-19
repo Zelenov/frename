@@ -1,3 +1,7 @@
+# 0.263
+## Fixed
+- In the file list, a Japanese or Korean clip name copied from a Mac is no longer cut with "…" when the whole name fits.
+
 # 0.260
 ## Fixed
 - In the file list, a clip name with accents written as separate marks, as names copied from a Mac often are, is no longer cut with "…" when the whole name fits.
