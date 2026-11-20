@@ -95,7 +95,7 @@ pub fn view<'a>(
             // While searching, a file found by its comment shows the hit instead of the first line.
             let fragment = props
                 .directory
-                .and_then(|dir| dir.comment_fragment(file, FRAGMENT_LEAD, text::caption_advance));
+                .and_then(|dir| dir.comment_fragment(file, FRAGMENT_LEAD, text::caption_advance()));
             let comment_line = row![
                 space().width(lead_width),
                 comment_line(snapshot, fragment, props.spinner_frame, comment_width)

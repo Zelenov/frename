@@ -133,24 +133,25 @@ fn inter_semibold() -> Option<&'static ttf_parser::Face<'static>> {
         .as_ref()
 }
 
-/// How wide `c` is in Inter at `size` px; a character Inter does not have (CJK, Hangul, kana)
-/// counts as one em, as the CJK fonts draw it.
+/// How wide `c` is in `face` at `size` px; a character the face does not have (CJK, Hangul,
+/// kana in Inter), or no face, counts as one em, as the CJK fonts draw it.
 fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
-    face.and_then(|face| {
-        let advance = face.glyph_hor_advance(face.glyph_index(c)?)?;
-        Some(f32::from(advance) * size / f32::from(face.units_per_em()))
-    })
-    .unwrap_or(size)
+    face.and_then(|face| advance_in(face, c, size))
+        .unwrap_or(size)
+}
+
+/// `c`'s own advance in `face` at `size` px, `None` when the face does not have it.
+fn advance_in(face: &ttf_parser::Face<'_>, c: char, size: f32) -> Option<f32> {
+    let advance = face.glyph_hor_advance(face.glyph_index(c)?)?;
+    Some(f32::from(advance) * size / f32::from(face.units_per_em()))
 }
 
 /// How wide `c` is at `size` px in the UI language's Regular face: the CJK family's own advance
 /// when the UI language draws in one and it has `c` (its Latin is wider than Inter's, #539),
 /// else Inter's (see [`char_width`]).
 fn regular_advance(cjk: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
-    match cjk {
-        Some(face) if face.glyph_index(c).is_some() => char_width(Some(face), c, size),
-        _ => char_width(inter(), c, size),
-    }
+    cjk.and_then(|face| advance_in(face, c, size))
+        .unwrap_or_else(|| char_width(inter(), c, size))
 }
 
 /// How wide `line` is at `size` px in the UI language's Regular font (see [`regular_advance`]).
@@ -402,11 +403,13 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     WrapEstimate { rows, cut: None }
 }
 
-/// How wide `c` is in caption text: the measured counterpart of [`text_width`] at
-/// `TEXT_CAPTION`, for cuts that are not from the end of a line (a path cut from its front,
-/// #408). Not the `CAPTION_CHAR_WIDTH` average.
-pub fn caption_advance(c: char) -> f32 {
-    char_width(inter(), c, TEXT_CAPTION)
+/// How wide a character is in caption text: the measured counterpart of [`text_width`] at
+/// `TEXT_CAPTION`, in the UI language's font (#539), for cuts that are not from the end of a line
+/// (a path cut from its front, #408). Not the `CAPTION_CHAR_WIDTH` average. Looks the font up
+/// once, so take it once per line, not per character.
+pub fn caption_advance() -> impl Fn(char) -> f32 {
+    let [cjk, _] = cjk_faces();
+    move |c| regular_advance(cjk, c, TEXT_CAPTION)
 }
 
 /// How a run of a [`body_runs`] line is drawn.
@@ -444,7 +447,7 @@ pub fn caption_marked<'a, M: 'a>(
     width: f32,
 ) -> Element<'a, M> {
     // Measured like `fit_caption`, so Cyrillic or CJK keeps its "…" (#408).
-    let cut = measured_cut(line, width, caption_advance);
+    let cut = measured_cut(line, width, caption_advance());
     let too_long = cut.is_some();
     let end = cut.unwrap_or(line.len());
     let shown = &line[..end];
@@ -595,7 +598,7 @@ mod tests {
             "Съёмка на набережной: закат и огни",
             "夕方の港の空撮。ロケ地は函館の港",
         ] {
-            let end = measured_cut(line, 90.0, caption_advance).expect("too long for 90 px");
+            let end = measured_cut(line, 90.0, caption_advance()).expect("too long for 90 px");
             let shown = format!("{}…", &line[..end]);
             assert!(text_width(&shown, TEXT_CAPTION) <= 90.0, "{shown}");
             assert_eq!(
@@ -653,31 +656,38 @@ mod tests {
         }
     }
 
+    /// #539: in a CJK UI, Latin is measured in the CJK font that draws it (its i, l, t and 1 are
+    /// wider than Inter's), for every bundled language; a character the subset lacks (Cyrillic)
+    /// falls back to Inter, as it is drawn.
     #[test]
     fn a_cjk_ui_measures_latin_in_its_own_font() {
-        let japanese = crate::ui::tokens::cjk_font_files()
-            .next()
-            .and_then(|file| ttf_parser::Face::parse(file, 0).ok())
-            .expect("the Japanese Regular face");
-        // Noto Sans CJK draws i, l, t and 1 wider than Inter (other letters narrower).
         let line = "little1111";
         let in_inter: f32 = line
             .chars()
             .map(|c| regular_advance(None, c, TEXT_BODY))
             .sum();
-        let in_cjk: f32 = line
-            .chars()
-            .map(|c| regular_advance(Some(&japanese), c, TEXT_BODY))
-            .sum();
-        assert!(in_cjk > in_inter * 1.1, "{in_cjk} vs {in_inter}");
-        // Fitted to its Inter width, the line no longer fits whole in the CJK font.
-        assert_eq!(fit_regular(line, in_inter, TEXT_BODY, None), line);
-        assert!(fit_regular(line, in_inter, TEXT_BODY, Some(&japanese)).ends_with('…'));
-        // A character the subset lacks (Cyrillic) is measured in Inter, as it falls back there.
-        assert_eq!(
-            regular_advance(Some(&japanese), 'Ж', TEXT_BODY),
-            regular_advance(None, 'Ж', TEXT_BODY)
-        );
+        for file in crate::ui::tokens::cjk_font_files().step_by(2) {
+            let face = ttf_parser::Face::parse(file, 0).expect("a CJK Regular face");
+            let in_cjk: f32 = line
+                .chars()
+                .map(|c| regular_advance(Some(&face), c, TEXT_BODY))
+                .sum();
+            assert!(in_cjk > in_inter * 1.1, "{in_cjk} vs {in_inter}");
+            // Fitted to its Inter width, the line no longer fits whole in the CJK font.
+            assert_eq!(fit_regular(line, in_inter, TEXT_BODY, None), line);
+            assert!(fit_regular(line, in_inter, TEXT_BODY, Some(&face)).ends_with('…'));
+            assert_eq!(
+                regular_advance(Some(&face), 'Ж', TEXT_BODY),
+                regular_advance(None, 'Ж', TEXT_BODY)
+            );
+        }
+        // Caption cuts that are not from the end (a search hit, a path) measure the same way.
+        for c in line.chars().chain(['Ж', '漢']) {
+            assert_eq!(
+                caption_advance()(c),
+                regular_advance(cjk_faces()[0], c, TEXT_CAPTION)
+            );
+        }
     }
 
     #[test]
