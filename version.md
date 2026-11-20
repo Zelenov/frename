@@ -1,3 +1,7 @@
+# 0.269
+## Fixed
+- With the interface in Japanese, Korean or Chinese, a long name in Latin letters is cut with "…" on one line, as in English. Before, it could wrap onto a second line or run past its row, for example a long folder name in the recent folders list.
+
 # 0.268
 ## Fixed
 - In the file list, a clip name made of emoji, such as 🎉🎉🎉.mp4 or ✅✅✅.mp4, is cut with "…" when it does not fit the row. Before, it could be cut at the row's edge with no "…".
