@@ -1,5 +1,6 @@
 # #580: "kitchen" typed in the file search bar; the hit in a comment that starts with flags is shown
-# after "…" from a whole flag. Not a README image; for looking at the fix (`frename --demo`).
+# after "…" from a whole flag; the two letters before the hit put the old cut inside a flag. Not a
+# README image; for looking at the fix (`frename --demo`).
 source = "../../tests/folder"
 open = "pick.wide.MVI_0701.mp4"
 seek = 2.0

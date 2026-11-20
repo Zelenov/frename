@@ -69,6 +69,7 @@ pub(crate) fn fragment(
     lead: f32,
     width: impl Fn(char) -> f32,
 ) -> Option<CommentFragment> {
+    use unicode_segmentation::UnicodeSegmentation;
     let (line, mut hits) = comment.lines().find_map(|line| {
         let hits = hits(line, words);
         (!hits.is_empty()).then_some((line, hits))
@@ -84,7 +85,6 @@ pub(crate) fn fragment(
     const ELLIPSIS: &str = "…";
     // The longest tail of what comes before the hit that fits beside the "…", in whole
     // characters as the reader sees them, so it never starts with half a flag (#580).
-    use unicode_segmentation::UnicodeSegmentation;
     let keep = lead - width('…');
     let mut used = 0.0;
     let mut cut = first;

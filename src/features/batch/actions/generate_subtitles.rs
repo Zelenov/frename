@@ -1166,6 +1166,7 @@ fn item_result(path: &Path, result: anyhow::Result<Outcome>, cancelled: bool) ->
 
 /// Why a file failed, short enough for the result list; the log has the whole error.
 fn failure_reason(e: &anyhow::Error) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
     if let Some(api) = api_error(e) {
         return fl!(
             "batch-subtitles-reason-soniox",
@@ -1189,9 +1190,7 @@ fn failure_reason(e: &anyhow::Error) -> String {
     }
     // 120 characters as the reader sees them: a path in it never ends in half a flag (#580).
     let cause = e.root_cause().to_string();
-    unicode_segmentation::UnicodeSegmentation::graphemes(cause.as_str(), true)
-        .take(120)
-        .collect()
+    cause.graphemes(true).take(120).collect()
 }
 
 /// A written video. A Premiere transcript among the files is worth saying, so the result list

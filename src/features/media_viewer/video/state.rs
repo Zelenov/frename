@@ -2052,9 +2052,8 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
 /// What the "not a time in this clip" notice shows of the pasted `text`: its first 24 characters
 /// as the reader sees them, so it never ends in half a flag (#580).
 fn unreadable_shown(text: &str) -> String {
-    unicode_segmentation::UnicodeSegmentation::graphemes(text.trim(), true)
-        .take(24)
-        .collect()
+    use unicode_segmentation::UnicodeSegmentation;
+    text.trim().graphemes(true).take(24).collect()
 }
 
 #[cfg(test)]
@@ -2069,8 +2068,6 @@ mod tests {
         player.more_open()
     }
 
-    /// #416: the note that a comment was not saved shows over the next clip; that clip saying
-    /// where it continued does not replace it, while a short note gives way as before.
     /// #580: a pasted text the notice cuts keeps every flag whole.
     #[test]
     fn an_unreadable_timecode_is_shown_in_whole_flags() {
@@ -2083,6 +2080,8 @@ mod tests {
         assert_eq!(super::unreadable_shown("  12:34x  "), "12:34x");
     }
 
+    /// #416: the note that a comment was not saved shows over the next clip; that clip saying
+    /// where it continued does not replace it, while a short note gives way as before.
     #[test]
     fn a_long_note_is_not_replaced_by_where_the_clip_continued() {
         let mut player = VideoPlayerState::default();
