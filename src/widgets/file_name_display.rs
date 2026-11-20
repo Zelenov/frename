@@ -230,4 +230,11 @@ mod tests {
         assert!((text::mono_width("MVI_0410.mp4") - 12.0 * MONO_CHAR_WIDTH).abs() < 0.01);
         assert!((text::mono_width("Съёмка") - 6.0 * MONO_CHAR_WIDTH).abs() < 0.01);
     }
+
+    /// #572: a mini chip of emoji is as wide as it draws, so the row keeps the name's "…".
+    #[test]
+    fn an_emoji_chip_is_fitted_at_the_width_it_draws() {
+        let drawn = 2.0 * SPACE_TIGHT + 6.0 * 1.245 * TEXT_CHIP_MINI;
+        assert!(chip_width("🎉🎉🎉🎉🎉🎉") >= drawn);
+    }
 }

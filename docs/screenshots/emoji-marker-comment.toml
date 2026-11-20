@@ -1,0 +1,15 @@
+# #572: the marker list with a long comment of emoji; it stops at 3 lines with its "…" inside the row.
+source = "../../tests/folder"
+open = "MVI_0410.mp4"
+seek = 1.0
+window = [1024, 640]
+panels = [440, 240]
+marker_list = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0410.mp4"
+markers = [
+  "0:02 — 🌃 — 🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃",
+  "0:06 — Lights — Lights come on along the coast as the night moves in from the east. Lights come on along the coast as the night moves in from the east.",
+]
