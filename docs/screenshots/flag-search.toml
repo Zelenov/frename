@@ -10,7 +10,7 @@ search = "kitchen"
 [[files]]
 from = "file_example_MP4_480_1_5MG.mp4"
 name = "pick.wide.MVI_0701.mp4"
-comment = "🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸 kitchen, the chef at work."
+comment = "🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸ab kitchen, the chef at work."
 
 [[files]]
 from = "file_example_MOV_480_700kB.mov"
