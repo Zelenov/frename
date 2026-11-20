@@ -1,3 +1,7 @@
+# 0.274
+## Fixed
+- A name of joined emoji, such as 👨‍👩‍👧, 👍🏽 or ❤️, is measured as the one emoji each draws, so it is cut with "…" where it really ends. Before, each counted two or three emoji wide and the name was cut at a fraction of its room.
+
 # 0.273
 ## Fixed
 - A search hit in a comment, a pasted text the player cannot read as a time, and a batch failure reason are cut between whole flags and emoji. Before, the cut could leave half a flag, a lone boxed letter.

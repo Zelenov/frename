@@ -1,0 +1,16 @@
+# #579: a clip named in joined emoji (a family, a skin tone, a heart with U+FE0F, a technologist)
+# in a narrow file list: each counts as the one emoji it draws, so the name is cut with "…" where
+# it really ends.
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+seek = 2.0
+window = [1440, 720]
+panels = [800, 300]
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "👨‍👩‍👧👍🏽❤️👩‍💻👨‍👩‍👧👍🏽❤️👩‍💻👨‍👩‍👧👍🏽❤️👩‍💻👨‍👩‍👧👍🏽❤️👩‍💻.mov"
