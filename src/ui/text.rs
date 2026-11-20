@@ -173,8 +173,8 @@ pub fn text_width(line: &str, size: f32) -> f32 {
     line_width(line, |c| regular_advance(cjk, c, size))
 }
 
-/// How wide `line` is, each character `advance(c)` wide and each cluster (a character as the
-/// reader sees it) as [`cluster_width`].
+/// How wide `line` is: the sum of its clusters (characters as the reader sees them), each
+/// [`cluster_width`] wide with `advance`.
 pub fn line_width(line: &str, advance: impl Fn(char) -> f32) -> f32 {
     use unicode_segmentation::UnicodeSegmentation;
     line.graphemes(true)
@@ -183,19 +183,26 @@ pub fn line_width(line: &str, advance: impl Fn(char) -> f32) -> f32 {
 }
 
 /// How wide one grapheme cluster draws, each character `advance(c)` wide: the sum of its
-/// characters, except an emoji made of several (a family joined with U+200D, a skin tone, an
-/// emoji with U+FE0F, a keycap), which draws as one emoji, as wide as [`EMOJI_PROBE`] measures
-/// (#579). A flag stays two: Segoe UI Emoji on Windows draws its two letters side by side.
+/// characters, except an emoji made of several that starts with an emoji (a family joined with
+/// U+200D, a skin tone) or holds U+FE0F or a keycap mark (❤️, 1️⃣), which draws as one emoji, as
+/// wide as [`EMOJI_PROBE`] measures (#579). Everything else keeps the sum, which errs wide:
+/// - a flag, also with a mark after it: Segoe UI Emoji on Windows draws its two letters side by
+///   side (on Linux and macOS a flag draws as one emoji, a little narrower);
+/// - a skin tone after a letter, which draws as the letter and a swatch.
+///
+/// A joined emoji newer than the system's emoji font draws as its parts side by side and is
+/// measured short; such names are rare.
 pub fn cluster_width(cluster: &str, advance: impl Fn(char) -> f32) -> f32 {
     let mut chars = cluster.chars();
-    let several = chars.next().is_some() && chars.next().is_some();
-    let flag = cluster.chars().all(is_regional_indicator);
-    if several
-        && !flag
-        && cluster
-            .chars()
-            .any(|c| is_colour_emoji(c) || matches!(c, '\u{FE0F}' | '\u{20E3}'))
-    {
+    let first = chars.next();
+    let several = chars.next().is_some();
+    let one_emoji = several
+        && !cluster.chars().any(is_regional_indicator)
+        && (first.is_some_and(is_colour_emoji)
+            || cluster
+                .chars()
+                .any(|c| matches!(c, '\u{FE0F}' | '\u{20E3}')));
+    if one_emoji {
         advance(EMOJI_PROBE)
     } else {
         cluster.chars().map(advance).sum()
@@ -890,13 +897,31 @@ mod tests {
             "👩\u{200D}💻",
         ] {
             assert_eq!(mono_width(joined), one, "{joined:?}");
-            assert_eq!(text_width(joined, TEXT_BODY), text_width("🎉", TEXT_BODY));
-            assert_eq!(
-                any_style_width(joined, TEXT_BODY),
-                any_style_width("🎉", TEXT_BODY)
-            );
+            let body = text_width("🎉", TEXT_BODY);
+            assert_eq!(text_width(joined, TEXT_BODY), body, "{joined:?}");
+            let label = any_style_width("🎉", TEXT_BODY);
+            assert_eq!(any_style_width(joined, TEXT_BODY), label, "{joined:?}");
         }
+        // The probe is an emoji no bundled font has, so it measures as the emoji font draws one.
+        assert!(one >= EMOJI_EM * TEXT_MONO);
+        let cjk = crate::ui::tokens::cjk_font_files().map(|f| ttf_parser::Face::parse(f, 0).ok());
+        let faces: Vec<_> = [inter(), inter_semibold(), mono_face()]
+            .into_iter()
+            .map(|face| face.cloned())
+            .chain(cjk)
+            .flatten()
+            .collect();
+        for face in &faces {
+            assert!(face.glyph_index(EMOJI_PROBE).is_none());
+        }
+        // A flag stays two letters, also with a mark after it; a skin tone after a letter keeps
+        // the letter and the swatch.
         assert_eq!(mono_width("🇵🇹"), 2.0 * one);
+        assert_eq!(
+            mono_width("🇵🇹\u{FE0F}"),
+            mono_width("🇵🇹") + mono_width("\u{FE0F}")
+        );
+        assert_eq!(mono_width("a🏽"), mono_width("a") + one);
         assert_eq!(mono_width("e\u{301}"), mono_width("é"));
         // A name of joined emoji is cut where it really ends: ten families fit ten emoji.
         let families = "👨\u{200D}👩\u{200D}👧".repeat(10);
