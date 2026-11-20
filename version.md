@@ -1,3 +1,7 @@
+# 0.270
+## Fixed
+- A tag, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.
+
 # 0.269
 ## Fixed
 - With the interface in Japanese, Korean or Chinese, a long name in Latin letters is cut with "…" on one line, as in English. Before, it could wrap onto a second line or run past its row, for example a long folder name in the recent folders list.

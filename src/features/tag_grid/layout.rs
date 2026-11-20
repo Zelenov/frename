@@ -16,8 +16,7 @@ const CHIP_CHROME: f32 = 2.0 * SPACE_S + CHECK_SIZE + 2.0 * SPACE_TIGHT + CHIP_M
 
 /// How wide `name` draws on a chip, checked (strong) or not, in the UI language's font, measured
 /// with the bundled fonts: a CJK character counts as the em it draws, not an average Latin letter
-/// (#528). A colour emoji draws a little wider than the em it counts as; the chip's clip keeps
-/// such a name inside it.
+/// (#528), and a colour emoji as the 1.25 em the emoji font draws (#572).
 ///
 /// Remembered by name and UI font: every view sizes the grid by the widest of all the tags.
 pub fn label_width(name: &str) -> f32 {

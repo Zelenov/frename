@@ -134,10 +134,20 @@ fn inter_semibold() -> Option<&'static ttf_parser::Face<'static>> {
 }
 
 /// How wide `c` is in `face` at `size` px; a character the face does not have (CJK, Hangul,
-/// kana in Inter), or no face, counts as one em, as the CJK fonts draw it.
+/// kana in Inter), or no face, counts as [`missing_advance`].
 fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
     face.and_then(|face| advance_in(face, c, size))
-        .unwrap_or(size)
+        .unwrap_or_else(|| missing_advance(c, size))
+}
+
+/// How wide a character the font lacks draws at `size` px, in the font it falls back to: one em,
+/// as the CJK fonts draw it, or [`EMOJI_EM`] em for a colour emoji (#544, #572).
+fn missing_advance(c: char, size: f32) -> f32 {
+    if is_colour_emoji(c) {
+        EMOJI_EM * size
+    } else {
+        size
+    }
 }
 
 /// `c`'s own advance in `face` at `size` px, `None` when the face does not have it.
@@ -297,11 +307,7 @@ fn mono_advance(c: char) -> f32 {
     if is_composing_cjk_mark(c) {
         return 0.0;
     }
-    let missing = if is_colour_emoji(c) {
-        EMOJI_EM * TEXT_MONO
-    } else {
-        TEXT_MONO
-    };
+    let missing = missing_advance(c, TEXT_MONO);
     let Some(face) = mono_face() else {
         return missing;
     };
@@ -345,12 +351,11 @@ pub fn fit_mono(line: &str, width: f32) -> Cow<'_, str> {
 
 /// How wide `c` counts in a wrapped-line estimate of body text: `average`, the caller's
 /// per-character estimate, or one em for a character Inter does not have (CJK, Hangul, kana),
-/// which the CJK font draws that wide (#548).
+/// which the CJK font draws that wide (#548), a colour emoji [`EMOJI_EM`] em (#572).
 fn estimated_body_advance(c: char, average: f32) -> f32 {
     match inter() {
-        Some(face) if face.glyph_index(c).is_none() => TEXT_BODY,
-        None => TEXT_BODY,
-        Some(_) => average,
+        Some(face) if face.glyph_index(c).is_some() => average,
+        _ => missing_advance(c, TEXT_BODY),
     }
 }
 
@@ -688,6 +693,39 @@ mod tests {
                 regular_advance(cjk_faces()[0], c, TEXT_CAPTION)
             );
         }
+    }
+
+    /// #572: emoji in body, caption and label text are measured as wide as the emoji font draws
+    /// them, so a cut line keeps its "…" inside its room.
+    #[test]
+    fn colour_emoji_count_as_wide_as_drawn_in_body_and_caption_text() {
+        let drawn = |line: &str, size: f32| -> f32 {
+            line.chars()
+                .map(|c| {
+                    if is_colour_emoji(c) {
+                        1.245 * size
+                    } else {
+                        char_width(inter(), c, size)
+                    }
+                })
+                .sum()
+        };
+        let line = "🎉".repeat(40);
+        let body = fit_body(&line, 200.0);
+        assert!(body.ends_with('…'));
+        assert!(drawn(&body, TEXT_BODY) <= 200.0, "{body}");
+        let caption = fit_caption(&line, 200.0);
+        assert!(drawn(&caption, TEXT_CAPTION) <= 200.0, "{caption}");
+        let label = fit_any_style(&line, 120.0, TEXT_BODY);
+        assert!(drawn(&label, TEXT_BODY) <= 120.0, "{label}");
+        assert!(text_width("✅", TEXT_BODY) >= EMOJI_EM * TEXT_BODY);
+        // A letter Inter lacks still counts one em, and Inter's own letters their advance.
+        assert_eq!(text_width("漢", TEXT_BODY), TEXT_BODY);
+        assert!(text_width("a", TEXT_BODY) < TEXT_BODY);
+        // The marker comment's row estimate counts an emoji as wide too.
+        let rows = |line: &str| wrap_estimate(line, 10.0 * TEXT_BODY, 7.0, usize::MAX).rows;
+        assert_eq!(rows(&"漢".repeat(8)), 1);
+        assert_eq!(rows(&"🎉".repeat(8)), 2);
     }
 
     #[test]
