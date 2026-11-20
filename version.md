@@ -1,6 +1,6 @@
 # 0.272
 ## Fixed
-- A name cut with "…" keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone letter box from a flag.
+- A name cut with "…", such as 🇺🇸🇩🇪🇫🇷.mp4 in a narrow file list, keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone boxed letter from a flag.
 
 # 0.271
 ## Fixed
