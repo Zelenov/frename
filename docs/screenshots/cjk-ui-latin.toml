@@ -1,0 +1,21 @@
+# #539: with the UI in Japanese, Latin text is drawn in Noto Sans CJK, whose i, l, t and 1 are
+# wider than Inter's: a long folder name in the recent folders list is cut with "…" inside its row.
+# Render with `--lang ja`.
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+folder_name = "2026-11 Lisbon"
+recent_menu = true
+window = [1440, 800]
+panels = [560, 340]
+
+[[recent]]
+folder = "Shoots/Still life tilt little 1111 111 111 lit till it fits 1111 lilt"
+minutes_ago = 95
+
+[[recent]]
+folder = "Shoots/2026-07 Madeira"
+minutes_ago = 1500
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"

@@ -143,10 +143,20 @@ fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
     .unwrap_or(size)
 }
 
-/// How wide `line` is in Inter at `size` px, from the font's own advances (see [`char_width`]).
+/// How wide `c` is at `size` px in the UI language's Regular face: the CJK family's own advance
+/// when the UI language draws in one and it has `c` (its Latin is wider than Inter's, #539),
+/// else Inter's (see [`char_width`]).
+fn regular_advance(cjk: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
+    match cjk {
+        Some(face) if face.glyph_index(c).is_some() => char_width(Some(face), c, size),
+        _ => char_width(inter(), c, size),
+    }
+}
+
+/// How wide `line` is at `size` px in the UI language's Regular font (see [`regular_advance`]).
 pub fn text_width(line: &str, size: f32) -> f32 {
-    let face = inter();
-    line.chars().map(|c| char_width(face, c, size)).sum()
+    let [cjk, _] = cjk_faces();
+    line.chars().map(|c| regular_advance(cjk, c, size)).sum()
 }
 
 /// The bundled CJK files' faces, parsed once each (by the file's address), for the UI language
@@ -191,7 +201,7 @@ pub fn any_style_width(line: &str, size: f32) -> f32 {
     line.chars().map(|c| any_style_advance(&cjk, c, size)).sum()
 }
 
-/// `line` in body text cut with "…" so it is at most `width` px wide, measured with
+/// `line` in body text cut with "…" so it is at most `width` px wide, measured as
 /// [`text_width`] (an average width a character can run past its room in Cyrillic or CJK,
 /// #391). iced cannot cut text itself; a clipping container behind it keeps a misjudged line
 /// from drawing past its background.
@@ -207,10 +217,21 @@ pub fn fit_caption(line: &str, width: f32) -> Cow<'_, str> {
 /// One pass that stops as soon as the line is known not to fit, so a long comment costs what
 /// its row shows, not its whole length (it runs for every row on every view).
 fn fit_measured(line: &str, width: f32, size: f32) -> Cow<'_, str> {
-    let face = inter();
+    let [cjk, _] = cjk_faces();
+    fit_regular(line, width, size, cjk)
+}
+
+/// `line` cut with "…" to `width` px at `size` px, measured in `cjk` (the UI language's CJK
+/// Regular face, if any) and Inter as [`regular_advance`].
+fn fit_regular<'a>(
+    line: &'a str,
+    width: f32,
+    size: f32,
+    cjk: Option<&ttf_parser::Face<'_>>,
+) -> Cow<'a, str> {
     cut_with_ellipsis(
         line,
-        measured_cut(line, width, |c| char_width(face, c, size)),
+        measured_cut(line, width, |c| regular_advance(cjk, c, size)),
     )
 }
 
@@ -630,6 +651,33 @@ mod tests {
             assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01, "{nfc}");
             assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd, "{nfc}");
         }
+    }
+
+    #[test]
+    fn a_cjk_ui_measures_latin_in_its_own_font() {
+        let japanese = crate::ui::tokens::cjk_font_files()
+            .next()
+            .and_then(|file| ttf_parser::Face::parse(file, 0).ok())
+            .expect("the Japanese Regular face");
+        // Noto Sans CJK draws i, l, t and 1 wider than Inter (other letters narrower).
+        let line = "little1111";
+        let in_inter: f32 = line
+            .chars()
+            .map(|c| regular_advance(None, c, TEXT_BODY))
+            .sum();
+        let in_cjk: f32 = line
+            .chars()
+            .map(|c| regular_advance(Some(&japanese), c, TEXT_BODY))
+            .sum();
+        assert!(in_cjk > in_inter * 1.1, "{in_cjk} vs {in_inter}");
+        // Fitted to its Inter width, the line no longer fits whole in the CJK font.
+        assert_eq!(fit_regular(line, in_inter, TEXT_BODY, None), line);
+        assert!(fit_regular(line, in_inter, TEXT_BODY, Some(&japanese)).ends_with('…'));
+        // A character the subset lacks (Cyrillic) is measured in Inter, as it falls back there.
+        assert_eq!(
+            regular_advance(Some(&japanese), 'Ж', TEXT_BODY),
+            regular_advance(None, 'Ж', TEXT_BODY)
+        );
     }
 
     #[test]
