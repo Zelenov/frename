@@ -713,6 +713,28 @@ mod tests {
     }
 
     #[test]
+    fn a_colour_emoji_counts_wider_than_one_em_in_mono() {
+        let name = "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉.mp4";
+        let emoji = 10.0 * EMOJI_EM * TEXT_MONO;
+        assert!(mono_width(name) >= emoji, "{}", mono_width(name));
+        // A row as wide as ten one-em emoji and the extension: the name no longer fits whole.
+        let row = 10.0 * TEXT_MONO + mono_width(".mp4");
+        assert!(
+            fit_mono(name, row).ends_with('…'),
+            "{}",
+            fit_mono(name, row)
+        );
+        assert_eq!(fit_mono(name, mono_width(name)), name);
+        // Emoji outside the pictograph planes, a flag's letters and a skin tone count as wide; a
+        // symbol JetBrains Mono draws itself (⚡) stays one mono cell.
+        for c in ['✅', '⭐', '☕', '⚽', '\u{1F1FA}', '\u{1F3FD}', '🀄'] {
+            assert!(mono_advance(c) >= EMOJI_EM * TEXT_MONO, "{c}");
+        }
+        assert_eq!(mono_advance('⚡'), MONO_CHAR_WIDTH);
+        assert_eq!(mono_advance('a'), MONO_CHAR_WIDTH);
+    }
+
+    #[test]
     fn a_mono_line_longer_than_its_room_ends_in_an_ellipsis() {
         assert_eq!(fit_mono("short", 100.0), "short");
         let cut = fit_mono("a very long comment line", 10.0 * MONO_CHAR_WIDTH);
