@@ -373,12 +373,14 @@ pub struct WrapEstimate {
 }
 
 /// An estimate of how `line` (no line break in it) wraps in rows `width` px wide, each
-/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji 1.25
-/// ([`estimated_body_advance`]). It wraps row by row as the text does, between whole characters
-/// as the reader sees them (grapheme clusters, #568): a CJK or emoji line breaks between any two
-/// of them, so the room one leaves at a row's end is lost, and a row holding one keeps an em more for the line-break rules that
-/// move a character to the next row (#548). A Latin row fills to `width`, as the old estimate.
+/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji
+/// [`EMOJI_EM`] em ([`estimated_body_advance`]). It wraps row by row as the text does, between
+/// whole characters as the reader sees them (grapheme clusters, #568): a CJK or emoji line
+/// breaks between any two of them, so the room one leaves at a row's end is lost, and a row
+/// holding one keeps an em more for the line-break rules that move a character to the next row
+/// (#548). A Latin row fills to `width`, as the old estimate.
 pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> WrapEstimate {
+    use unicode_segmentation::UnicodeSegmentation;
     let ellipsis = estimated_body_advance('…', average);
     let limit = |wide: bool| if wide { width - TEXT_BODY } else { width };
     let mut rows = 1;
@@ -386,7 +388,6 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     let mut wide = false;
     // Where the "…" would go, while on the last row allowed.
     let mut cut = 0;
-    use unicode_segmentation::UnicodeSegmentation;
     for (at, cluster) in line.grapheme_indices(true) {
         let advance: f32 = cluster
             .chars()
