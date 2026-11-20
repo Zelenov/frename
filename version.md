@@ -1,6 +1,6 @@
 # 0.271
 ## Fixed
-- A Korean or Japanese name copied from a Mac (where its letters are stored apart) is no longer cut with "…" where it fits, in the recent folders list, tag chips and other lists. Before, it was measured up to three times too wide.
+- A Korean or Japanese name copied from a Mac (where its letters are stored apart) is no longer cut with "…" where it fits, in the recent folders list, the file list's tag chips and the tag grid. Before, it was measured up to three times too wide.
 
 # 0.270
 ## Fixed
