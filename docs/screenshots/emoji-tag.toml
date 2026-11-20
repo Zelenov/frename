@@ -1,5 +1,5 @@
-# #572: a tag of emoji, the longest of the folder, fits its chip in the tag grid and in the file
-# list's mini chips; a comment of emoji ends in "…" inside its row.
+# #572: a tag of emoji, the longest of the folder, fits its chip in the file list's mini chips, or
+# ends in "…" when the tag grid's column is narrower; a comment of emoji ends in "…" inside its row.
 source = "../../tests/folder"
 open = "🎉🎬🎤🎥🎧🎹🎸.pick.MVI_0410.mp4"
 seek = 10.0

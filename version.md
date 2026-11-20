@@ -1,6 +1,6 @@
 # 0.270
 ## Fixed
-- A tag, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.
+- A tag, marker name, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.
 
 # 0.269
 ## Fixed

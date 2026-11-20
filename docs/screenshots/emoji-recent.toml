@@ -1,0 +1,19 @@
+# #572: a folder name of emoji in the recent folders list is cut with "…" inside its row.
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+folder_name = "2026-11 Lisbon"
+recent_menu = true
+window = [1440, 800]
+panels = [560, 340]
+
+[[recent]]
+folder = "Shoots/🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃🎉🌊🌅🚤🌃"
+minutes_ago = 95
+
+[[recent]]
+folder = "Shoots/2026-07 Madeira"
+minutes_ago = 1500
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"

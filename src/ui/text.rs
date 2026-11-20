@@ -283,7 +283,7 @@ fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option
     None
 }
 
-/// How many em a colour emoji takes in [`mono_advance`]: Noto Color Emoji draws one 1.245 em
+/// How many em a colour emoji takes when the font lacks it ([`missing_advance`]): Noto Color Emoji draws one 1.245 em
 /// wide, Segoe UI Emoji a little less, so a name of emoji errs wide rather than short (#544).
 const EMOJI_EM: f32 = 1.25;
 
@@ -370,8 +370,9 @@ pub struct WrapEstimate {
 }
 
 /// An estimate of how `line` (no line break in it) wraps in rows `width` px wide, each
-/// character `average` wide or one em ([`estimated_body_advance`]). It wraps row by row as the
-/// text does: a CJK line breaks between any two characters, so the room a character leaves at
+/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji 1.25
+/// ([`estimated_body_advance`]). It wraps row by row as the text does: a CJK or emoji line breaks
+/// between any two characters, so the room a character leaves at
 /// a row's end is lost, and a row holding one keeps an em more for the line-break rules that
 /// move a character to the next row (#548). A Latin row fills to `width`, as the old estimate.
 pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> WrapEstimate {
@@ -698,7 +699,7 @@ mod tests {
     /// #572: emoji in body, caption and label text are measured as wide as the emoji font draws
     /// them, so a cut line keeps its "…" inside its room.
     #[test]
-    fn colour_emoji_count_as_wide_as_drawn_in_body_and_caption_text() {
+    fn colour_emoji_count_as_wide_as_drawn_in_body_caption_label_and_wrap_estimates() {
         let drawn = |line: &str, size: f32| -> f32 {
             line.chars()
                 .map(|c| {
@@ -715,8 +716,10 @@ mod tests {
         assert!(body.ends_with('…'));
         assert!(drawn(&body, TEXT_BODY) <= 200.0, "{body}");
         let caption = fit_caption(&line, 200.0);
+        assert!(caption.ends_with('…'));
         assert!(drawn(&caption, TEXT_CAPTION) <= 200.0, "{caption}");
         let label = fit_any_style(&line, 120.0, TEXT_BODY);
+        assert!(label.ends_with('…'));
         assert!(drawn(&label, TEXT_BODY) <= 120.0, "{label}");
         assert!(text_width("✅", TEXT_BODY) >= EMOJI_EM * TEXT_BODY);
         // A letter Inter lacks still counts one em, and Inter's own letters their advance.
