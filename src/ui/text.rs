@@ -269,13 +269,16 @@ fn cut_with_ellipsis(line: &str, end: Option<usize>) -> Cow<'_, str> {
 
 /// Where `line` must stop to end in "…" within `width` px, each character `advance(c)` wide: the
 /// byte index the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
+/// It cuts between whole characters as the reader sees them (grapheme clusters), never inside a
+/// flag, an emoji sequence or a syllable (#568).
 fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option<usize> {
+    use unicode_segmentation::UnicodeSegmentation;
     let room = width - advance('…');
     let mut used = 0.0;
-    // Where the text stops if it gets a "…": the last char that fits in `room`.
+    // Where the text stops if it gets a "…": the last cluster that fits in `room`.
     let mut cut = None;
-    for (at, c) in line.char_indices() {
-        used += advance(c);
+    for (at, cluster) in line.grapheme_indices(true) {
+        used += cluster.chars().map(&advance).sum::<f32>();
         if cut.is_none() && used > room {
             cut = Some(at);
         }
@@ -383,8 +386,12 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     let mut wide = false;
     // Where the "…" would go, while on the last row allowed.
     let mut cut = 0;
-    for (at, c) in line.char_indices() {
-        let advance = estimated_body_advance(c, average);
+    // A row breaks between whole characters as the reader sees them, never inside a cluster (#568).
+    for (at, cluster) in unicode_segmentation::UnicodeSegmentation::grapheme_indices(line, true) {
+        let advance: f32 = cluster
+            .chars()
+            .map(|c| estimated_body_advance(c, average))
+            .sum();
         let row_wide = wide || advance > average;
         if used > 0.0 && used + advance > limit(row_wide) {
             if rows == max_rows {
@@ -403,7 +410,7 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
         used += advance;
         wide = wide || advance > average;
         if rows == max_rows && used + ellipsis <= limit(wide) {
-            cut = at + c.len_utf8();
+            cut = at + cluster.len();
         }
     }
     WrapEstimate { rows, cut: None }
@@ -776,6 +783,39 @@ mod tests {
             (any_style_width(decomposed, TEXT_BODY) - any_style_width(composed, TEXT_BODY)).abs()
                 < 0.01
         );
+    }
+
+    /// #568: a cut line ends in "…" after a whole flag, emoji sequence or accented letter, never
+    /// inside one.
+    #[test]
+    fn a_cut_never_splits_a_flag_or_an_emoji_sequence() {
+        use unicode_segmentation::UnicodeSegmentation;
+        let lines = [
+            "🇺🇸🇩🇪🇫🇷🇯🇵🇺🇸🇩🇪🇫🇷🇯🇵.mp4",
+            "👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}",
+            "cafe\u{301} cafe\u{301} cafe\u{301} cafe\u{301}",
+        ];
+        for line in lines {
+            let boundaries: Vec<usize> = line.grapheme_indices(true).map(|(at, _)| at).collect();
+            let whole = |cut: &str| {
+                let kept = cut.trim_end_matches('…').trim_end();
+                kept.is_empty() || kept.len() == line.len() || boundaries.contains(&kept.len())
+            };
+            for step in 1..60 {
+                let width = step as f32 * 4.0;
+                for cut in [
+                    fit_mono(line, width),
+                    fit_body(line, width),
+                    fit_caption(line, width),
+                ] {
+                    assert!(whole(&cut), "{line:?} at {width}: {cut:?}");
+                }
+                let estimate = wrap_estimate(line, width.max(TEXT_BODY * 2.0), 7.0, 1);
+                if let Some(cut) = estimate.cut {
+                    assert!(cut == 0 || boundaries.contains(&cut), "{line:?}: {cut}");
+                }
+            }
+        }
     }
 
     #[test]

@@ -1,3 +1,7 @@
+# 0.272
+## Fixed
+- A name cut with "…" keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone letter box from a flag.
+
 # 0.271
 ## Fixed
 - A Korean or Japanese name copied from a Mac (where its letters are stored apart) is no longer cut with "…" where it fits, in the recent folders list, the file list's tag chips and the tag grid. Before, it was measured up to three times too wide.

@@ -1673,6 +1673,7 @@ dependencies = [
  "tokio",
  "ttf-parser",
  "unicode-properties",
+ "unicode-segmentation",
  "ureq",
  "url",
  "velopack",
