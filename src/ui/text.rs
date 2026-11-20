@@ -141,17 +141,25 @@ fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
 }
 
 /// How wide a character the font lacks draws at `size` px, in the font it falls back to: one em,
-/// as the CJK fonts draw it, or [`EMOJI_EM`] em for a colour emoji (#544, #572).
+/// as the CJK fonts draw it, [`EMOJI_EM`] em for a colour emoji (#544, #572), nothing for a mark
+/// drawn into the syllable before it (#573, see [`is_composing_cjk_mark`]).
 fn missing_advance(c: char, size: f32) -> f32 {
-    if is_colour_emoji(c) {
+    if is_composing_cjk_mark(c) {
+        0.0
+    } else if is_colour_emoji(c) {
         EMOJI_EM * size
     } else {
         size
     }
 }
 
-/// `c`'s own advance in `face` at `size` px, `None` when the face does not have it.
+/// `c`'s own advance in `face` at `size` px, `None` when the face does not have it. A mark the
+/// font composes into the syllable before it (a decomposed name from a Mac) takes no room of its
+/// own (#573).
 fn advance_in(face: &ttf_parser::Face<'_>, c: char, size: f32) -> Option<f32> {
+    if is_composing_cjk_mark(c) {
+        return face.glyph_index(c).map(|_| 0.0);
+    }
     let advance = face.glyph_hor_advance(face.glyph_index(c)?)?;
     Some(f32::from(advance) * size / f32::from(face.units_per_em()))
 }
@@ -729,6 +737,49 @@ mod tests {
         let rows = |line: &str| wrap_estimate(line, 10.0 * TEXT_BODY, 7.0, usize::MAX).rows;
         assert_eq!(rows(&"漢".repeat(8)), 1);
         assert_eq!(rows(&"🎉".repeat(8)), 2);
+    }
+
+    /// #573: a decomposed Korean or Japanese name (NFD, from a Mac) measures as its composed
+    /// form in body text (in a CJK face never shorter), so it is not cut where it fits.
+    #[test]
+    fn decomposed_korean_or_japanese_body_text_measures_as_composed() {
+        let composed = "한국어 촬영 자료";
+        let decomposed = "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}\u{110B}\u{1165} \
+                          \u{110E}\u{116A}\u{11AF}\u{110B}\u{1167}\u{11BC} \
+                          \u{110C}\u{1161}\u{1105}\u{116D}";
+        let kana = ("がっこう", "か\u{3099}っこう");
+        let width = |line: &str, cjk: Option<&ttf_parser::Face<'_>>| -> f32 {
+            line.chars()
+                .map(|c| regular_advance(cjk, c, TEXT_BODY))
+                .sum()
+        };
+        let faces = crate::ui::tokens::cjk_font_files()
+            .step_by(2)
+            .map(|file| ttf_parser::Face::parse(file, 0).expect("a CJK Regular face"))
+            .collect::<Vec<_>>();
+        for cjk in std::iter::once(None).chain(faces.iter().map(Some)) {
+            for (nfc, nfd) in [(composed, decomposed), kana] {
+                let (nfc_width, nfd_width) = (width(nfc, cjk), width(nfd, cjk));
+                // Never shorter; a subset may have the syllable (narrower) but not its jamo.
+                assert!(nfd_width >= nfc_width - 0.01, "{nfc}");
+                let syllables = nfc.chars().filter(|c| !c.is_whitespace()).count() as f32;
+                assert!(
+                    nfd_width - nfc_width <= 0.1 * TEXT_BODY * syllables,
+                    "{nfc}"
+                );
+                if cjk.is_none() {
+                    let room = nfc_width + 1.0;
+                    assert_eq!(fit_regular(nfd, room, TEXT_BODY, cjk), nfd, "{nfc}");
+                }
+            }
+        }
+        // The wrapped-line estimate of a marker comment, and a strong label, count it the same.
+        let rows = |line: &str| wrap_estimate(line, 7.0 * TEXT_BODY, 7.0, usize::MAX).rows;
+        assert_eq!(rows(decomposed), rows(composed));
+        assert!(
+            (any_style_width(decomposed, TEXT_BODY) - any_style_width(composed, TEXT_BODY)).abs()
+                < 0.01
+        );
     }
 
     #[test]

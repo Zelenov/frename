@@ -1,3 +1,7 @@
+# 0.271
+## Fixed
+- A Korean or Japanese name copied from a Mac (where its letters are stored apart) is no longer cut with "…" where it fits, in the recent folders list, tag chips and other lists. Before, it was measured up to three times too wide.
+
 # 0.270
 ## Fixed
 - A tag, marker name, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.
