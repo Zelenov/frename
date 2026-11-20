@@ -1187,7 +1187,11 @@ fn failure_reason(e: &anyhow::Error) -> String {
     {
         return fl!("batch-subtitles-unsupported-reason");
     }
-    e.root_cause().to_string().chars().take(120).collect()
+    // 120 characters as the reader sees them: a path in it never ends in half a flag (#580).
+    let cause = e.root_cause().to_string();
+    unicode_segmentation::UnicodeSegmentation::graphemes(cause.as_str(), true)
+        .take(120)
+        .collect()
 }
 
 /// A written video. A Premiere transcript among the files is worth saying, so the result list
@@ -1886,6 +1890,18 @@ mod tests {
             failure_reason(&anyhow::anyhow!("unsupported container")),
             fl!("batch-subtitles-unsupported-reason")
         );
+    }
+
+    /// #580: a long failure reason is cut to 120 characters as the reader sees them, so a path
+    /// in it never ends in half a flag.
+    #[test]
+    fn a_long_failure_reason_keeps_whole_flags() {
+        let reason = failure_reason(&anyhow::anyhow!("A{}", "🇵🇹🇪🇸".repeat(100)));
+        let indicators = reason
+            .chars()
+            .filter(|c| ('\u{1F1E6}'..='\u{1F1FF}').contains(c))
+            .count();
+        assert_eq!(indicators, 2 * 119);
     }
 
     #[test]

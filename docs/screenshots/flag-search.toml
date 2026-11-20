@@ -1,0 +1,18 @@
+# #580: "kitchen" typed in the file search bar; the hit in a comment that starts with flags is shown
+# after "…" from a whole flag. Not a README image; for looking at the fix (`frename --demo`).
+source = "../../tests/folder"
+open = "pick.wide.MVI_0701.mp4"
+seek = 2.0
+window = [1280, 720]
+panels = [460, 320]
+search = "kitchen"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.MVI_0701.mp4"
+comment = "🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸 kitchen, the chef at work."
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "review.people.MVI_0702.mp4"
+comment = "Interview in the kitchen."

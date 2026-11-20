@@ -958,13 +958,10 @@ impl VideoPlayerState {
                 let text = text.unwrap_or_default();
                 match self.parse_timecode(&text) {
                     Some(ms) => Task::done(Message::SeekExact(ms)),
-                    None => {
-                        let shown: String = text.trim().chars().take(24).collect();
-                        self.show_notice(
-                            fl!("video-timecode-unreadable", text = shown),
-                            NOTICE_DURATION,
-                        )
-                    }
+                    None => self.show_notice(
+                        fl!("video-timecode-unreadable", text = unreadable_shown(&text)),
+                        NOTICE_DURATION,
+                    ),
                 }
             }
             Message::ShowNotice(text) => self.show_notice(text, NOTICE_DURATION),
@@ -2052,6 +2049,14 @@ fn nv12_to_rgb(yuv: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
     rgb
 }
 
+/// What the "not a time in this clip" notice shows of the pasted `text`: its first 24 characters
+/// as the reader sees them, so it never ends in half a flag (#580).
+fn unreadable_shown(text: &str) -> String {
+    unicode_segmentation::UnicodeSegmentation::graphemes(text.trim(), true)
+        .take(24)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2066,6 +2071,18 @@ mod tests {
 
     /// #416: the note that a comment was not saved shows over the next clip; that clip saying
     /// where it continued does not replace it, while a short note gives way as before.
+    /// #580: a pasted text the notice cuts keeps every flag whole.
+    #[test]
+    fn an_unreadable_timecode_is_shown_in_whole_flags() {
+        let shown = super::unreadable_shown(&format!("A{}", "🇵🇹🇪🇸".repeat(20)));
+        let indicators = shown
+            .chars()
+            .filter(|c| ('\u{1F1E6}'..='\u{1F1FF}').contains(c))
+            .count();
+        assert_eq!(indicators, 2 * 23);
+        assert_eq!(super::unreadable_shown("  12:34x  "), "12:34x");
+    }
+
     #[test]
     fn a_long_note_is_not_replaced_by_where_the_clip_continued() {
         let mut player = VideoPlayerState::default();

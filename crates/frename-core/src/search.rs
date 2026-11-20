@@ -82,12 +82,14 @@ pub(crate) fn fragment(
         });
     }
     const ELLIPSIS: &str = "…";
-    // The longest tail of what comes before the hit that fits beside the "…".
+    // The longest tail of what comes before the hit that fits beside the "…", in whole
+    // characters as the reader sees them, so it never starts with half a flag (#580).
+    use unicode_segmentation::UnicodeSegmentation;
     let keep = lead - width('…');
     let mut used = 0.0;
     let mut cut = first;
-    for (at, c) in before.char_indices().rev() {
-        used += width(c);
+    for (at, cluster) in before.grapheme_indices(true).rev() {
+        used += cluster.chars().map(&width).sum::<f32>();
         if used > keep {
             break;
         }
@@ -194,6 +196,24 @@ mod tests {
     /// Every character one unit wide, so a lead counts characters.
     fn one(_: char) -> f32 {
         1.0
+    }
+
+    /// #580: the text cut before a hit starts after "…" with a whole flag, never half of one.
+    #[test]
+    fn a_fragment_never_starts_with_half_a_flag() {
+        let words = vec!["kitchen".to_string()];
+        let comment = format!("{} kitchen", "🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸".repeat(3));
+        for lead in 2..30 {
+            let fragment = fragment(&comment, &words, lead as f32, |_| 1.0).expect("a hit");
+            let indicators = fragment
+                .text
+                .chars()
+                .filter(|c| ('\u{1F1E6}'..='\u{1F1FF}').contains(c))
+                .count();
+            assert_eq!(indicators % 2, 0, "{lead}: {}", fragment.text);
+            let hit = fragment.highlights[0].clone();
+            assert_eq!(&fragment.text[hit], "kitchen");
+        }
     }
 
     #[test]

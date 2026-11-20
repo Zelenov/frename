@@ -1,3 +1,7 @@
+# 0.273
+## Fixed
+- A search hit in a comment, a pasted text the player cannot read as a time, and a batch failure reason are cut between whole flags and emoji. Before, the cut could leave half a flag, a lone boxed letter.
+
 # 0.270
 ## Fixed
 - A tag, marker name, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.
