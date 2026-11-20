@@ -251,6 +251,10 @@ fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option
     None
 }
 
+/// How many em a colour emoji takes in [`mono_advance`]: Noto Color Emoji draws one 1.245 em
+/// wide, Segoe UI Emoji a little less, so a name of emoji errs wide rather than short (#544).
+const EMOJI_EM: f32 = 1.25;
+
 /// The bundled JetBrains Mono, parsed once.
 fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
     use std::sync::OnceLock;
@@ -265,18 +269,38 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 /// the CJK fonts draw it (#538). Without the font every character counts as one em, so a name
 /// errs wide. A decomposed Japanese or Korean name (NFD, from a Mac) is drawn composed, so its
 /// marks take no room: a dakuten or handakuten, and a Hangul syllable's vowel and final jamo,
-/// count as nothing, its initial jamo as the syllable's em (#551).
+/// count as nothing, its initial jamo as the syllable's em (#551). A colour emoji the font does
+/// not have counts as [`EMOJI_EM`] em, as the emoji fonts draw it (#544).
 fn mono_advance(c: char) -> f32 {
     if is_composing_cjk_mark(c) {
         return 0.0;
     }
+    let missing = if is_colour_emoji(c) {
+        EMOJI_EM * TEXT_MONO
+    } else {
+        TEXT_MONO
+    };
     let Some(face) = mono_face() else {
-        return TEXT_MONO;
+        return missing;
     };
     match face.glyph_index(c) {
         Some(glyph) if face.glyph_hor_advance(glyph) == Some(0) => 0.0,
         Some(_) => MONO_CHAR_WIDTH,
-        None => TEXT_MONO,
+        None => missing,
+    }
+}
+
+/// A character drawn as a colour emoji when the font lacks it: one with Unicode's
+/// Emoji_Presentation (🎉, ✅, ⭐, the regional indicators of a flag, the skin tones), or any
+/// emoji in the pictograph planes from U+1F000 (🕴, which the emoji font draws in colour too).
+fn is_colour_emoji(c: char) -> bool {
+    use unicode_properties::{EmojiStatus, UnicodeEmoji};
+    match c.emoji_status() {
+        EmojiStatus::EmojiPresentation
+        | EmojiStatus::EmojiPresentationAndModifierBase
+        | EmojiStatus::EmojiPresentationAndEmojiComponent
+        | EmojiStatus::EmojiPresentationAndModifierAndEmojiComponent => true,
+        _ => c >= '\u{1F000}' && c.is_emoji_char(),
     }
 }
 
@@ -606,6 +630,28 @@ mod tests {
             assert!((mono_width(nfc) - mono_width(nfd)).abs() < 0.01, "{nfc}");
             assert_eq!(fit_mono(nfd, mono_width(nfc)), nfd, "{nfc}");
         }
+    }
+
+    #[test]
+    fn a_colour_emoji_counts_wider_than_one_em_in_mono() {
+        let name = "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉.mp4";
+        let emoji = 10.0 * EMOJI_EM * TEXT_MONO;
+        assert!(mono_width(name) >= emoji, "{}", mono_width(name));
+        // A row as wide as ten one-em emoji and the extension: the name no longer fits whole.
+        let row = 10.0 * TEXT_MONO + mono_width(".mp4");
+        assert!(
+            fit_mono(name, row).ends_with('…'),
+            "{}",
+            fit_mono(name, row)
+        );
+        assert_eq!(fit_mono(name, mono_width(name)), name);
+        // Emoji outside the pictograph planes, a flag's letters and a skin tone count as wide; a
+        // symbol JetBrains Mono draws itself (⚡) stays one mono cell.
+        for c in ['✅', '⭐', '☕', '⚽', '\u{1F1FA}', '\u{1F3FD}', '🀄'] {
+            assert!(mono_advance(c) >= EMOJI_EM * TEXT_MONO, "{c}");
+        }
+        assert_eq!(mono_advance('⚡'), MONO_CHAR_WIDTH);
+        assert_eq!(mono_advance('a'), MONO_CHAR_WIDTH);
     }
 
     #[test]

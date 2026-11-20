@@ -1672,6 +1672,7 @@ dependencies = [
  "sonisub",
  "tokio",
  "ttf-parser",
+ "unicode-properties",
  "ureq",
  "url",
  "velopack",
