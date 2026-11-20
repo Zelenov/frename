@@ -153,13 +153,8 @@ fn missing_advance(c: char, size: f32) -> f32 {
     }
 }
 
-/// `c`'s own advance in `face` at `size` px, `None` when the face does not have it. A mark the
-/// font composes into the syllable before it (a decomposed name from a Mac) takes no room of its
-/// own (#573).
+/// `c`'s own advance in `face` at `size` px, `None` when the face does not have it.
 fn advance_in(face: &ttf_parser::Face<'_>, c: char, size: f32) -> Option<f32> {
-    if is_composing_cjk_mark(c) {
-        return face.glyph_index(c).map(|_| 0.0);
-    }
     let advance = face.glyph_hor_advance(face.glyph_index(c)?)?;
     Some(f32::from(advance) * size / f32::from(face.units_per_em()))
 }
@@ -312,9 +307,6 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 /// count as nothing, its initial jamo as the syllable's em (#551). A colour emoji the font does
 /// not have counts as [`EMOJI_EM`] em, as the emoji fonts draw it (#544).
 fn mono_advance(c: char) -> f32 {
-    if is_composing_cjk_mark(c) {
-        return 0.0;
-    }
     let missing = missing_advance(c, TEXT_MONO);
     let Some(face) = mono_face() else {
         return missing;
@@ -760,7 +752,8 @@ mod tests {
         for cjk in std::iter::once(None).chain(faces.iter().map(Some)) {
             for (nfc, nfd) in [(composed, decomposed), kana] {
                 let (nfc_width, nfd_width) = (width(nfc, cjk), width(nfd, cjk));
-                // Never shorter; a subset may have the syllable (narrower) but not its jamo.
+                // Never shorter: the bundled subsets have the composed syllable (a little narrower
+                // than an em) but none of its jamo, and the initial jamo counts one em.
                 assert!(nfd_width >= nfc_width - 0.01, "{nfc}");
                 let syllables = nfc.chars().filter(|c| !c.is_whitespace()).count() as f32;
                 assert!(
@@ -773,6 +766,9 @@ mod tests {
                 }
             }
         }
+        // No bundled font has the marks; the fallback for a missing character counts them as nothing.
+        assert_eq!(char_width(inter(), '\u{1161}', TEXT_BODY), 0.0);
+        assert_eq!(char_width(None, '\u{3099}', TEXT_BODY), 0.0);
         // The wrapped-line estimate of a marker comment, and a strong label, count it the same.
         let rows = |line: &str| wrap_estimate(line, 7.0 * TEXT_BODY, 7.0, usize::MAX).rows;
         assert_eq!(rows(decomposed), rows(composed));
