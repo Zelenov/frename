@@ -18,8 +18,10 @@ pub fn age_text(age: Age) -> String {
 /// `path` cut from the front to at most `room` wide, each character `width(c)` wide: what is
 /// left starts with "…" and, if it can, at a separator, so it reads as the end of a path
 /// (`…\2026\Lisbon`). The end of a path is the part that tells one folder from the next. The
-/// view measures characters in caption text, so Cyrillic or CJK is cut where it really ends (#408).
+/// view measures characters in caption text, so Cyrillic or CJK is cut where it really ends (#408),
+/// and between whole characters as the reader sees them, never inside a flag (#568).
 pub fn shorten_path(path: &str, room: f32, width: impl Fn(char) -> f32) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
     let total: f32 = path.chars().map(&width).sum();
     if total <= room {
         return path.to_string();
@@ -28,8 +30,8 @@ pub fn shorten_path(path: &str, room: f32, width: impl Fn(char) -> f32) -> Strin
     // The longest tail of `path` that fits in `keep`.
     let mut used = 0.0;
     let mut start = path.len();
-    for (at, c) in path.char_indices().rev() {
-        used += width(c);
+    for (at, cluster) in path.grapheme_indices(true).rev() {
+        used += cluster.chars().map(&width).sum::<f32>();
         if used > keep {
             break;
         }
@@ -74,6 +76,20 @@ mod tests {
         // The near-separator rule counts width too: a wide name is not dropped for a far one.
         let cut = shorten_path(r"D:\Footage\北海道ロケ\ab", 16.0, wide);
         assert_eq!(cut, r"…\北海道ロケ\ab", "{cut}");
+    }
+
+    /// #568: a path cut from the front starts after "…" with a whole flag, not half of one.
+    #[test]
+    fn a_path_is_cut_between_whole_flags() {
+        let path = format!("D:/Trips/{}", "🇵🇹🇪🇸🇫🇷🇩🇪🇺🇸".repeat(3));
+        for room in 4..30 {
+            let cut = shorten_path(&path, room as f32, one);
+            let indicators = cut
+                .chars()
+                .filter(|c| ('\u{1F1E6}'..='\u{1F1FF}').contains(c))
+                .count();
+            assert_eq!(indicators % 2, 0, "{room}: {cut}");
+        }
     }
 
     #[test]

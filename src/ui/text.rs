@@ -269,13 +269,16 @@ fn cut_with_ellipsis(line: &str, end: Option<usize>) -> Cow<'_, str> {
 
 /// Where `line` must stop to end in "…" within `width` px, each character `advance(c)` wide: the
 /// byte index the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
+/// It cuts between whole characters as the reader sees them (grapheme clusters, each as wide as
+/// its characters), never inside a flag, an emoji sequence or a syllable (#568).
 fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option<usize> {
+    use unicode_segmentation::UnicodeSegmentation;
     let room = width - advance('…');
     let mut used = 0.0;
-    // Where the text stops if it gets a "…": the last char that fits in `room`.
+    // Where the text stops if it gets a "…": the last cluster that fits in `room`.
     let mut cut = None;
-    for (at, c) in line.char_indices() {
-        used += advance(c);
+    for (at, cluster) in line.grapheme_indices(true) {
+        used += cluster.chars().map(&advance).sum::<f32>();
         if cut.is_none() && used > room {
             cut = Some(at);
         }
@@ -370,12 +373,14 @@ pub struct WrapEstimate {
 }
 
 /// An estimate of how `line` (no line break in it) wraps in rows `width` px wide, each
-/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji 1.25
-/// ([`estimated_body_advance`]). It wraps row by row as the text does: a CJK or emoji line breaks
-/// between any two characters, so the room a character leaves at
-/// a row's end is lost, and a row holding one keeps an em more for the line-break rules that
-/// move a character to the next row (#548). A Latin row fills to `width`, as the old estimate.
+/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji
+/// [`EMOJI_EM`] em ([`estimated_body_advance`]). It wraps row by row as the text does, between
+/// whole characters as the reader sees them (grapheme clusters, #568): a CJK or emoji line
+/// breaks between any two of them, so the room one leaves at a row's end is lost, and a row
+/// holding one keeps an em more for the line-break rules that move a character to the next row
+/// (#548). A Latin row fills to `width`, as the old estimate.
 pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> WrapEstimate {
+    use unicode_segmentation::UnicodeSegmentation;
     let ellipsis = estimated_body_advance('…', average);
     let limit = |wide: bool| if wide { width - TEXT_BODY } else { width };
     let mut rows = 1;
@@ -383,9 +388,17 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     let mut wide = false;
     // Where the "…" would go, while on the last row allowed.
     let mut cut = 0;
-    for (at, c) in line.char_indices() {
-        let advance = estimated_body_advance(c, average);
-        let row_wide = wide || advance > average;
+    for (at, cluster) in line.grapheme_indices(true) {
+        let advance: f32 = cluster
+            .chars()
+            .map(|c| estimated_body_advance(c, average))
+            .sum();
+        // Wide when one of its characters is (CJK, an emoji), not because it has several (an
+        // accent written apart, NFD).
+        let cluster_wide = cluster
+            .chars()
+            .any(|c| estimated_body_advance(c, average) > average);
+        let row_wide = wide || cluster_wide;
         if used > 0.0 && used + advance > limit(row_wide) {
             if rows == max_rows {
                 return WrapEstimate {
@@ -401,9 +414,9 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
             }
         }
         used += advance;
-        wide = wide || advance > average;
+        wide = wide || cluster_wide;
         if rows == max_rows && used + ellipsis <= limit(wide) {
-            cut = at + c.len_utf8();
+            cut = at + cluster.len();
         }
     }
     WrapEstimate { rows, cut: None }
@@ -776,6 +789,56 @@ mod tests {
             (any_style_width(decomposed, TEXT_BODY) - any_style_width(composed, TEXT_BODY)).abs()
                 < 0.01
         );
+    }
+
+    /// #568: a cut line ends in "…" after a whole flag, emoji sequence or accented letter, never
+    /// inside one.
+    #[test]
+    fn a_cut_never_splits_a_flag_or_an_emoji_sequence() {
+        use unicode_segmentation::UnicodeSegmentation;
+        let lines = [
+            "🇺🇸🇩🇪🇫🇷🇯🇵🇺🇸🇩🇪🇫🇷🇯🇵.mp4",
+            "👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}",
+            "cafe\u{301} cafe\u{301} cafe\u{301} cafe\u{301}",
+            "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}",
+        ];
+        for line in lines {
+            let boundaries: Vec<usize> = line.grapheme_indices(true).map(|(at, _)| at).collect();
+            let whole = |cut: &str| {
+                let kept = cut.trim_end_matches('…').trim_end();
+                kept.is_empty() || kept.len() == line.len() || boundaries.contains(&kept.len())
+            };
+            for step in 1..60 {
+                let width = step as f32 * 4.0;
+                for cut in [
+                    fit_mono(line, width),
+                    fit_body(line, width),
+                    fit_caption(line, width),
+                ] {
+                    assert!(whole(&cut), "{line:?} at {width}: {cut:?}");
+                }
+                for max_rows in [1, 2] {
+                    let estimate = wrap_estimate(line, width.max(TEXT_BODY * 2.0), 7.0, max_rows);
+                    if let Some(cut) = estimate.cut {
+                        assert!(cut == 0 || boundaries.contains(&cut), "{line:?}: {cut}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// #568: an accent written apart (NFD, from a Mac) does not make a Latin row "wide" in the
+    /// wrap estimate: it wraps as a line of as many plain letters does (Inter has the accent, so
+    /// it counts as an average letter either way).
+    #[test]
+    fn a_decomposed_latin_line_is_not_a_wide_row() {
+        let rows = |line: &str, width: f32| wrap_estimate(line, width, 7.0, usize::MAX).rows;
+        let decomposed = "Re\u{301}sume\u{301} cafe\u{301} nai\u{308}ve ".repeat(4);
+        let plain = "Rexsumex cafex naixve ".repeat(4);
+        assert_eq!(decomposed.chars().count(), plain.chars().count());
+        for width in (10..60).map(|step| step as f32 * 7.0) {
+            assert_eq!(rows(&decomposed, width), rows(&plain, width), "{width}");
+        }
     }
 
     #[test]
