@@ -1,3 +1,7 @@
+# 0.274
+## Fixed
+- A name of joined emoji, such as 👨‍👩‍👧, 👍🏽 or ❤️, is measured as the one emoji each draws, so it is cut with "…" where it really ends. Before, each counted two or three emoji wide and the name was cut at a fraction of its room. Flags still count as two letters, as Windows draws them.
+
 # 0.272
 ## Fixed
 - A name cut with "…", such as 🇺🇸🇩🇪🇫🇷.mp4 in a narrow file list, keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone boxed letter from a flag.

@@ -170,8 +170,46 @@ fn regular_advance(cjk: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f3
 /// How wide `line` is at `size` px in the UI language's Regular font (see [`regular_advance`]).
 pub fn text_width(line: &str, size: f32) -> f32 {
     let [cjk, _] = cjk_faces();
-    line.chars().map(|c| regular_advance(cjk, c, size)).sum()
+    line_width(line, |c| regular_advance(cjk, c, size))
 }
+
+/// How wide `line` is, each character `advance(c)` wide and each cluster (a character as the
+/// reader sees it) as [`cluster_width`].
+pub fn line_width(line: &str, advance: impl Fn(char) -> f32) -> f32 {
+    use unicode_segmentation::UnicodeSegmentation;
+    line.graphemes(true)
+        .map(|g| cluster_width(g, &advance))
+        .sum()
+}
+
+/// How wide one grapheme cluster draws, each character `advance(c)` wide: the sum of its
+/// characters, except an emoji made of several (a family joined with U+200D, a skin tone, an
+/// emoji with U+FE0F, a keycap), which draws as one emoji, as wide as [`EMOJI_PROBE`] measures
+/// (#579). A flag stays two: Segoe UI Emoji on Windows draws its two letters side by side.
+pub fn cluster_width(cluster: &str, advance: impl Fn(char) -> f32) -> f32 {
+    let mut chars = cluster.chars();
+    let several = chars.next().is_some() && chars.next().is_some();
+    let flag = cluster.chars().all(is_regional_indicator);
+    if several
+        && !flag
+        && cluster
+            .chars()
+            .any(|c| is_colour_emoji(c) || matches!(c, '\u{FE0F}' | '\u{20E3}'))
+    {
+        advance(EMOJI_PROBE)
+    } else {
+        cluster.chars().map(advance).sum()
+    }
+}
+
+/// One of the 26 letters a flag is written with (U+1F1E6–U+1F1FF).
+fn is_regional_indicator(c: char) -> bool {
+    ('\u{1F1E6}'..='\u{1F1FF}').contains(&c)
+}
+
+/// A colour emoji no bundled font has, so every measure counts it as the emoji font draws one
+/// ([`missing_advance`]): what an emoji made of several characters is measured as.
+const EMOJI_PROBE: char = '\u{1F389}';
 
 /// The bundled CJK files' faces, parsed once each (by the file's address), for the UI language
 /// that draws in them.
@@ -212,7 +250,7 @@ fn any_style_advance(cjk: &[Option<&ttf_parser::Face<'_>>; 2], c: char, size: f3
 /// language's font: room for a label that is either, as its state changes (a checked tag, #528).
 pub fn any_style_width(line: &str, size: f32) -> f32 {
     let cjk = cjk_faces();
-    line.chars().map(|c| any_style_advance(&cjk, c, size)).sum()
+    line_width(line, |c| any_style_advance(&cjk, c, size))
 }
 
 /// `line` in body text cut with "…" so it is at most `width` px wide, measured as
@@ -278,7 +316,7 @@ fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option
     // Where the text stops if it gets a "…": the last cluster that fits in `room`.
     let mut cut = None;
     for (at, cluster) in line.grapheme_indices(true) {
-        used += cluster.chars().map(&advance).sum::<f32>();
+        used += cluster_width(cluster, &advance);
         if cut.is_none() && used > room {
             cut = Some(at);
         }
@@ -343,7 +381,7 @@ fn is_composing_cjk_mark(c: char) -> bool {
 
 /// How wide `line` is in `mono` text, each character [`mono_advance`] wide.
 pub fn mono_width(line: &str) -> f32 {
-    line.chars().map(mono_advance).sum()
+    line_width(line, mono_advance)
 }
 
 /// `line` in `mono` text cut with "…" so it is at most `width` px wide, each character
@@ -389,10 +427,7 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     // Where the "…" would go, while on the last row allowed.
     let mut cut = 0;
     for (at, cluster) in line.grapheme_indices(true) {
-        let advance: f32 = cluster
-            .chars()
-            .map(|c| estimated_body_advance(c, average))
-            .sum();
+        let advance = cluster_width(cluster, |c| estimated_body_advance(c, average));
         // Wide when one of its characters is (CJK, an emoji), not because it has several (an
         // accent written apart, NFD).
         let cluster_wide = cluster
@@ -839,6 +874,35 @@ mod tests {
         for width in (10..60).map(|step| step as f32 * 7.0) {
             assert_eq!(rows(&decomposed, width), rows(&plain, width), "{width}");
         }
+    }
+
+    /// #579: an emoji made of several characters counts as the one emoji it draws, in every
+    /// measure; a flag stays its two letters, as Windows draws it; other clusters are the sum of
+    /// their characters.
+    #[test]
+    fn a_joined_emoji_counts_as_one_emoji() {
+        let one = mono_width("🎉");
+        for joined in [
+            "👨\u{200D}👩\u{200D}👧",
+            "👍🏽",
+            "❤\u{FE0F}",
+            "1\u{FE0F}\u{20E3}",
+            "👩\u{200D}💻",
+        ] {
+            assert_eq!(mono_width(joined), one, "{joined:?}");
+            assert_eq!(text_width(joined, TEXT_BODY), text_width("🎉", TEXT_BODY));
+            assert_eq!(
+                any_style_width(joined, TEXT_BODY),
+                any_style_width("🎉", TEXT_BODY)
+            );
+        }
+        assert_eq!(mono_width("🇵🇹"), 2.0 * one);
+        assert_eq!(mono_width("e\u{301}"), mono_width("é"));
+        // A name of joined emoji is cut where it really ends: ten families fit ten emoji.
+        let families = "👨\u{200D}👩\u{200D}👧".repeat(10);
+        assert_eq!(fit_mono(&families, 10.0 * one + 0.5), families);
+        let rows = |line: &str| wrap_estimate(line, 10.0 * TEXT_BODY, 7.0, usize::MAX).rows;
+        assert_eq!(rows(&"👍🏽".repeat(7)), rows(&"🎉".repeat(7)));
     }
 
     #[test]

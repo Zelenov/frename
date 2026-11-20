@@ -22,7 +22,7 @@ pub fn age_text(age: Age) -> String {
 /// and between whole characters as the reader sees them, never inside a flag (#568).
 pub fn shorten_path(path: &str, room: f32, width: impl Fn(char) -> f32) -> String {
     use unicode_segmentation::UnicodeSegmentation;
-    let total: f32 = path.chars().map(&width).sum();
+    let total = crate::ui::text::line_width(path, &width);
     if total <= room {
         return path.to_string();
     }
@@ -31,7 +31,7 @@ pub fn shorten_path(path: &str, room: f32, width: impl Fn(char) -> f32) -> Strin
     let mut used = 0.0;
     let mut start = path.len();
     for (at, cluster) in path.grapheme_indices(true).rev() {
-        used += cluster.chars().map(&width).sum::<f32>();
+        used += crate::ui::text::cluster_width(cluster, &width);
         if used > keep {
             break;
         }
