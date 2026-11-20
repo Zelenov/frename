@@ -251,6 +251,10 @@ fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option
     None
 }
 
+/// How many em a colour emoji takes in [`mono_advance`]: Noto Color Emoji draws one 1.245 em
+/// wide, Segoe UI Emoji a little less, so a name of emoji errs wide rather than short (#544).
+const EMOJI_EM: f32 = 1.25;
+
 /// The bundled JetBrains Mono, parsed once.
 fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
     use std::sync::OnceLock;
@@ -271,30 +275,33 @@ fn mono_advance(c: char) -> f32 {
     if is_composing_cjk_mark(c) {
         return 0.0;
     }
+    let missing = if is_colour_emoji(c) {
+        EMOJI_EM * TEXT_MONO
+    } else {
+        TEXT_MONO
+    };
     let Some(face) = mono_face() else {
-        return if is_colour_emoji(c) {
-            EMOJI_EM * TEXT_MONO
-        } else {
-            TEXT_MONO
-        };
+        return missing;
     };
     match face.glyph_index(c) {
         Some(glyph) if face.glyph_hor_advance(glyph) == Some(0) => 0.0,
         Some(_) => MONO_CHAR_WIDTH,
-        None if is_colour_emoji(c) => EMOJI_EM * TEXT_MONO,
-        None => TEXT_MONO,
+        None => missing,
     }
 }
 
-/// How many em a colour emoji takes: Noto Color Emoji draws one about 1.25 em wide, Segoe UI
-/// Emoji a little less, so a name of emoji errs wide rather than short (#544).
-const EMOJI_EM: f32 = 1.25;
-
-/// A character in the pictograph blocks that is drawn as a colour emoji: emoticons, symbols and
-/// pictographs, transport, the supplemental and extended-A pictographs, and the regional
-/// indicators that make flags (U+1F1E6–U+1F1FF, U+1F300–U+1FAFF).
+/// A character drawn as a colour emoji when the font lacks it: one with Unicode's
+/// Emoji_Presentation (🎉, ✅, ⭐, the regional indicators of a flag, the skin tones), or any
+/// emoji in the pictograph planes from U+1F000 (🕴, which the emoji font draws in colour too).
 fn is_colour_emoji(c: char) -> bool {
-    matches!(c, '\u{1F1E6}'..='\u{1F1FF}' | '\u{1F300}'..='\u{1FAFF}')
+    use unicode_properties::{EmojiStatus, UnicodeEmoji};
+    match c.emoji_status() {
+        EmojiStatus::EmojiPresentation
+        | EmojiStatus::EmojiPresentationAndModifierBase
+        | EmojiStatus::EmojiPresentationAndEmojiComponent
+        | EmojiStatus::EmojiPresentationAndModifierAndEmojiComponent => true,
+        _ => c >= '\u{1F000}' && c.is_emoji_char(),
+    }
 }
 
 /// A combining kana voicing mark (U+3099, U+309A), or a conjoining Hangul vowel or final jamo
@@ -638,6 +645,13 @@ mod tests {
             fit_mono(name, row)
         );
         assert_eq!(fit_mono(name, mono_width(name)), name);
+        // Emoji outside the pictograph planes, a flag's letters and a skin tone count as wide; a
+        // symbol JetBrains Mono draws itself (⚡) stays one mono cell.
+        for c in ['✅', '⭐', '☕', '⚽', '\u{1F1FA}', '\u{1F3FD}', '🀄'] {
+            assert!(mono_advance(c) >= EMOJI_EM * TEXT_MONO, "{c}");
+        }
+        assert_eq!(mono_advance('⚡'), MONO_CHAR_WIDTH);
+        assert_eq!(mono_advance('a'), MONO_CHAR_WIDTH);
     }
 
     #[test]

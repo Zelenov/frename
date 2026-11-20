@@ -1,6 +1,6 @@
 # 0.268
 ## Fixed
-- A clip name made of emoji, such as 🎉🎉🎉.mp4, is cut with "…" when it does not fit a narrow file list row. Before, it could be cut at the row's edge with no "…".
+- In the file list, a clip name made of emoji, such as 🎉🎉🎉.mp4 or ✅✅✅.mp4, is cut with "…" when it does not fit the row. Before, it could be cut at the row's edge with no "…".
 
 # 0.267
 ## Fixed
