@@ -1,0 +1,20 @@
+# #573: a Korean folder name copied from a Mac (decomposed, NFD) in the recent folders list is not
+# cut where it fits.
+source = "../../tests/folder"
+open = "MVI_0401.mp4"
+folder_name = "2026-11 Lisbon"
+recent_menu = true
+window = [1440, 800]
+panels = [560, 340]
+
+[[recent]]
+folder = "Shoots/한국어 촬영 자료 2026 서울 인터뷰"
+minutes_ago = 95
+
+[[recent]]
+folder = "Shoots/2026-07 Madeira"
+minutes_ago = 1500
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "MVI_0401.mp4"

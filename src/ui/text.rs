@@ -141,9 +141,12 @@ fn char_width(face: Option<&ttf_parser::Face<'_>>, c: char, size: f32) -> f32 {
 }
 
 /// How wide a character the font lacks draws at `size` px, in the font it falls back to: one em,
-/// as the CJK fonts draw it, or [`EMOJI_EM`] em for a colour emoji (#544, #572).
+/// as the CJK fonts draw it, [`EMOJI_EM`] em for a colour emoji (#544, #572), nothing for a mark
+/// drawn into the syllable before it (#573, see [`is_composing_cjk_mark`]).
 fn missing_advance(c: char, size: f32) -> f32 {
-    if is_colour_emoji(c) {
+    if is_composing_cjk_mark(c) {
+        0.0
+    } else if is_colour_emoji(c) {
         EMOJI_EM * size
     } else {
         size
@@ -266,13 +269,16 @@ fn cut_with_ellipsis(line: &str, end: Option<usize>) -> Cow<'_, str> {
 
 /// Where `line` must stop to end in "…" within `width` px, each character `advance(c)` wide: the
 /// byte index the "…" goes after, or `None` when the whole line fits. One pass, stopping early.
+/// It cuts between whole characters as the reader sees them (grapheme clusters, each as wide as
+/// its characters), never inside a flag, an emoji sequence or a syllable (#568).
 fn measured_cut(line: &str, width: f32, advance: impl Fn(char) -> f32) -> Option<usize> {
+    use unicode_segmentation::UnicodeSegmentation;
     let room = width - advance('…');
     let mut used = 0.0;
-    // Where the text stops if it gets a "…": the last char that fits in `room`.
+    // Where the text stops if it gets a "…": the last cluster that fits in `room`.
     let mut cut = None;
-    for (at, c) in line.char_indices() {
-        used += advance(c);
+    for (at, cluster) in line.grapheme_indices(true) {
+        used += cluster.chars().map(&advance).sum::<f32>();
         if cut.is_none() && used > room {
             cut = Some(at);
         }
@@ -304,9 +310,6 @@ fn mono_face() -> Option<&'static ttf_parser::Face<'static>> {
 /// count as nothing, its initial jamo as the syllable's em (#551). A colour emoji the font does
 /// not have counts as [`EMOJI_EM`] em, as the emoji fonts draw it (#544).
 fn mono_advance(c: char) -> f32 {
-    if is_composing_cjk_mark(c) {
-        return 0.0;
-    }
     let missing = missing_advance(c, TEXT_MONO);
     let Some(face) = mono_face() else {
         return missing;
@@ -370,12 +373,14 @@ pub struct WrapEstimate {
 }
 
 /// An estimate of how `line` (no line break in it) wraps in rows `width` px wide, each
-/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji 1.25
-/// ([`estimated_body_advance`]). It wraps row by row as the text does: a CJK or emoji line breaks
-/// between any two characters, so the room a character leaves at
-/// a row's end is lost, and a row holding one keeps an em more for the line-break rules that
-/// move a character to the next row (#548). A Latin row fills to `width`, as the old estimate.
+/// character `average` wide, or as wide as the fallback font draws it: one em, an emoji
+/// [`EMOJI_EM`] em ([`estimated_body_advance`]). It wraps row by row as the text does, between
+/// whole characters as the reader sees them (grapheme clusters, #568): a CJK or emoji line
+/// breaks between any two of them, so the room one leaves at a row's end is lost, and a row
+/// holding one keeps an em more for the line-break rules that move a character to the next row
+/// (#548). A Latin row fills to `width`, as the old estimate.
 pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> WrapEstimate {
+    use unicode_segmentation::UnicodeSegmentation;
     let ellipsis = estimated_body_advance('…', average);
     let limit = |wide: bool| if wide { width - TEXT_BODY } else { width };
     let mut rows = 1;
@@ -383,9 +388,17 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
     let mut wide = false;
     // Where the "…" would go, while on the last row allowed.
     let mut cut = 0;
-    for (at, c) in line.char_indices() {
-        let advance = estimated_body_advance(c, average);
-        let row_wide = wide || advance > average;
+    for (at, cluster) in line.grapheme_indices(true) {
+        let advance: f32 = cluster
+            .chars()
+            .map(|c| estimated_body_advance(c, average))
+            .sum();
+        // Wide when one of its characters is (CJK, an emoji), not because it has several (an
+        // accent written apart, NFD).
+        let cluster_wide = cluster
+            .chars()
+            .any(|c| estimated_body_advance(c, average) > average);
+        let row_wide = wide || cluster_wide;
         if used > 0.0 && used + advance > limit(row_wide) {
             if rows == max_rows {
                 return WrapEstimate {
@@ -401,9 +414,9 @@ pub fn wrap_estimate(line: &str, width: f32, average: f32, max_rows: usize) -> W
             }
         }
         used += advance;
-        wide = wide || advance > average;
+        wide = wide || cluster_wide;
         if rows == max_rows && used + ellipsis <= limit(wide) {
-            cut = at + c.len_utf8();
+            cut = at + cluster.len();
         }
     }
     WrapEstimate { rows, cut: None }
@@ -729,6 +742,103 @@ mod tests {
         let rows = |line: &str| wrap_estimate(line, 10.0 * TEXT_BODY, 7.0, usize::MAX).rows;
         assert_eq!(rows(&"漢".repeat(8)), 1);
         assert_eq!(rows(&"🎉".repeat(8)), 2);
+    }
+
+    /// #573: a decomposed Korean or Japanese name (NFD, from a Mac) measures as its composed
+    /// form in body text (in a CJK face never shorter), so it is not cut where it fits.
+    #[test]
+    fn decomposed_korean_or_japanese_body_text_measures_as_composed() {
+        let composed = "한국어 촬영 자료";
+        let decomposed = "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}\u{110B}\u{1165} \
+                          \u{110E}\u{116A}\u{11AF}\u{110B}\u{1167}\u{11BC} \
+                          \u{110C}\u{1161}\u{1105}\u{116D}";
+        let kana = ("がっこう", "か\u{3099}っこう");
+        let width = |line: &str, cjk: Option<&ttf_parser::Face<'_>>| -> f32 {
+            line.chars()
+                .map(|c| regular_advance(cjk, c, TEXT_BODY))
+                .sum()
+        };
+        let faces = crate::ui::tokens::cjk_font_files()
+            .step_by(2)
+            .map(|file| ttf_parser::Face::parse(file, 0).expect("a CJK Regular face"))
+            .collect::<Vec<_>>();
+        for cjk in std::iter::once(None).chain(faces.iter().map(Some)) {
+            for (nfc, nfd) in [(composed, decomposed), kana] {
+                let (nfc_width, nfd_width) = (width(nfc, cjk), width(nfd, cjk));
+                // Never shorter: the bundled subsets have the composed syllable (a little narrower
+                // than an em) but none of its jamo, and the initial jamo counts one em.
+                assert!(nfd_width >= nfc_width - 0.01, "{nfc}");
+                let syllables = nfc.chars().filter(|c| !c.is_whitespace()).count() as f32;
+                assert!(
+                    nfd_width - nfc_width <= 0.1 * TEXT_BODY * syllables,
+                    "{nfc}"
+                );
+                if cjk.is_none() {
+                    let room = nfc_width + 1.0;
+                    assert_eq!(fit_regular(nfd, room, TEXT_BODY, cjk), nfd, "{nfc}");
+                }
+            }
+        }
+        // No bundled font has the marks; the fallback for a missing character counts them as nothing.
+        assert_eq!(char_width(inter(), '\u{1161}', TEXT_BODY), 0.0);
+        assert_eq!(char_width(None, '\u{3099}', TEXT_BODY), 0.0);
+        // The wrapped-line estimate of a marker comment, and a strong label, count it the same.
+        let rows = |line: &str| wrap_estimate(line, 7.0 * TEXT_BODY, 7.0, usize::MAX).rows;
+        assert_eq!(rows(decomposed), rows(composed));
+        assert!(
+            (any_style_width(decomposed, TEXT_BODY) - any_style_width(composed, TEXT_BODY)).abs()
+                < 0.01
+        );
+    }
+
+    /// #568: a cut line ends in "…" after a whole flag, emoji sequence or accented letter, never
+    /// inside one.
+    #[test]
+    fn a_cut_never_splits_a_flag_or_an_emoji_sequence() {
+        use unicode_segmentation::UnicodeSegmentation;
+        let lines = [
+            "🇺🇸🇩🇪🇫🇷🇯🇵🇺🇸🇩🇪🇫🇷🇯🇵.mp4",
+            "👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}👨\u{200D}👩\u{200D}👧👍🏽❤\u{FE0F}",
+            "cafe\u{301} cafe\u{301} cafe\u{301} cafe\u{301}",
+            "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}",
+        ];
+        for line in lines {
+            let boundaries: Vec<usize> = line.grapheme_indices(true).map(|(at, _)| at).collect();
+            let whole = |cut: &str| {
+                let kept = cut.trim_end_matches('…').trim_end();
+                kept.is_empty() || kept.len() == line.len() || boundaries.contains(&kept.len())
+            };
+            for step in 1..60 {
+                let width = step as f32 * 4.0;
+                for cut in [
+                    fit_mono(line, width),
+                    fit_body(line, width),
+                    fit_caption(line, width),
+                ] {
+                    assert!(whole(&cut), "{line:?} at {width}: {cut:?}");
+                }
+                for max_rows in [1, 2] {
+                    let estimate = wrap_estimate(line, width.max(TEXT_BODY * 2.0), 7.0, max_rows);
+                    if let Some(cut) = estimate.cut {
+                        assert!(cut == 0 || boundaries.contains(&cut), "{line:?}: {cut}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// #568: an accent written apart (NFD, from a Mac) does not make a Latin row "wide" in the
+    /// wrap estimate: it wraps as a line of as many plain letters does (Inter has the accent, so
+    /// it counts as an average letter either way).
+    #[test]
+    fn a_decomposed_latin_line_is_not_a_wide_row() {
+        let rows = |line: &str, width: f32| wrap_estimate(line, width, 7.0, usize::MAX).rows;
+        let decomposed = "Re\u{301}sume\u{301} cafe\u{301} nai\u{308}ve ".repeat(4);
+        let plain = "Rexsumex cafex naixve ".repeat(4);
+        assert_eq!(decomposed.chars().count(), plain.chars().count());
+        for width in (10..60).map(|step| step as f32 * 7.0) {
+            assert_eq!(rows(&decomposed, width), rows(&plain, width), "{width}");
+        }
     }
 
     #[test]

@@ -2,6 +2,14 @@
 ## Fixed
 - A search hit in a comment, a pasted text the player cannot read as a time, and a batch failure reason are cut between whole flags and emoji. Before, the cut could leave half a flag, a lone boxed letter.
 
+# 0.272
+## Fixed
+- A name cut with "…", such as 🇺🇸🇩🇪🇫🇷.mp4 in a narrow file list, keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone boxed letter from a flag.
+
+# 0.271
+## Fixed
+- A Korean or Japanese name copied from a Mac (where its letters are stored apart) is no longer cut with "…" where it fits, in the recent folders list, the file list's tag chips and the tag grid. Before, it was measured up to three times too wide.
+
 # 0.270
 ## Fixed
 - A tag, marker name, comment or folder name made of emoji, such as 🎉🎉🎉, fits its chip or is cut with "…" inside its row. Before, its last emoji could be sliced at the edge, and in the file list it could push the clip name's "…" out of the row.

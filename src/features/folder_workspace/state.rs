@@ -3998,20 +3998,22 @@ impl FolderWorkspace {
     }
 }
 
-/// The file name of `path` for a note, at most 40 characters: a longer one keeps its start
-/// and its end around "…" (#416: the names that lose a comment are the longest).
+/// The file name of `path` for a note, at most 40 characters as the reader sees them
+/// (grapheme clusters, so a flag or an emoji sequence stays whole, #568): a longer one keeps its
+/// start and its end around "…" (#416: the names that lose a comment are the longest).
 fn short_file_name(path: &std::path::Path) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
     const MAX: usize = 40;
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let chars: Vec<char> = name.chars().collect();
-    if chars.len() <= MAX {
+    let clusters: Vec<&str> = name.graphemes(true).collect();
+    if clusters.len() <= MAX {
         return name;
     }
-    let head: String = chars[..MAX / 2].iter().collect();
-    let tail: String = chars[chars.len() - (MAX / 2 - 1)..].iter().collect();
+    let head = clusters[..MAX / 2].concat();
+    let tail = clusters[clusters.len() - (MAX / 2 - 1)..].concat();
     format!("{head}…{tail}")
 }
 
@@ -6768,6 +6770,23 @@ mod tests {
             super::short_file_name(std::path::Path::new("/a/clip.mov")),
             "clip.mov"
         );
+    }
+
+    /// #568: a note's shortened name keeps every flag whole, before and after its "…".
+    #[test]
+    fn a_shortened_note_name_never_splits_a_flag() {
+        use unicode_segmentation::UnicodeSegmentation;
+        let long = format!("A{}.mov", "🇺🇸🇩🇪🇫🇷".repeat(12));
+        let short = super::short_file_name(std::path::Path::new(&long));
+        let (head, tail) = short.split_once('…').expect("shortened");
+        for part in [head, tail] {
+            let indicators = part
+                .chars()
+                .filter(|c| ('\u{1F1E6}'..='\u{1F1FF}').contains(c))
+                .count();
+            assert_eq!(indicators % 2, 0, "{part}");
+        }
+        assert_eq!(short.graphemes(true).count(), 40);
     }
 
     // --- Markers ---

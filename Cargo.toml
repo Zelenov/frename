@@ -69,12 +69,13 @@ indicatif = "0.18"
 # Measure body text against the bundled Inter, to cut a line with "…" where it really ends (#391);
 # also reads the glyph coverage of the bundled CJK fonts in a test.
 ttf-parser = "0.25"
-# Cut a notice's text between whole characters as the reader sees them, never inside a flag
-# (#580); already in the tree through iced.
-unicode-segmentation = "1"
 # Which characters draw as colour emoji, to measure a clip name of them in mono (#544); already
 # in the tree through iced's text shaping.
 unicode-properties = { version = "0.1", default-features = false, features = ["emoji"] }
+# Cut text with "…" between whole characters as the reader sees them, never inside a flag or an
+# emoji sequence (#568), also a notice's text and a batch failure reason (#580); already in the
+# tree through iced.
+unicode-segmentation = "1"
 
 [features]
 # The Microsoft Store build (packaging/windows/build-msix.ps1): the Store installs and updates
