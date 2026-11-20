@@ -632,7 +632,11 @@ mod tests {
         assert!(mono_width(name) >= emoji, "{}", mono_width(name));
         // A row as wide as ten one-em emoji and the extension: the name no longer fits whole.
         let row = 10.0 * TEXT_MONO + mono_width(".mp4");
-        assert!(fit_mono(name, row).ends_with('…'), "{}", fit_mono(name, row));
+        assert!(
+            fit_mono(name, row).ends_with('…'),
+            "{}",
+            fit_mono(name, row)
+        );
         assert_eq!(fit_mono(name, mono_width(name)), name);
     }
 
