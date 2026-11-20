@@ -73,7 +73,8 @@ ttf-parser = "0.25"
 # in the tree through iced's text shaping.
 unicode-properties = { version = "0.1", default-features = false, features = ["emoji"] }
 # Cut text with "…" between whole characters as the reader sees them, never inside a flag or an
-# emoji sequence (#568); already in the tree through iced.
+# emoji sequence (#568), also a notice's text and a batch failure reason (#580); already in the
+# tree through iced.
 unicode-segmentation = "1"
 
 [features]

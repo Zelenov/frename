@@ -1,3 +1,7 @@
+# 0.273
+## Fixed
+- A search hit in a comment, a pasted text the player cannot read as a time, and a batch failure reason are cut between whole flags and emoji. Before, the cut could leave half a flag, a lone boxed letter.
+
 # 0.272
 ## Fixed
 - A name cut with "…", such as 🇺🇸🇩🇪🇫🇷.mp4 in a narrow file list, keeps its last flag or emoji whole. Before, the cut could fall inside one and leave half of it, such as a lone boxed letter from a flag.
