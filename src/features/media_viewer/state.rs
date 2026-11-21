@@ -193,9 +193,10 @@ impl MediaViewerState {
         matches!(self.active, ActiveMedia::Video) && self.video.more_shown(pane_width)
     }
 
-    /// Close the video's **More** menu.
-    pub fn close_more(&mut self) {
-        self.video.close_more();
+    /// For tests: a video is on screen (see [`video::VideoPlayerState::pretend_video_shown`]).
+    #[cfg(test)]
+    pub fn pretend_video_shown(&mut self) {
+        self.video.pretend_video_shown();
     }
 
     /// Handle media viewer messages.

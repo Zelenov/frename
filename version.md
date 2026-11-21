@@ -1,6 +1,6 @@
 # 0.277
 ## Fixed
-- `Esc` with the file list's filter menu or the video's More (⋯) menu open closes that menu and does nothing else. Before, the menu stayed open and `Esc` cleared the file and tag searches instead (or left batch mode, the side search or fullscreen).
+- `Esc` with the file list's filter menu or the video's More (⋯) menu open closes that menu and does nothing else. Before, the menu stayed open and `Esc` cleared the file and tag searches instead (or left batch mode or the subtitle and marker search).
 
 # 0.276
 ## Fixed
