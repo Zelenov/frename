@@ -1,3 +1,7 @@
+# 0.277
+## Fixed
+- A frame saved with `F12` is written aside first and then put in place. Before, a save that failed part-way (a full disk, a network drive that dropped) could leave a cut-off picture, or spoil the frame saved earlier at the same moment, while the note said it was not saved.
+
 # 0.276
 ## Fixed
 - In fullscreen (F5), the tag keys (`Delete`, `Enter`, `Shift+Space` and the arrows) do nothing, because the tag panel is hidden. Before, they acted on it out of sight: `Delete` could remove a tag from the folder's tags, `Enter` could add one, and `Shift+Space` could tag or untag the clip.
