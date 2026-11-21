@@ -580,9 +580,10 @@ impl FolderWorkspace {
                     Task::batch([task, self.follow_marker_list(false)])
                 }
             },
-            // Fullscreen hides the tag panel: Delete, Shift+Space and the arrows must not act on
-            // a selection the editor cannot see (#587).
+            // Fullscreen hides the tag panel: Delete, Enter, Shift+Space and the arrows must not
+            // act on a selection the editor cannot see (#587).
             Message::RemoveTag
+            | Message::SaveSelectedTag
             | Message::TagPanel(
                 tag_panel::Message::SelectLeft
                 | tag_panel::Message::SelectRight
@@ -11406,6 +11407,18 @@ mod tests {
             list.get_tag(pick).is_some_and(|t| !t.is_checked()),
             "Shift+Space leaves the clip's tags"
         );
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .unsave_tag(pick)
+            .expect("unsave");
+        let _ = workspace.update(Message::SaveSelectedTag);
+        let stored = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(pick)
+            .map(|t| t.is_stored());
+        assert_eq!(stored, Some(false), "Enter leaves the unsaved tag unsaved");
         let _ = workspace.update(Message::RemoveTag);
         assert!(
             workspace
@@ -11415,7 +11428,10 @@ mod tests {
                 .is_some(),
             "Delete keeps the folder's tag"
         );
-        assert!(!workspace.history.can_undo(), "nothing happened");
+        assert!(
+            !workspace.history.can_undo(),
+            "no step from any of the keys"
+        );
     }
 
     #[test]

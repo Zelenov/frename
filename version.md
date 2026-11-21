@@ -1,6 +1,6 @@
 # 0.276
 ## Fixed
-- In fullscreen (F5), `Delete`, `Shift+Space` and the arrow keys no longer act on the hidden tag panel. Before, `Delete` could remove a tag from the folder's tags and `Shift+Space` could tag or untag the clip, out of sight.
+- In fullscreen (F5), the tag keys (`Delete`, `Enter`, `Shift+Space` and the arrows) do nothing, because the tag panel is hidden. Before, they acted on it out of sight: `Delete` could remove a tag from the folder's tags, `Enter` could add one, and `Shift+Space` could tag or untag the clip.
 
 # 0.275
 ## Fixed
