@@ -1,3 +1,7 @@
+# 0.275
+## Fixed
+- In fullscreen (F5), Space plays and pauses, even when the comment box had the keys before. Before, the keys still went to the comment box or the tag search hidden under the video, so Space typed a space and letters could change the clip's comment out of sight.
+
 # 0.274
 ## Fixed
 - A name of joined emoji, such as 👨‍👩‍👧, 👍🏽 or ❤️, is measured as the one emoji each draws, so it is cut with "…" where it really ends. Before, each counted two or three emoji wide and the name was cut at a fraction of its room.

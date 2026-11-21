@@ -126,7 +126,7 @@ saves first, how frename resumes where you stopped, and more ways to open a fold
 |---|---|
 | `↑` `↓` `←` `→` | Move the selection in the tag grid |
 | `Shift+Space` | Tag or untag the file with the selected tag |
-| Any letter, `Backspace` | Type into the tag search |
+| Any letter, `Backspace` | Type into the tag search (not in fullscreen) |
 | `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags |
 | `Delete` | Delete the selected tag from the folder's tags |
 | `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
@@ -211,7 +211,8 @@ Nothing is moved.
 While a text box (tag search, file search, comment) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
 `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
-Press `Esc` first to give the keys back to the app. `[` and `]` set in and out points, except while
+Press `Esc` first to give the keys back to the app. `F5` (fullscreen) takes the cursor from the
+box too, so `Space` plays and pauses there. `[` and `]` set in and out points, except while
 you type in a marker's name. `Ctrl+Z` and `Ctrl+Y` do nothing while you type a comment, a file
 name, a time or a field of batch mode; in the tag and file search they still undo and redo.
 The F-keys always work, and so does `Ctrl+R` (except in fullscreen); so do `Ctrl+Alt+←` / `→`
