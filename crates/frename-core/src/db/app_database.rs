@@ -976,6 +976,20 @@ mod tests {
     }
 
     #[test]
+    fn probe_subtitle_choice_follows_outside_renames() {
+        let db = database("subtitle-choice-tidy");
+        let folder = Path::new("/footage");
+        db.set_subtitle_choice(&folder.join("MVI_0410.mp4"), SubtitleFormat::Premiere);
+        let listed = ["skip.MVI_0410.mp4"].map(str::to_string);
+        db.tidy_playback_positions(folder, &listed);
+        assert_eq!(
+            db.get_subtitle_choice(&folder.join("skip.MVI_0410.mp4")),
+            Some(SubtitleFormat::Premiere)
+        );
+        assert_eq!(db.get_subtitle_choice(&folder.join("MVI_0410.mp4")), None);
+    }
+
+    #[test]
     fn listing_a_folder_forgets_gone_files_and_follows_outside_renames() {
         let db = database("playback-tidy");
         let folder = Path::new("/footage");
