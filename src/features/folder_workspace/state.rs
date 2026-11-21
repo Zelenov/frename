@@ -862,12 +862,14 @@ impl FolderWorkspace {
                 if self.file_menu.is_open() {
                     return self.handle_file_menu(file_menu::Message::Close);
                 }
-                // An open menu closes first, and nothing else happens (#592).
-                if self.filter_menu_open {
-                    self.filter_menu_open = false;
-                    return Task::none();
+                // A menu on screen closes first, and nothing else happens (#592). One left open
+                // but hidden (fullscreen, a folder loading, a pane too wide to fold) keeps out
+                // of the way.
+                if self.filter_menu_open && !self.media_fullscreen && !self.loading {
+                    return self.handle_folder_message(folder::Message::CloseFilterMenu);
                 }
-                if self.media_viewer.close_more() {
+                if !self.media_fullscreen && self.media_viewer.more_shown(self.left_width()) {
+                    self.media_viewer.close_more();
                     return Task::none();
                 }
                 if self.markers.describe_all_asked().is_some() {
@@ -10322,27 +10324,18 @@ mod tests {
         assert_eq!(workspace.pending_file_action, None, "dropped");
     }
 
-    /// Esc closes the file list's filter menu, and the video's More, and does nothing else: the
-    /// searches stay (#592).
+    /// Esc closes the file list's filter menu and does nothing else: the searches stay; the
+    /// next Esc clears them (#592).
     #[test]
-    fn escape_closes_the_filter_menu_and_more_first() {
+    fn escape_closes_the_filter_menu_first() {
         let (_test_dir, mut workspace) = open_folder(2);
         let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
             "beach".to_string(),
         )));
         workspace.file_workspace.set_tag_filter("pi".to_string());
         let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
-        assert!(workspace.filter_menu_open());
         let _ = workspace.update(Message::EscapePressed);
         assert!(!workspace.filter_menu_open(), "Esc closes the filter menu");
-
-        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
-            media_viewer_video::Message::ToggleMore,
-        )));
-        assert!(workspace.media_viewer().more_open());
-        let _ = workspace.update(Message::EscapePressed);
-        assert!(!workspace.media_viewer().more_open(), "Esc closes More");
-
         let name_filter = workspace
             .directory()
             .map(|dir| dir.name_filter().to_string());
@@ -10352,9 +10345,58 @@ mod tests {
             "the file search stays"
         );
         assert_eq!(workspace.file_workspace().tag_list().filter_query(), "pi");
-        // With both closed, the next Esc clears the searches as before.
         let _ = workspace.update(Message::EscapePressed);
         assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
+    }
+
+    /// Esc closes the video's More when it is on screen (a pane narrow enough to fold), and
+    /// does nothing else (#592).
+    #[test]
+    fn escape_closes_more_first_when_it_is_on_screen() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        workspace.left_width = 200.0;
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMore,
+        )));
+        assert!(workspace.media_viewer().more_shown(workspace.left_width()));
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            !workspace.media_viewer().more_shown(200.0),
+            "Esc closes More"
+        );
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "pi");
+    }
+
+    /// A menu left open but not on screen does not take Esc: in fullscreen the first Esc leaves
+    /// fullscreen, and with a pane too wide to fold, Esc clears the search (#592).
+    #[test]
+    fn escape_passes_a_hidden_menu_by() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        workspace.left_width = 200.0;
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMore,
+        )));
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(workspace.media_fullscreen);
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            !workspace.media_fullscreen,
+            "the first Esc leaves fullscreen"
+        );
+
+        let _ = workspace.update(Message::Folder(folder::Message::CloseFilterMenu));
+        workspace.left_width = 5000.0;
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(
+            workspace.file_workspace().tag_list().filter_query(),
+            "",
+            "More folds away in a wide pane: Esc clears the search"
+        );
     }
 
     /// Esc closes an open file menu and does nothing else.

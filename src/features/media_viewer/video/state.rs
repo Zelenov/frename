@@ -1167,6 +1167,22 @@ impl VideoPlayerState {
         self.more_open
     }
 
+    /// How the controls fold in a pane `pane_width` wide (fullscreen: `f32::INFINITY`, the whole
+    /// window), for the view and for whether **More** is on screen.
+    pub fn fold_for(&self, pane_width: f32) -> crate::features::video_controls::Fold {
+        crate::features::video_controls::Fold::for_width_with(
+            pane_width,
+            usize::from(self.subtitles().is_some()) + 1,
+            crate::features::video_controls::view::readout_width(self.time_format()),
+        )
+    }
+
+    /// Whether **More** is open and drawn: a pane wide enough to fold nothing has no More, though
+    /// the flag stays set.
+    pub fn more_shown(&self, pane_width: f32) -> bool {
+        self.more_open && self.fold_for(pane_width).has_more()
+    }
+
     /// Close **More**; true when it was open.
     pub fn close_more(&mut self) -> bool {
         std::mem::replace(&mut self.more_open, false)

@@ -188,14 +188,14 @@ impl MediaViewerState {
         self.video.cancel_time_edit()
     }
 
-    /// Whether the video's **More** menu is open.
-    pub fn more_open(&self) -> bool {
-        self.video.more_open()
+    /// Whether the video's **More** menu is open and on screen, its pane `pane_width` wide.
+    pub fn more_shown(&self, pane_width: f32) -> bool {
+        matches!(self.active, ActiveMedia::Video) && self.video.more_shown(pane_width)
     }
 
-    /// Close the video's **More** menu; true when it was open.
-    pub fn close_more(&mut self) -> bool {
-        self.video.close_more()
+    /// Close the video's **More** menu.
+    pub fn close_more(&mut self) {
+        self.video.close_more();
     }
 
     /// Handle media viewer messages.

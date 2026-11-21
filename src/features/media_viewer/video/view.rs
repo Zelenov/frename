@@ -130,12 +130,7 @@ pub fn view<'a>(
     } else {
         markers.pane_width
     };
-    let list_buttons = usize::from(subtitles.is_some()) + 1;
-    let fold = Fold::for_width_with(
-        pane_width,
-        list_buttons,
-        controls::readout_width(state.time_format()),
-    );
+    let fold = state.fold_for(pane_width);
 
     let mut layers: Vec<Element<'a, Message>> = vec![picture.into()];
     if let Some(side) = side_overlay(
@@ -160,7 +155,7 @@ pub fn view<'a>(
             starts_over.then_some(Message::GoToStart),
         ));
     }
-    if state.more_open() && fold.has_more() {
+    if state.more_shown(pane_width) {
         layers.push(more_popover(state, markers, fold));
     }
     let picture_area = stack(layers).width(Length::Fill).height(Length::Fill);
