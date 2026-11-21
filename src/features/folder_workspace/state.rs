@@ -1500,8 +1500,13 @@ impl FolderWorkspace {
     }
 
     fn unless_writing(&self, message: Message) -> Task<Message> {
+        // Batch mode hides the comment box; its notes box for the AI is the one written in then.
         if self.batch.is_active() {
-            return Task::done(message);
+            return if self.notes_focused {
+                Task::none()
+            } else {
+                Task::done(message)
+            };
         }
         iced::widget::operation::is_focused(iced::widget::Id::new(
             crate::features::file_workspace::view::COMMENT_EDITOR_ID,
@@ -6987,6 +6992,32 @@ mod tests {
         let _ = workspace.update(Message::RotateVideo(1));
         let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
         assert_eq!(rotation.map(|r| r.degrees()), Ok(90));
+    }
+
+    /// Typing in batch mode's notes box keeps Ctrl+Alt+←/→, Alt+←/→ and Home: the clip is not
+    /// turned, stepped or sent to its start (#591).
+    #[test]
+    fn the_notes_box_keeps_the_keys_it_types_with() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::NotesFocused(true));
+        workspace.media_viewer_mut().pretend_resume_note();
+        for message in [
+            Message::RotateVideoWhileTyping(1),
+            Message::StepFrameWhileTyping(crate::features::video_controls::FrameStep::Forward),
+            Message::GoToStartWhileTyping,
+        ] {
+            assert_eq!(workspace.update(message).units(), 0, "the notes keep it");
+        }
+        let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
+        assert_eq!(rotation.map(|r| r.degrees()), Ok(0));
+        // Out of the box, the turn goes straight through again.
+        let _ = workspace.update(Message::NotesFocused(false));
+        assert_eq!(
+            workspace.update(Message::RotateVideoWhileTyping(1)).units(),
+            1
+        );
     }
 
     #[test]
