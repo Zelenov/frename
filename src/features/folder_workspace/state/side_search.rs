@@ -28,6 +28,8 @@ impl FolderWorkspace {
                     return Task::none();
                 }
                 self.side_search.open();
+                // The search field takes the keys from the notes box (#591).
+                self.notes_focused = false;
                 let show = self.media_viewer.shown_overlay() == Overlay::Closed;
                 let show = show.then(|| self.show_a_list());
                 Task::batch([
@@ -41,6 +43,7 @@ impl FolderWorkspace {
             }
             SearchMessage::Clear => {
                 self.side_search.set_query(String::new());
+                self.notes_focused = false;
                 operation::focus(iced::widget::Id::new(SIDE_SEARCH_INPUT_ID))
             }
             SearchMessage::Submit => return self.step_search(!self.modifiers.shift()),

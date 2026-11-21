@@ -1,3 +1,7 @@
+# 0.277
+## Fixed
+- In batch mode, typing in "Notes for the AI" keeps `Ctrl+Alt+←`/`→`, `Alt+←`/`→` and `Home` in the text. Before, they also turned the clip (and saved the turn), stepped its video a frame, or, while "Resumed at" showed, sent it back to the start.
+
 # 0.276
 ## Fixed
 - In fullscreen (F5), the tag keys (`Delete`, `Enter`, `Shift+Space` and the arrows) do nothing, because the tag panel is hidden. Before, they acted on it out of sight: `Delete` could remove a tag from the folder's tags, `Enter` could add one, and `Shift+Space` could tag or untag the clip.
