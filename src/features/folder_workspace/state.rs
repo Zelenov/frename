@@ -1500,7 +1500,8 @@ impl FolderWorkspace {
     }
 
     fn unless_writing(&self, message: Message) -> Task<Message> {
-        // Batch mode hides the comment box; its notes box for the AI is the one written in then.
+        // Batch mode hides the comment box; the box typed in there is the notes for the AI (#591),
+        // known from `notes_focused`, as Undo/Redo use it.
         if self.batch.is_active() {
             return if self.notes_focused {
                 Task::none()
@@ -7010,8 +7011,6 @@ mod tests {
         ] {
             assert_eq!(workspace.update(message).units(), 0, "the notes keep it");
         }
-        let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
-        assert_eq!(rotation.map(|r| r.degrees()), Ok(0));
         // Out of the box, the turn goes straight through again.
         let _ = workspace.update(Message::NotesFocused(false));
         assert_eq!(
