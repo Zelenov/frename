@@ -82,7 +82,7 @@ impl<S: AppStateStore + Clone> Directory<S> {
             .filter_map(|f| f.file_path().file_name())
             .map(|name| name.to_string_lossy().to_string())
             .collect();
-        store.tidy_playback_positions(directory, &names);
+        store.tidy_after_listing(directory, &names);
         log::info!("Directory scan complete: {} files found", files.len());
         Ok(Self::with_files(directory, files, store))
     }

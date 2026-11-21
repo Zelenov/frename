@@ -1,3 +1,7 @@
+# 0.277
+## Fixed
+- The subtitle file you picked for a clip stays picked after the clip is renamed outside frename (in Explorer, Finder, or by the restore after a crash). Before, the clip went back to its first subtitle file, and Describe with AI sent that one.
+
 # 0.276
 ## Fixed
 - In fullscreen (F5), the tag keys (`Delete`, `Enter`, `Shift+Space` and the arrows) do nothing, because the tag panel is hidden. Before, they acted on it out of sight: `Delete` could remove a tag from the folder's tags, `Enter` could add one, and `Shift+Space` could tag or untag the clip.

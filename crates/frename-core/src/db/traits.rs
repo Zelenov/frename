@@ -246,9 +246,10 @@ pub trait AppStateStore: Send + Sync {
     /// The clip at `from` was renamed to `to`: its remembered position goes along.
     fn move_playback_position(&self, _from: &Path, _to: &Path) {}
 
-    /// `folder` now lists the files `names`: positions of files that are gone are dropped, or
-    /// follow a file renamed outside frename (see [`crate::playback::tidy`]).
-    fn tidy_playback_positions(&self, _folder: &Path, _names: &[String]) {}
+    /// `folder` now lists the files `names`: the playback positions and subtitle picks (#593) of
+    /// files that are gone are dropped, or follow a file renamed outside frename (see
+    /// [`crate::playback::tidy`]).
+    fn tidy_after_listing(&self, _folder: &Path, _names: &[String]) {}
 
     /// The subtitle file the editor picked to show for the clip at `clip` (#242), if any.
     fn get_subtitle_choice(&self, _clip: &Path) -> Option<SubtitleFormat> {
