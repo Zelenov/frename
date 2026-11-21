@@ -125,32 +125,42 @@ fn move_position(
     Ok(())
 }
 
-/// Apply [`crate::playback::tidy`] to `folder`'s positions, then drop the oldest beyond
+/// Apply [`crate::playback::tidy`] to `folder`'s rows of `table` (keyed by folder and file
+/// name, given as a literal): a gone file's row follows its outside rename or is dropped. A row follows only to a
+/// name that has none of its own, so the rename cannot collide.
+fn tidy_rows(
+    conn: &Connection,
+    table: &'static str,
+    folder: &str,
+    names: &[String],
+) -> Result<(), rusqlite::Error> {
+    let remembered: Vec<String> = conn
+        .prepare(&format!("SELECT file_name FROM {table} WHERE folder = ?1"))?
+        .query_map([folder], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    for (name, change) in crate::playback::tidy(&remembered, names, cfg!(windows)) {
+        match change {
+            crate::playback::Tidy::Follow(renamed) => conn.execute(
+                &format!("UPDATE {table} SET file_name = ?3 WHERE folder = ?1 AND file_name = ?2"),
+                rusqlite::params![folder, name, renamed],
+            )?,
+            crate::playback::Tidy::Forget => conn.execute(
+                &format!("DELETE FROM {table} WHERE folder = ?1 AND file_name = ?2"),
+                rusqlite::params![folder, name],
+            )?,
+        };
+    }
+    Ok(())
+}
+
+/// Tidy `folder`'s positions ([`tidy_rows`]), then drop the oldest beyond
 /// [`crate::playback::MOST_KEPT`].
 fn tidy_positions(
     conn: &Connection,
     folder: &str,
     names: &[String],
 ) -> Result<(), rusqlite::Error> {
-    let remembered: Vec<String> = conn
-        .prepare("SELECT file_name FROM playback_position WHERE folder = ?1")?
-        .query_map([folder], |row| row.get(0))?
-        .collect::<Result<_, _>>()?;
-    for (name, change) in crate::playback::tidy(&remembered, names, cfg!(windows)) {
-        match change {
-            crate::playback::Tidy::Follow(renamed) => move_position(
-                conn,
-                &(folder.to_string(), name),
-                &(folder.to_string(), renamed),
-            )?,
-            crate::playback::Tidy::Forget => {
-                conn.execute(
-                    "DELETE FROM playback_position WHERE folder = ?1 AND file_name = ?2",
-                    rusqlite::params![folder, name],
-                )?;
-            }
-        }
-    }
+    tidy_rows(conn, "playback_position", folder, names)?;
     conn.execute(
         "DELETE FROM playback_position WHERE rowid NOT IN
              (SELECT rowid FROM playback_position ORDER BY saved_at_ms DESC LIMIT ?1)",
@@ -572,12 +582,16 @@ impl AppStateStore for AppDatabase {
         }
     }
 
-    fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
+    fn tidy_after_listing(&self, folder: &Path, names: &[String]) {
         let folder = folder_key(folder);
         let Ok(conn) = self.conn() else { return };
         let conn = lock_connection(&conn);
         if let Err(e) = tidy_positions(&conn, &folder, names) {
-            log::warn!("tidy_playback_positions failed: {e}");
+            log::warn!("tidy_after_listing: positions failed: {e}");
+        }
+        // The subtitle file picked for a clip follows it too (#593).
+        if let Err(e) = tidy_rows(&conn, "subtitle_choice", &folder, names) {
+            log::warn!("tidy_after_listing: subtitle picks failed: {e}");
         }
     }
 
@@ -986,7 +1000,7 @@ mod tests {
         db.set_playback_position(elsewhere, secs(40));
 
         let listed = ["kept.mp4", "skip.MVI_0410.mp4", "new.mp4"].map(str::to_string);
-        db.tidy_playback_positions(folder, &listed);
+        db.tidy_after_listing(folder, &listed);
 
         assert_eq!(
             db.get_playback_position(&folder.join("kept.mp4")),
@@ -1002,6 +1016,42 @@ mod tests {
             Some(secs(40)),
             "another folder is left alone"
         );
+    }
+
+    /// #593: the subtitle file picked for a clip follows a rename done outside frename, and a
+    /// gone clip's pick is dropped, as the playback position is; another folder is left alone.
+    #[test]
+    fn listing_a_folder_tidies_the_subtitle_picks_too() {
+        let db = database("subtitle-choice-tidy");
+        let folder = Path::new("/footage");
+        db.set_subtitle_choice(&folder.join("MVI_0410.mp4"), SubtitleFormat::Premiere);
+        db.set_subtitle_choice(&folder.join("gone.mp4"), SubtitleFormat::Ass);
+        db.set_subtitle_choice(&folder.join("kept.mp4"), SubtitleFormat::Srt);
+        let elsewhere = Path::new("/other/gone.mp4");
+        db.set_subtitle_choice(elsewhere, SubtitleFormat::Srt);
+        // A renamed clip that already has a pick of its own keeps it; the old one is dropped.
+        db.set_subtitle_choice(&folder.join("A002.mp4"), SubtitleFormat::Ass);
+        db.set_subtitle_choice(&folder.join("pick.A002.mp4"), SubtitleFormat::Capt);
+
+        let listed = ["kept.mp4", "skip.MVI_0410.mp4", "pick.A002.mp4"].map(str::to_string);
+        db.tidy_after_listing(folder, &listed);
+
+        assert_eq!(
+            db.get_subtitle_choice(&folder.join("skip.MVI_0410.mp4")),
+            Some(SubtitleFormat::Premiere)
+        );
+        assert_eq!(db.get_subtitle_choice(&folder.join("MVI_0410.mp4")), None);
+        assert_eq!(db.get_subtitle_choice(&folder.join("gone.mp4")), None);
+        assert_eq!(
+            db.get_subtitle_choice(&folder.join("kept.mp4")),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(db.get_subtitle_choice(elsewhere), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            db.get_subtitle_choice(&folder.join("pick.A002.mp4")),
+            Some(SubtitleFormat::Capt)
+        );
+        assert_eq!(db.get_subtitle_choice(&folder.join("A002.mp4")), None);
     }
 
     /// A clip name or folder path with `;`, `=` or `\` comes back as it was (#514), and a record

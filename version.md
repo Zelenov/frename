@@ -1,3 +1,7 @@
+# 0.280
+## Fixed
+- The subtitle file you picked for a clip stays picked when the clip's tags are changed outside frename (in Explorer, or by the restore after a crash), as its resume point does. Before, the clip went back to its first subtitle file, and Describe with AI sent that one.
+
 # 0.279
 ## Fixed
 - `Esc` with the file list's filter menu or the video's More (⋯) menu open closes that menu and does nothing else. Before, the menu stayed open and `Esc` cleared the file and tag searches instead (or left batch mode or the subtitle and marker search).

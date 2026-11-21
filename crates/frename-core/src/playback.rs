@@ -66,7 +66,8 @@ pub fn worth_remembering(position: Duration) -> bool {
     position >= WORTH_RESUMING
 }
 
-/// What becomes of a position remembered for a file name once its folder is listed again.
+/// What becomes of a row remembered for a file name (a playback position, a subtitle pick, #593)
+/// once its folder is listed again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tidy {
     /// The file was renamed outside frename (its tags changed): the position follows it to this
@@ -76,8 +77,8 @@ pub enum Tidy {
     Forget,
 }
 
-/// For positions remembered under `remembered` file names of a folder that now `listed` these
-/// files: the ones that must follow a rename or be dropped. A name still listed (exactly, case
+/// For rows (positions, subtitle picks) remembered under `remembered` file names of a folder
+/// that now `listed` these files: the ones that must follow a rename or be dropped. A name still listed (exactly, case
 /// included) keeps its position. A gone name follows a rename done outside frename that only
 /// changed the tags ([`FileSnapshot::untagged_key`]; with `ignore_case`, as on Windows, also one
 /// that changed only letter case), but only when that is certain: exactly one listed file is

@@ -80,13 +80,13 @@ impl<S: AppStateStore> AppStateStore for LoggingAppStateStore<S> {
         self.inner.move_playback_position(from, to);
     }
 
-    fn tidy_playback_positions(&self, folder: &Path, names: &[String]) {
+    fn tidy_after_listing(&self, folder: &Path, names: &[String]) {
         log::debug!(
-            "AppStateStore::tidy_playback_positions({}, {} files)",
+            "AppStateStore::tidy_after_listing({}, {} files)",
             folder.display(),
             names.len()
         );
-        self.inner.tidy_playback_positions(folder, names);
+        self.inner.tidy_after_listing(folder, names);
     }
 
     fn get_subtitle_choice(&self, clip: &Path) -> Option<SubtitleFormat> {
