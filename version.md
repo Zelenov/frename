@@ -1,3 +1,7 @@
+# 0.276
+## Fixed
+- In fullscreen (F5), `Delete`, `Shift+Space` and the arrow keys no longer act on the hidden tag panel. Before, `Delete` could remove a tag from the folder's tags and `Shift+Space` could tag or untag the clip, out of sight.
+
 # 0.275
 ## Fixed
 - In fullscreen (F5), Space plays and pauses, even when the comment box had the keys before. Before, the keys still went to the comment box or the tag search hidden under the video, so Space typed a space and letters could change the clip's comment out of sight.

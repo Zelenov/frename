@@ -580,6 +580,16 @@ impl FolderWorkspace {
                     Task::batch([task, self.follow_marker_list(false)])
                 }
             },
+            // Fullscreen hides the tag panel: Delete, Shift+Space and the arrows must not act on
+            // a selection the editor cannot see (#587).
+            Message::RemoveTag
+            | Message::TagPanel(
+                tag_panel::Message::SelectLeft
+                | tag_panel::Message::SelectRight
+                | tag_panel::Message::SelectUp
+                | tag_panel::Message::SelectDown
+                | tag_panel::Message::ToggleSelectedTag,
+            ) if self.media_fullscreen => Task::none(),
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
@@ -11365,6 +11375,47 @@ mod tests {
             !workspace.media_fullscreen,
             "the first Esc leaves fullscreen"
         );
+    }
+
+    /// #587: in fullscreen the tag panel is hidden; its keys must not change it out of sight.
+    #[test]
+    fn the_tag_keys_do_nothing_in_fullscreen() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        workspace.tag_panel.set_selected(Some(pick));
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(workspace.media_fullscreen);
+
+        for key in [
+            tag_panel::Message::SelectLeft,
+            tag_panel::Message::SelectRight,
+            tag_panel::Message::SelectUp,
+            tag_panel::Message::SelectDown,
+        ] {
+            let _ = workspace.update(Message::TagPanel(key));
+            assert_eq!(workspace.tag_panel.selected_tag_id(), Some(pick), "arrows");
+        }
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        let list = workspace.file_workspace().tag_list();
+        assert!(
+            list.get_tag(pick).is_some_and(|t| !t.is_checked()),
+            "Shift+Space leaves the clip's tags"
+        );
+        let _ = workspace.update(Message::RemoveTag);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .is_some(),
+            "Delete keeps the folder's tag"
+        );
+        assert!(!workspace.history.can_undo(), "nothing happened");
     }
 
     #[test]
