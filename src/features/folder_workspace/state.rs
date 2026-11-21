@@ -602,6 +602,8 @@ impl FolderWorkspace {
                     .set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
+            // Fullscreen hides the tag search: a letter typed there must not go to it (#585).
+            Message::FocusSearchBarAndKey(_) if self.media_fullscreen => Task::none(),
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::RunOnOpenClip(action) => self.run_on_open_clip(action),
@@ -2683,7 +2685,20 @@ impl FolderWorkspace {
         if !self.media_viewer.is_previewable() {
             return Task::none();
         }
-        Task::done(self.restore_lists_message())
+        let restore = Task::done(self.restore_lists_message());
+        if !on {
+            return restore;
+        }
+        // The fields under the video stay in the layout: one that kept the keys would take
+        // Space and every letter typed in fullscreen, out of sight (#585). The comment's
+        // typing so far is its own undo step, as when the box loses the keys any other way.
+        self.end_comment_session();
+        self.file_workspace.set_comment_focused(false);
+        let unfocus = iced::advanced::widget::operate(
+            iced::advanced::widget::operation::focusable::unfocus::<()>(),
+        )
+        .map(|()| Message::Noop);
+        Task::batch([restore, unfocus])
     }
 
     /// The task message that puts the lists back at the offsets they have now.
@@ -11180,9 +11195,10 @@ mod tests {
         for expect_fullscreen in [true, false] {
             let task = workspace.update(Message::ToggleMediaFullscreen);
             assert_eq!(workspace.media_fullscreen, expect_fullscreen);
+            // Entering also takes the keys from the fields under the video (#585).
             assert_eq!(
                 task.units(),
-                1,
+                if expect_fullscreen { 2 } else { 1 },
                 "the toggle asks for the lists to be put back"
             );
         }
@@ -11288,6 +11304,43 @@ mod tests {
             target_file: Some(test_dir.target_file()),
         });
         assert!(!workspace.recent_folders.is_open());
+    }
+
+    /// #585: in fullscreen the tag search is out of sight; a letter must not be typed into it.
+    #[test]
+    fn a_letter_in_fullscreen_does_not_go_to_the_hidden_tag_search() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(
+            workspace.media_fullscreen,
+            "a video is open, so fullscreen starts"
+        );
+        let _ = workspace.update(Message::FocusSearchBarAndKey(super::GlobalSearchKey::Char(
+            'k',
+        )));
+        assert_eq!(workspace.file_workspace.tag_list().filter_query(), "");
+    }
+
+    /// #585: the comment box stays in the layout under the fullscreen video. Entering
+    /// fullscreen takes its keys and closes what was typed so far as its own undo step.
+    #[test]
+    fn fullscreen_takes_the_keys_from_the_comment_box() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::CommentAction(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert('a')),
+        ));
+        assert!(workspace.file_workspace.comment_focused());
+        assert!(workspace.comment_session.is_some());
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(workspace.media_fullscreen);
+        assert!(!workspace.file_workspace.comment_focused());
+        assert!(
+            workspace.comment_session.is_none(),
+            "the typing is one undo step"
+        );
+        assert!(workspace.history.can_undo());
     }
 
     #[test]
