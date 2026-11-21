@@ -10316,6 +10316,29 @@ mod tests {
 
     /// Esc closes an open file menu and does nothing else.
     #[test]
+    fn probe_escape_closes_the_filter_menu_first() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            "beach".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        assert!(workspace.filter_menu_open());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.filter_menu_open(), "Esc closes the filter menu");
+        assert_eq!(workspace.directory().unwrap().name_filter(), "beach");
+    }
+
+    #[test]
+    fn probe_batch_notes_keep_the_turn_keys() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        let _ = workspace.update(Message::NotesFocused(true));
+        let task = workspace.update(Message::RotateVideoWhileTyping(1));
+        assert_eq!(task.units(), 0, "typing in the notes keeps Ctrl+Alt+arrow");
+    }
+
+    #[test]
     fn escape_closes_the_file_menu_first() {
         use crate::features::file_menu;
         let (_test_dir, mut workspace) = open_folder(2);
