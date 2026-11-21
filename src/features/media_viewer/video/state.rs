@@ -211,6 +211,9 @@ pub struct VideoPlayerState {
     unload_waits_on: Vec<u64>,
     /// **More** is open over the picture.
     more_open: bool,
+    /// For tests without a real video: count as showing one (see [`Self::pretend_video_shown`]).
+    #[cfg(test)]
+    video_pretended: bool,
     /// Steps of the spinner clock since the load started: turns the spinner, and after a while
     /// says the file is slow to come.
     loading_ticks: usize,
@@ -290,6 +293,8 @@ impl Default for VideoPlayerState {
             loads_in_flight: Vec::new(),
             unload_waits_on: Vec::new(),
             more_open: false,
+            #[cfg(test)]
+            video_pretended: false,
             loading_ticks: 0,
             frame_step: None,
             slow_for: None,
@@ -491,6 +496,21 @@ impl VideoPlayerState {
     #[cfg(test)]
     pub fn loads_started(&self) -> u64 {
         self.load_generation
+    }
+
+    /// For tests: a video is on screen, so what is drawn over it (More) counts as shown.
+    #[cfg(test)]
+    pub fn pretend_video_shown(&mut self) {
+        self.video_pretended = true;
+    }
+
+    /// Whether a video is drawn, rather than a placeholder (loading, cannot play).
+    fn video_drawn(&self) -> bool {
+        #[cfg(test)]
+        if self.video_pretended {
+            return true;
+        }
+        self.current_video.is_some()
     }
 
     /// For tests without a real video: the clip has loaded and is shown at `position`.
@@ -1165,6 +1185,22 @@ impl VideoPlayerState {
     /// Whether **More** is open.
     pub fn more_open(&self) -> bool {
         self.more_open
+    }
+
+    /// How the controls fold in a pane `pane_width` wide (fullscreen: `f32::INFINITY`, the whole
+    /// window), for the view and for whether **More** is on screen.
+    pub fn fold_for(&self, pane_width: f32) -> crate::features::video_controls::Fold {
+        crate::features::video_controls::Fold::for_width_with(
+            pane_width,
+            usize::from(self.subtitles().is_some()) + 1,
+            crate::features::video_controls::view::readout_width(self.time_format()),
+        )
+    }
+
+    /// Whether **More** is open and drawn: without a video, or in a pane wide enough to fold
+    /// nothing, there is no More, though the flag stays set.
+    pub fn more_shown(&self, pane_width: f32) -> bool {
+        self.more_open && self.video_drawn() && self.fold_for(pane_width).has_more()
     }
 
     /// The file being loaded, by name, while it loads.

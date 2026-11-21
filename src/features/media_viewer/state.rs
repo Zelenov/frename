@@ -188,6 +188,17 @@ impl MediaViewerState {
         self.video.cancel_time_edit()
     }
 
+    /// Whether the video's **More** menu is open and on screen, its pane `pane_width` wide.
+    pub fn more_shown(&self, pane_width: f32) -> bool {
+        matches!(self.active, ActiveMedia::Video) && self.video.more_shown(pane_width)
+    }
+
+    /// For tests: a video is on screen (see [`video::VideoPlayerState::pretend_video_shown`]).
+    #[cfg(test)]
+    pub fn pretend_video_shown(&mut self) {
+        self.video.pretend_video_shown();
+    }
+
     /// Handle media viewer messages.
     /// Note: FolderWorkspace intercepts `Message::Unloaded` before calling this.
     pub fn update(&mut self, msg: Message) -> Task<Message> {

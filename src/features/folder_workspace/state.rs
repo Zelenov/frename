@@ -862,6 +862,28 @@ impl FolderWorkspace {
                 if self.file_menu.is_open() {
                     return self.handle_file_menu(file_menu::Message::Close);
                 }
+                // A menu on screen closes first, and nothing else happens (#592). One left open
+                // but hidden (fullscreen, a folder loading, a pane too wide to fold) keeps out
+                // of the way.
+                let filter_menu_shown =
+                    self.directory.is_some() && !self.media_fullscreen && !self.loading;
+                if self.filter_menu_open && filter_menu_shown {
+                    return self.handle_folder_message(folder::Message::CloseFilterMenu);
+                }
+                // Fullscreen, the whole window is the pane: nothing folds into More.
+                let pane_width = if self.media_fullscreen {
+                    f32::INFINITY
+                } else {
+                    self.left_width()
+                };
+                if self.media_viewer.more_shown(pane_width) {
+                    return self
+                        .media_viewer
+                        .update(media_viewer::Message::Video(
+                            media_viewer_video::Message::CloseMore,
+                        ))
+                        .map(Message::MediaViewer);
+                }
                 if self.markers.describe_all_asked().is_some() {
                     self.markers.set_describe_all_asked(None);
                     return Task::none();
@@ -10342,6 +10364,117 @@ mod tests {
         workspace.pending_file_action = Some((open, FileAction::CopyPath));
         assert_eq!(workspace.file_action_after_save(open, true).units(), 0);
         assert_eq!(workspace.pending_file_action, None, "dropped");
+    }
+
+    /// Esc closes the file list's filter menu and does nothing else: the searches stay; the
+    /// next Esc clears them (#592).
+    #[test]
+    fn escape_closes_the_filter_menu_first() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            "beach".to_string(),
+        )));
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.filter_menu_open(), "Esc closes the filter menu");
+        let name_filter = workspace
+            .directory()
+            .map(|dir| dir.name_filter().to_string());
+        assert_eq!(
+            name_filter.as_deref(),
+            Some("beach"),
+            "the file search stays"
+        );
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "pi");
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
+    }
+
+    /// A workspace with a clip whose video is drawn in a pane narrow enough to fold controls
+    /// into More, More open, and the tag search holding "pi".
+    fn workspace_with_more_open(test_dir: &TestDirectory) -> FolderWorkspace {
+        let mut workspace = marker_workspace(test_dir, 1);
+        workspace.left_width = 200.0;
+        workspace.media_viewer_mut().pretend_video_shown();
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMore,
+        )));
+        assert!(workspace.media_viewer().more_shown(workspace.left_width()));
+        workspace
+    }
+
+    /// Esc closes the video's More when it is on screen, and does nothing else (#592).
+    #[test]
+    fn escape_closes_more_first_when_it_is_on_screen() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = workspace_with_more_open(&test_dir);
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.media_viewer().more_shown(workspace.left_width()));
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "pi");
+    }
+
+    /// In fullscreen the list and More are not on screen: the first Esc leaves fullscreen, and
+    /// the menus stay as they were (#592).
+    #[test]
+    fn escape_in_fullscreen_passes_the_hidden_menus_by() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = workspace_with_more_open(&test_dir);
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(workspace.media_fullscreen);
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            !workspace.media_fullscreen,
+            "the first Esc leaves fullscreen"
+        );
+        assert!(
+            workspace.filter_menu_open(),
+            "the filter menu was not touched"
+        );
+        assert!(workspace.media_viewer().more_shown(workspace.left_width()));
+    }
+
+    /// A pane too wide to fold anything has no More on screen: Esc clears the search (#592).
+    #[test]
+    fn escape_passes_more_by_in_a_wide_pane() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = workspace_with_more_open(&test_dir);
+        workspace.left_width = 5000.0;
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
+    }
+
+    /// Without a video drawn (still loading, cannot play) there is no More on screen: Esc
+    /// clears the search (#592).
+    #[test]
+    fn escape_passes_more_by_without_a_video() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        workspace.left_width = 200.0;
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMore,
+        )));
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
+    }
+
+    /// While a folder loads, its list and the filter menu with it are not on screen: Esc goes
+    /// on (#592).
+    #[test]
+    fn escape_passes_the_filter_menu_by_while_a_folder_loads() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        workspace.loading = true;
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            workspace.filter_menu_open(),
+            "the hidden menu was not touched"
+        );
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
     }
 
     /// Esc closes an open file menu and does nothing else.
