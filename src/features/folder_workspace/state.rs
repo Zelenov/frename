@@ -2694,6 +2694,10 @@ impl FolderWorkspace {
         // typing so far is its own undo step, as when the box loses the keys any other way.
         self.end_comment_session();
         self.file_workspace.set_comment_focused(false);
+        self.notes_focused = false;
+        // A rename left open would hold `[`, `]` and the first Esc out of sight: drop it, as
+        // Esc does.
+        self.inline_rename = None;
         let unfocus = iced::advanced::widget::operate(
             iced::advanced::widget::operation::focusable::unfocus::<()>(),
         )
@@ -11195,11 +11199,12 @@ mod tests {
         for expect_fullscreen in [true, false] {
             let task = workspace.update(Message::ToggleMediaFullscreen);
             assert_eq!(workspace.media_fullscreen, expect_fullscreen);
-            // Entering also takes the keys from the fields under the video (#585).
+            // Entering also takes the keys from the fields under the video (#585): the second
+            // task is the unfocus.
             assert_eq!(
                 task.units(),
                 if expect_fullscreen { 2 } else { 1 },
-                "the toggle asks for the lists to be put back"
+                "the toggle asks for the lists to be put back (and, entering, for the unfocus)"
             );
         }
         // The fresh list reports offset 0 before the restore runs: the offset carried by the
@@ -11341,6 +11346,25 @@ mod tests {
             "the typing is one undo step"
         );
         assert!(workspace.history.can_undo());
+    }
+
+    /// #585: a rename left open under the fullscreen video would take `[` and the first Esc.
+    #[test]
+    fn fullscreen_closes_an_open_rename() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        assert!(workspace.inline_rename.is_some());
+        let _ = workspace.update(Message::ToggleMediaFullscreen);
+        assert!(workspace.media_fullscreen);
+        assert!(workspace.inline_rename.is_none());
+        let task = workspace.update(Message::SetSegmentStart);
+        assert!(task.units() > 0, "[ sets the In point");
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(
+            !workspace.media_fullscreen,
+            "the first Esc leaves fullscreen"
+        );
     }
 
     #[test]
