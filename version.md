@@ -1,3 +1,7 @@
+# 0.279
+## Fixed
+- `Esc` with the file list's filter menu or the video's More (⋯) menu open closes that menu and does nothing else. Before, the menu stayed open and `Esc` cleared the file and tag searches instead (or left batch mode or the subtitle and marker search).
+
 # 0.278
 ## Fixed
 - A frame saved with `F12` is written aside first and then put in place. Before, a save that failed part-way (a full disk, a network drive that dropped) could leave a cut-off picture, or spoil the frame saved earlier at the same moment, while the note said it was not saved.

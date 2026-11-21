@@ -337,7 +337,8 @@ button is off. mp4 and mov hold everything.
   many are left.
 - **Filter** the list to files that are untagged, have subtitles, a comment or markers: the
   filter button at the right end of the search bar opens a menu (tick as many as you like;
-  **Show all** clears them) and shows how many are on. A file with subtitles shows the subtitles
+  **Show all** clears them; `Esc` or a click outside closes it) and shows how many are
+  on. A file with subtitles shows the subtitles
   icon, and a file with markers a pin and their number.
 - The list shows only videos (mp4, mov, mkv, avi, webm, and other common formats), oldest first.
 
