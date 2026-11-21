@@ -1167,6 +1167,11 @@ impl VideoPlayerState {
         self.more_open
     }
 
+    /// Close **More**; true when it was open.
+    pub fn close_more(&mut self) -> bool {
+        std::mem::replace(&mut self.more_open, false)
+    }
+
     /// The file being loaded, by name, while it loads.
     pub fn loading_name(&self) -> Option<String> {
         self.loading

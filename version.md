@@ -1,3 +1,7 @@
+# 0.277
+## Fixed
+- `Esc` with the file list's filter menu or the video's More (⋯) menu open closes that menu and does nothing else. Before, the menu stayed open and `Esc` cleared the file and tag searches instead (or left batch mode, the side search or fullscreen).
+
 # 0.276
 ## Fixed
 - In fullscreen (F5), the tag keys (`Delete`, `Enter`, `Shift+Space` and the arrows) do nothing, because the tag panel is hidden. Before, they acted on it out of sight: `Delete` could remove a tag from the folder's tags, `Enter` could add one, and `Shift+Space` could tag or untag the clip.

@@ -188,6 +188,16 @@ impl MediaViewerState {
         self.video.cancel_time_edit()
     }
 
+    /// Whether the video's **More** menu is open.
+    pub fn more_open(&self) -> bool {
+        self.video.more_open()
+    }
+
+    /// Close the video's **More** menu; true when it was open.
+    pub fn close_more(&mut self) -> bool {
+        self.video.close_more()
+    }
+
     /// Handle media viewer messages.
     /// Note: FolderWorkspace intercepts `Message::Unloaded` before calling this.
     pub fn update(&mut self, msg: Message) -> Task<Message> {

@@ -862,6 +862,14 @@ impl FolderWorkspace {
                 if self.file_menu.is_open() {
                     return self.handle_file_menu(file_menu::Message::Close);
                 }
+                // An open menu closes first, and nothing else happens (#592).
+                if self.filter_menu_open {
+                    self.filter_menu_open = false;
+                    return Task::none();
+                }
+                if self.media_viewer.close_more() {
+                    return Task::none();
+                }
                 if self.markers.describe_all_asked().is_some() {
                     self.markers.set_describe_all_asked(None);
                     return Task::none();
@@ -10312,6 +10320,41 @@ mod tests {
         workspace.pending_file_action = Some((open, FileAction::CopyPath));
         assert_eq!(workspace.file_action_after_save(open, true).units(), 0);
         assert_eq!(workspace.pending_file_action, None, "dropped");
+    }
+
+    /// Esc closes the file list's filter menu, and the video's More, and does nothing else: the
+    /// searches stay (#592).
+    #[test]
+    fn escape_closes_the_filter_menu_and_more_first() {
+        let (_test_dir, mut workspace) = open_folder(2);
+        let _ = workspace.update(Message::Folder(folder::Message::SetNameFilter(
+            "beach".to_string(),
+        )));
+        workspace.file_workspace.set_tag_filter("pi".to_string());
+        let _ = workspace.update(Message::Folder(folder::Message::ToggleFilterMenu));
+        assert!(workspace.filter_menu_open());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.filter_menu_open(), "Esc closes the filter menu");
+
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::ToggleMore,
+        )));
+        assert!(workspace.media_viewer().more_open());
+        let _ = workspace.update(Message::EscapePressed);
+        assert!(!workspace.media_viewer().more_open(), "Esc closes More");
+
+        let name_filter = workspace
+            .directory()
+            .map(|dir| dir.name_filter().to_string());
+        assert_eq!(
+            name_filter.as_deref(),
+            Some("beach"),
+            "the file search stays"
+        );
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "pi");
+        // With both closed, the next Esc clears the searches as before.
+        let _ = workspace.update(Message::EscapePressed);
+        assert_eq!(workspace.file_workspace().tag_list().filter_query(), "");
     }
 
     /// Esc closes an open file menu and does nothing else.
