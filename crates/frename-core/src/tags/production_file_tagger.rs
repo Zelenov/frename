@@ -365,7 +365,9 @@ impl FileTaggerBackend for ProductionFileTagger {
             image_data.len(),
             path
         );
-        std::fs::write(&path, image_data)
+        // Written aside and renamed over: a write that fails part-way leaves no cut-off frame, and
+        // an earlier frame at the same moment stays whole (#594).
+        crate::write_atomically(&path, image_data)
             .inspect(|()| log::info!("save_screenshot: ok"))
             .inspect_err(|e| log::error!("save_screenshot: failed {:?}: {}", path, e))
     }
@@ -1097,6 +1099,34 @@ mod tests {
         let short = clip_named("short-name-frame", "clip.mov");
         assert!(tagger.save_screenshot(&short, 10_936, b"jpeg").is_ok());
         assert!(screenshot_path(&short, 10_936).exists());
+    }
+
+    /// #594: a frame saved again at the same moment replaces the old file instead of writing into
+    /// it, so a write that fails part-way cannot cut off the frame saved before. A second name
+    /// (hard link) of the old file still reads the old bytes: an in-place write would change it.
+    #[test]
+    fn a_frame_saved_again_replaces_the_old_file_instead_of_writing_into_it() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("frame-again", "clip.mov");
+        tagger.save_screenshot(&path, 5_000, b"good").unwrap();
+        let frame = screenshot_path(&path, 5_000);
+        let witness = path.with_file_name("witness.bin");
+        std::fs::hard_link(&frame, &witness).unwrap();
+
+        tagger.save_screenshot(&path, 5_000, b"newer").unwrap();
+
+        assert_eq!(std::fs::read(&frame).unwrap(), b"newer");
+        assert_eq!(
+            std::fs::read(&witness).unwrap(),
+            b"good",
+            "the old file was written into"
+        );
+        let leftovers: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "no scratch file left");
     }
 
     /// #526: a tag that leaves the clip's own name short enough (235 bytes) but would make its
