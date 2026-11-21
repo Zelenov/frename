@@ -1,6 +1,6 @@
 # 0.277
 ## Fixed
-- The subtitle file you picked for a clip stays picked after the clip is renamed outside frename (in Explorer, Finder, or by the restore after a crash). Before, the clip went back to its first subtitle file, and Describe with AI sent that one.
+- The subtitle file you picked for a clip stays picked when the clip's tags are changed outside frename (in Explorer, or by the restore after a crash), as its resume point does. Before, the clip went back to its first subtitle file, and Describe with AI sent that one.
 
 # 0.276
 ## Fixed

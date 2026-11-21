@@ -126,11 +126,11 @@ fn move_position(
 }
 
 /// Apply [`crate::playback::tidy`] to `folder`'s rows of `table` (keyed by folder and file
-/// name): a gone file's row follows its outside rename or is dropped. A row follows only to a
+/// name, given as a literal): a gone file's row follows its outside rename or is dropped. A row follows only to a
 /// name that has none of its own, so the rename cannot collide.
 fn tidy_rows(
     conn: &Connection,
-    table: &str,
+    table: &'static str,
     folder: &str,
     names: &[String],
 ) -> Result<(), rusqlite::Error> {
@@ -1029,8 +1029,11 @@ mod tests {
         db.set_subtitle_choice(&folder.join("kept.mp4"), SubtitleFormat::Srt);
         let elsewhere = Path::new("/other/gone.mp4");
         db.set_subtitle_choice(elsewhere, SubtitleFormat::Srt);
+        // A renamed clip that already has a pick of its own keeps it; the old one is dropped.
+        db.set_subtitle_choice(&folder.join("A002.mp4"), SubtitleFormat::Ass);
+        db.set_subtitle_choice(&folder.join("pick.A002.mp4"), SubtitleFormat::Capt);
 
-        let listed = ["kept.mp4", "skip.MVI_0410.mp4"].map(str::to_string);
+        let listed = ["kept.mp4", "skip.MVI_0410.mp4", "pick.A002.mp4"].map(str::to_string);
         db.tidy_after_listing(folder, &listed);
 
         assert_eq!(
@@ -1044,6 +1047,11 @@ mod tests {
             Some(SubtitleFormat::Srt)
         );
         assert_eq!(db.get_subtitle_choice(elsewhere), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            db.get_subtitle_choice(&folder.join("pick.A002.mp4")),
+            Some(SubtitleFormat::Capt)
+        );
+        assert_eq!(db.get_subtitle_choice(&folder.join("A002.mp4")), None);
     }
 
     /// A clip name or folder path with `;`, `=` or `\` comes back as it was (#514), and a record
