@@ -3616,7 +3616,7 @@ impl FolderWorkspace {
         }
         // Redoing a move renames the clip left, which an undo of it opened again: on Windows the
         // player holds that file, so the step waits for the video to let go (#602).
-        if self.history.redo_switches_file() && self.media_viewer.needs_unload_before_rename() {
+        if self.history.redo_renames_file() && self.media_viewer.needs_unload_before_rename() {
             self.redo_after_unload = true;
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }

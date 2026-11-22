@@ -17,6 +17,12 @@ pub trait Undoable<SD, ST>: Send {
         false
     }
 
+    /// Whether redoing it renames a file on disk at once: the clip it renames may be open in the
+    /// player, which on Windows holds the file until its video is unloaded (#602).
+    fn redo_renames_file(&self) -> bool {
+        false
+    }
+
     /// Whether it only changes the open video (its markers or its turn), which stay editable in
     /// batch mode, unlike tags and the file name.
     fn edits_open_video(&self) -> bool {
