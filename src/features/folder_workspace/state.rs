@@ -2318,8 +2318,10 @@ impl FolderWorkspace {
     fn on_media_unloaded(&mut self) -> Task<Message> {
         // A redo waiting for this unload (#602) runs only if nothing else came first: a step to
         // another clip, a folder or a batch item makes it stale, and Ctrl+Y can be pressed again.
-        // Those reopen what they need below; otherwise the clip's video comes back here unless
-        // the redo moved on to another clip, whose refresh opens that one.
+        // Those reopen what they need below. Batch mode turned on meanwhile, or an edit that
+        // cleared the step, drops it too, and the clip's video comes back here. A redo that went
+        // through moved on to another clip, whose refresh opens that one; a refused one stays on
+        // this clip, whose video comes back.
         if std::mem::take(&mut self.redo_after_unload)
             && self.batch_item_waits_for_unload.is_none()
             && !self.closing
@@ -2327,7 +2329,7 @@ impl FolderWorkspace {
             && self.pending_file_updates.is_empty()
             && self.navigation_targets.is_empty()
         {
-            if !self.history.redo_renames_file() {
+            if !self.history.redo_renames_file() || self.batch.is_active() {
                 return self.open_selected_video();
             }
             let open = self.file_workspace.file().map(File::id);
@@ -3625,7 +3627,13 @@ impl FolderWorkspace {
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
-        if !self.history.can_redo() || self.directory.is_none() || self.redo_after_unload {
+        // A save of the clip left may still wait for its video; the redo would send a second
+        // unload into the reopen of this clip.
+        if !self.history.can_redo()
+            || self.directory.is_none()
+            || self.redo_after_unload
+            || !self.pending_file_updates.is_empty()
+        {
             return Task::none();
         }
         // Redoing a move renames the clip left, which an undo of it opened again: on Windows the
@@ -8678,6 +8686,52 @@ mod tests {
                 "database"
             ))),
             "another error does not say a file is in use"
+        );
+    }
+
+    /// #602: batch mode turned on while a redo waits for the video drops the redo (a batch
+    /// Ctrl+Y would not rename either) and opens the clip's video again.
+    #[test]
+    fn batch_mode_turned_on_while_a_redo_waits_drops_it() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        let path_of = |w: &FolderWorkspace| {
+            w.directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("file_0")
+        };
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        let renamed = path_of(&workspace);
+        std::fs::write(&renamed, []).expect("the renamed clip on disk");
+        let _ = workspace.update(Message::Undo);
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        let back = path_of(&workspace);
+
+        let _ = workspace.update(Message::Redo);
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(workspace.batch().is_active());
+        unload_for_real(&mut workspace);
+        assert_eq!(path_of(&workspace), back, "not renamed in batch mode");
+        assert!(back.exists());
+        assert!(
+            workspace.needs_media_unload(),
+            "the clip's video opens again"
         );
     }
 

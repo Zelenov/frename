@@ -237,9 +237,8 @@ the whole folder, so after moving to another clip the first undo goes back to th
 (a note says so) and the next one undoes its last change. While the clip you left is still being
 saved (its video closing, usually a moment), `Ctrl+Z` and `Ctrl+Y` do nothing. If the system
 refuses a step (the clip is open in another app, or read-only), nothing changes and a note says
-why. In batch mode only
-markers and rotation are undone. It does not cover batch actions; opening a folder or running a batch
-action clears the undo history.
+why. In batch mode only markers and rotation are undone. It does not cover batch actions; opening
+a folder or running a batch action clears the undo history.
 
 ---
 

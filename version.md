@@ -1,6 +1,6 @@
 # 0.283
 ## Fixed
-- On Windows, `Ctrl+Y` after undoing a move to another clip renames the clip you left again. Before, the player held that clip's file and nothing happened.
+- On Windows, `Ctrl+Y` after `Ctrl+Z` undid a move to another clip works again: the clip you left gets its new name back and you are on the next clip. Before, the player held that clip's file and nothing happened.
 - An undo or redo step the system refuses (the clip is open in another app, or read-only) now says so in a note instead of doing nothing.
 
 # 0.282
