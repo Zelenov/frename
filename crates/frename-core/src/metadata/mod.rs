@@ -553,7 +553,7 @@ pub(crate) fn save_comment_text_file(path: &Path, comment: &str, saved_to_xmp: b
     // A pending snapshot's comment came from the text file if there is one, and is unknown
     // otherwise; either way there is nothing to change.
     let written = if saved_to_xmp {
-        crate::comment::try_save_comment(path, "")
+        crate::comment::try_remove_comment(path)
     } else {
         crate::comment::try_save_comment(path, comment)
     };

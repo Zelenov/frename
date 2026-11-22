@@ -840,12 +840,7 @@ mod tests {
         /// `None` where read-only files are writable anyway (running as root): nothing to check
         /// there. CI runs as a normal user, so there that is a broken setup.
         fn set(paths: &[&Path]) -> Option<Self> {
-            let guard = Self(paths.iter().map(|p| p.to_path_buf()).collect());
-            for path in &guard.0 {
-                let mut permissions = std::fs::metadata(path).expect("file").permissions();
-                permissions.set_readonly(true);
-                std::fs::set_permissions(path, permissions).expect("read-only");
-            }
+            let guard = Self::flag(paths);
             let writable = guard
                 .0
                 .iter()
@@ -859,6 +854,18 @@ mod tests {
                 return None;
             }
             Some(guard)
+        }
+
+        /// Only sets the read-only flag, even where the files stay writable (root): for checks
+        /// that go by the flag, as the refusal of a read-only comment file does (#601).
+        fn flag(paths: &[&Path]) -> Self {
+            let guard = Self(paths.iter().map(|p| p.to_path_buf()).collect());
+            for path in &guard.0 {
+                let mut permissions = std::fs::metadata(path).expect("file").permissions();
+                permissions.set_readonly(true);
+                std::fs::set_permissions(path, permissions).expect("read-only");
+            }
+            guard
         }
     }
 
@@ -941,10 +948,7 @@ mod tests {
         let path = saved_clip("read-only-clear", TEXT, "Keep", (None, None));
         let comment_file = crate::comment::comment_path(&path);
         assert!(comment_file.exists());
-        let mut permissions = std::fs::metadata(&comment_file).unwrap().permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(&comment_file, permissions).unwrap();
-        let _read_only = ReadOnly(vec![comment_file.clone()]);
+        let _read_only = ReadOnly::flag(&[&comment_file]);
 
         let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
         wanted.set_comment(String::new());
@@ -958,6 +962,26 @@ mod tests {
             &saved,
             report.points_in_comment
         ));
+    }
+
+    /// #601: with comments in the video, a read-only comment file left over from the text-file
+    /// storage still goes once the comment is in the video: kept, its old text would win over
+    /// the video's when the clip is read back.
+    #[test]
+    fn a_read_only_leftover_comment_file_goes_once_the_comment_is_in_the_video() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("read-only-leftover", "clip.mov");
+        let comment_file = crate::comment::comment_path(&path);
+        std::fs::write(&comment_file, "old leftover").unwrap();
+        let _read_only = ReadOnly::flag(&[&comment_file]);
+
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), BOTH_HOMES);
+        wanted.set_comment("new typed".to_string());
+        let report = tagger.save_reporting_with(&wanted, &path, BOTH_HOMES);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), BOTH_HOMES);
+
+        assert_eq!(saved.comment(), "new typed");
+        assert!(!comment_file.exists(), "the leftover is gone");
     }
 
     /// #425: with the default storage, a video that refuses the XMP (read-only here) has its
