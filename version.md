@@ -1,6 +1,7 @@
 # 0.282
 ## Fixed
-- `Ctrl+Y` that redoes the rename made when you left a clip waits for the clip's video to close first, as a save does. Before, on Windows the clip open in the player could not be renamed, and nothing happened. An undo or redo step the system refuses (the clip is open in another app, or read-only) now says so instead of doing nothing.
+- On Windows, `Ctrl+Y` after undoing a move to another clip renames the clip you left again. Before, the player held that clip's file and nothing happened.
+- An undo or redo step the system refuses (the clip is open in another app, or read-only) now says so in a note instead of doing nothing.
 
 # 0.281
 ## Fixed

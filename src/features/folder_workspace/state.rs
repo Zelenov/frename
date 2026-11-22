@@ -2318,16 +2318,29 @@ impl FolderWorkspace {
     fn on_media_unloaded(&mut self) -> Task<Message> {
         // A redo waiting for this unload (#602) runs only if nothing else came first: a step to
         // another clip, a folder or a batch item makes it stale, and Ctrl+Y can be pressed again.
-        let redo = std::mem::take(&mut self.redo_after_unload);
-        if redo
+        // Those reopen what they need below; otherwise the clip's video comes back here unless
+        // the redo moved on to another clip, whose refresh opens that one.
+        if std::mem::take(&mut self.redo_after_unload)
             && self.batch_item_waits_for_unload.is_none()
             && !self.closing
             && self.pending_scan.is_none()
             && self.pending_file_updates.is_empty()
             && self.navigation_targets.is_empty()
-            && self.history.can_redo()
         {
-            return self.redo_now();
+            if !self.history.redo_renames_file() {
+                return self.open_selected_video();
+            }
+            let open = self.file_workspace.file().map(File::id);
+            let redone = self.redo_now();
+            let selected = self
+                .directory
+                .as_ref()
+                .and_then(|d| d.selected_file())
+                .map(File::id);
+            if selected != open {
+                return redone;
+            }
+            return Task::batch([redone, self.open_selected_video()]);
         }
         if let Some(item) = self.batch_item_waits_for_unload.take() {
             let item_clip = item.id;
@@ -3584,7 +3597,8 @@ impl FolderWorkspace {
 
     fn perform_undo(&mut self) -> Task<Message> {
         self.end_comment_session();
-        if !self.history.can_undo() || self.directory.is_none() {
+        // A redo waits for the video to let go (#602): the step on top is still that one.
+        if !self.history.can_undo() || self.directory.is_none() || self.redo_after_unload {
             return Task::none();
         }
         let turns_a_video = self.history.undo_turns_a_video();
@@ -3621,6 +3635,19 @@ impl FolderWorkspace {
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }
         self.redo_now()
+    }
+
+    /// Open the selected clip's video, after an unload that was for a redo (#602).
+    fn open_selected_video(&mut self) -> Task<Message> {
+        let Some(file) = self
+            .directory
+            .as_ref()
+            .and_then(|d| d.selected_file())
+            .cloned()
+        else {
+            return Task::none();
+        };
+        self.media_viewer.open(&file).map(Message::MediaViewer)
     }
 
     fn redo_now(&mut self) -> Task<Message> {
@@ -8643,9 +8670,72 @@ mod tests {
     /// #602: an undo or redo step the system refused (the file is in use or read-only) says so.
     #[test]
     fn an_undo_or_redo_the_system_refused_is_told() {
-        let error =
-            frename_core::UndoError::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
-        assert!(FolderWorkspace::undo_failed_notice(&error).units() > 0);
+        let io = |kind| frename_core::UndoError::Io(std::io::Error::from(kind));
+        let told = |e| FolderWorkspace::undo_failed_notice(&e).units() > 0;
+        assert!(told(io(std::io::ErrorKind::PermissionDenied)));
+        assert!(
+            !told(frename_core::UndoError::Io(std::io::Error::other(
+                "database"
+            ))),
+            "another error does not say a file is in use"
+        );
+    }
+
+    /// The player as the app drives it: `Unload`, the video's own teardown, then `Unloaded`.
+    fn unload_for_real(workspace: &mut FolderWorkspace) {
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Unload));
+        let _ = workspace.update(Message::MediaViewer(media_viewer::Message::Video(
+            media_viewer_video::Message::VideoUnloaded,
+        )));
+        unload(workspace);
+    }
+
+    /// #602: a redo that waited for the video and is then refused (here: the name is taken
+    /// meanwhile) leaves the editor on the clip with its video open again, not a blank player;
+    /// Ctrl+Z while it waits does nothing.
+    #[test]
+    fn a_refused_redo_that_waited_for_the_video_opens_it_again() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        let path_of = |w: &FolderWorkspace| {
+            w.directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("file_0")
+        };
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        let renamed = path_of(&workspace);
+        std::fs::write(&renamed, []).expect("the renamed clip on disk");
+        let _ = workspace.update(Message::Undo);
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        assert!(workspace.needs_media_unload(), "file_0's video is open");
+        std::fs::write(&renamed, "another clip").expect("the name taken meanwhile");
+
+        let _ = workspace.update(Message::Redo);
+        let task = workspace.update(Message::Undo);
+        assert_eq!(task.units(), 0, "Ctrl+Z waits with the redo");
+        unload_for_real(&mut workspace);
+        assert_ne!(path_of(&workspace), renamed, "refused");
+        assert!(workspace.history.can_redo(), "the step stays to redo");
+        assert!(
+            workspace.needs_media_unload(),
+            "the clip's video opens again"
+        );
     }
 
     fn unload(workspace: &mut FolderWorkspace) {

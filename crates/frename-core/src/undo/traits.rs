@@ -17,8 +17,8 @@ pub trait Undoable<SD, ST>: Send {
         false
     }
 
-    /// Whether redoing it renames a file on disk at once: the clip it renames may be open in the
-    /// player, which on Windows holds the file until its video is unloaded (#602).
+    /// Whether redoing it renames a file on disk, which the player may hold open (on Windows,
+    /// until its video is unloaded; #602).
     fn redo_renames_file(&self) -> bool {
         false
     }

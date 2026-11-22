@@ -76,9 +76,19 @@ impl FolderWorkspace {
             }
             UndoError::NameTooLong(_) => Self::notice(&fl!("undo-name-too-long")),
             // A rename refused by the system: the clip is open in another app (Premiere) or
-            // read-only (#602).
-            UndoError::Io(_) => Self::notice(&fl!("undo-file-in-use")),
+            // read-only (#602). Other I/O errors (a database, a lost drive) say nothing of a file
+            // in use, so they stay in the log.
+            UndoError::Io(e) if refused_by_the_system(e) => Self::notice(&fl!("undo-file-in-use")),
             _ => Task::none(),
         }
     }
+}
+
+/// A file the system would not change: read-only, or held by another program (Windows' sharing
+/// and lock violations, 32 and 33).
+fn refused_by_the_system(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ResourceBusy
+    ) || (cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33)))
 }
