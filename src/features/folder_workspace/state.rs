@@ -3627,18 +3627,17 @@ impl FolderWorkspace {
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
-        // A save of the clip left may still wait for its video; the redo would send a second
-        // unload into the reopen of this clip.
-        if !self.history.can_redo()
-            || self.directory.is_none()
-            || self.redo_after_unload
-            || !self.pending_file_updates.is_empty()
-        {
+        if !self.history.can_redo() || self.directory.is_none() || self.redo_after_unload {
             return Task::none();
         }
         // Redoing a move renames the clip left, which an undo of it opened again: on Windows the
         // player holds that file, so the step waits for the video to let go (#602).
         if self.history.redo_renames_file() && self.media_viewer.needs_unload_before_rename() {
+            // A save of the clip left may still wait for its video: a second unload would go
+            // into the reopen of this clip, and that save's unload would drop the redo anyway.
+            if !self.pending_file_updates.is_empty() {
+                return Task::none();
+            }
             self.redo_after_unload = true;
             return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
         }
