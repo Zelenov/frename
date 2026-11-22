@@ -1449,6 +1449,41 @@ mod tests {
         assert!(!history.redo_switches_file());
     }
 
+    /// #602: only a move whose save renamed the clip left renames a file when redone; the app
+    /// unloads the player first for that one.
+    #[test]
+    fn a_move_says_whether_its_redo_renames_a_file() {
+        for (after, renames) in [("a.mp4", false), ("pick.a.mp4", true)] {
+            let dir = crate::test_support::fresh_dir(&format!("undo-redo-renames-{renames}"));
+            let (a, b) = (dir.join("a.mp4"), dir.join("b.mp4"));
+            let path_after = dir.join(after);
+            std::fs::write(&path_after, []).expect("the clip as saved");
+            std::fs::write(&b, []).expect("the clip moved to");
+            let a_file = File::from_path(a.clone(), SystemTime::UNIX_EPOCH);
+            let b_file = File::from_path(b, SystemTime::UNIX_EPOCH);
+            let (a_id, b_id) = (a_file.id(), b_file.id());
+            let mut directory =
+                Directory::with_files(&dir, vec![a_file, b_file], FakeAppStorage::new());
+            let mut tag_list = TagList::new(FakeAppStorage::new(), FileSnapshot::default());
+            let mut history: History<FakeAppStorage, FakeAppStorage> = History::new(50);
+            history.push(Box::new(NavigateFileCommand {
+                file_id: a_id,
+                to_file_id: b_id,
+                path_before: a,
+                path_after,
+                snapshot_before: FileSnapshot::default(),
+                snapshot_after: FileSnapshot::default(),
+            }));
+            assert!(!history.redo_renames_file(), "nothing to redo yet");
+            let mut ctx = UndoContext {
+                directory: &mut directory,
+                tag_list: &mut tag_list,
+            };
+            history.undo(&mut ctx).expect("undo");
+            assert_eq!(history.redo_renames_file(), renames, "{after}");
+        }
+    }
+
     // --- Issue #139: rename, comment, marker name, sync ---
 
     #[test]

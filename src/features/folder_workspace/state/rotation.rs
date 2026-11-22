@@ -61,8 +61,9 @@ impl FolderWorkspace {
     }
 
     /// Say why an undo or redo step did not happen, when the user can do something about it:
-    /// a turn of a file that is read-only or open in another app, or a rename that would replace
-    /// another file or leave a sidecar behind under a name that is too long.
+    /// a turn of a file that is read-only or open in another app, a rename the system refused
+    /// (the file is in use or read-only), or a rename that would replace another file or leave a
+    /// sidecar behind under a name that is too long.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
             UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
@@ -74,7 +75,20 @@ impl FolderWorkspace {
                 Self::notice(&fl!("undo-name-taken", name = name))
             }
             UndoError::NameTooLong(_) => Self::notice(&fl!("undo-name-too-long")),
+            // A rename refused by the system: the clip is open in another app (Premiere) or
+            // read-only (#602). Other I/O errors (a database, a lost drive) say nothing of a file
+            // in use, so they stay in the log.
+            UndoError::Io(e) if refused_by_the_system(e) => Self::notice(&fl!("undo-file-in-use")),
             _ => Task::none(),
         }
     }
+}
+
+/// A file the system would not change: read-only, or held by another program (Windows' sharing
+/// and lock violations, 32 and 33).
+fn refused_by_the_system(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ResourceBusy
+    ) || (cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33)))
 }

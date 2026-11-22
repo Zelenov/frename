@@ -147,4 +147,12 @@ where
             .last()
             .is_some_and(|cmd| cmd.switches_file())
     }
+
+    /// Whether the step [`Self::redo`] would take renames a file on disk (see
+    /// [`Undoable::redo_renames_file`]).
+    pub fn redo_renames_file(&self) -> bool {
+        self.redo_stack
+            .last()
+            .is_some_and(|cmd| cmd.redo_renames_file())
+    }
 }

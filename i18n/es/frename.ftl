@@ -720,6 +720,7 @@ rotate-turned = Girado { $turn } · rotación actual: { $flag }
 rotate-failed = No girado: { $reason }
 undo-name-taken = Sin cambios: otro archivo ya se llama { $name }
 undo-name-too-long = Sin cambios: los nombres de los fotogramas guardados, subtítulos o transcripción del clip serían demasiado largos
+undo-file-in-use = Sin cambios: el archivo es de solo lectura o está en uso
 undo-back-on-clip = De vuelta en este clip (se deshizo el movimiento). Ctrl+Z de nuevo deshace su último cambio.
 redo-on-clip = De nuevo en este clip (se rehízo el movimiento).
 rotate-reason-in-use = el archivo es de solo lectura o está en uso

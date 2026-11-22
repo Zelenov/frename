@@ -1,3 +1,8 @@
+# 0.283
+## Fixed
+- On Windows, `Ctrl+Y` after `Ctrl+Z` undid a move to another clip works again: the clip you left gets its new name back and you are on the next clip. Before, the player held that clip's file and nothing happened.
+- An undo or redo step the system refuses (the clip is open in another app, or read-only) now says so in a note instead of doing nothing.
+
 # 0.282
 ## Fixed
 - With comments in a text file, clearing the comment of a clip whose `.comment.txt` is read-only keeps the file and says the comment was not saved, as typing a new one does. Before, on macOS and Linux the read-only file was deleted without a word.

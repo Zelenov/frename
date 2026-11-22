@@ -74,4 +74,8 @@ where
     fn switches_file(&self) -> bool {
         true
     }
+
+    fn redo_renames_file(&self) -> bool {
+        self.path_before != self.path_after
+    }
 }

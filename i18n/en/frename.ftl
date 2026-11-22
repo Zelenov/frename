@@ -662,6 +662,7 @@ rotate-turned = Turned { $turn } · rotation now { $flag }
 rotate-failed = Not rotated: { $reason }
 undo-name-taken = Not changed: another file is already named { $name }
 undo-name-too-long = Not changed: the names of the clip's saved frames, subtitles or transcript would be too long
+undo-file-in-use = Not changed: the file is read-only or in use
 undo-back-on-clip = Back on this clip (undid the move). Ctrl+Z again undoes its last change.
 redo-on-clip = On this clip again (redid the move).
 rotate-reason-in-use = the file is read-only or in use
