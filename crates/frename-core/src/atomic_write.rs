@@ -11,13 +11,20 @@ use std::path::{Path, PathBuf};
 /// Write `contents` to `path`, replacing what is there in one step. A read-only file is refused,
 /// as an in-place write refuses it: a rename would replace it on macOS and Linux and drop the lock.
 pub(crate) fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    refuse_read_only(path)?;
+    replace_through(path, &scratch_path(path), contents.as_ref())
+}
+
+/// An error when `path` is a read-only file: the editor protected it, so it is neither replaced
+/// nor removed, though macOS and Linux would let the folder's owner do either (#601).
+pub(crate) fn refuse_read_only(path: &Path) -> std::io::Result<()> {
     if std::fs::metadata(path).is_ok_and(|m| m.permissions().readonly()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!("{} is read-only", path.display()),
         ));
     }
-    replace_through(path, &scratch_path(path), contents.as_ref())
+    Ok(())
 }
 
 /// Write `contents` to `scratch`, then rename it over `path`. A failed rename removes the scratch

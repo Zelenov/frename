@@ -56,17 +56,27 @@ pub fn save_comment(file_path: &Path, comment: &str) {
     }
 }
 
-/// Like [`save_comment`], but says when the file could not be written or removed.
+/// Like [`save_comment`], but says when the file could not be written or removed. A read-only
+/// comment file is the editor's: it is neither replaced nor removed, on every system (#601).
 pub fn try_save_comment(file_path: &Path, comment: &str) -> std::io::Result<()> {
     let trimmed = comment.trim();
     let path = comment_path(file_path);
+    crate::refuse_read_only(&path)?;
     if trimmed.is_empty() {
-        match std::fs::remove_file(&path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
-            _ => Ok(()),
-        }
+        try_remove_comment(file_path)
     } else {
         crate::write_atomically(&path, format!("{UTF8_BOM}{trimmed}"))
+    }
+}
+
+/// Remove the comment file of a file, if there is one, saying when that failed. Unlike
+/// [`try_save_comment`] it does not spare a read-only file: it is for a comment file left over
+/// once the comment went into the video, whose text would otherwise win over the video's when
+/// the clip is read back.
+pub fn try_remove_comment(file_path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_file(comment_path(file_path)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
     }
 }
 
