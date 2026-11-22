@@ -932,6 +932,34 @@ mod tests {
         );
     }
 
+    /// #601: clearing the comment of a read-only comment file is refused like writing a new one,
+    /// not done by deleting the file (macOS and Linux let a folder's owner delete a read-only
+    /// file). Checked by the read-only flag, so it holds when running as root too.
+    #[test]
+    fn clearing_a_read_only_comment_file_keeps_it_and_is_told() {
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("read-only-clear", TEXT, "Keep", (None, None));
+        let comment_file = crate::comment::comment_path(&path);
+        assert!(comment_file.exists());
+        let mut permissions = std::fs::metadata(&comment_file).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&comment_file, permissions).unwrap();
+        let _read_only = ReadOnly(vec![comment_file.clone()]);
+
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_comment(String::new());
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), TEXT);
+
+        assert!(comment_file.exists(), "the read-only comment file is kept");
+        assert_eq!(saved.comment(), "Keep");
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
     /// #425: with the default storage, a video that refuses the XMP (read-only here) has its
     /// comment and points kept in the comment file; a read-only one keeps the old points, and
     /// that is told too.

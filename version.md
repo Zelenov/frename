@@ -1,3 +1,7 @@
+# 0.281
+## Fixed
+- With comments in a text file, clearing the comment of a clip whose `.comment.txt` is read-only keeps the file and says the comment was not saved, as typing a new one does. Before, on macOS and Linux the read-only file was deleted without a word.
+
 # 0.280
 ## Fixed
 - The subtitle file you picked for a clip stays picked when the clip's tags are changed outside frename (in Explorer, or by the restore after a crash), as its resume point does. Before, the clip went back to its first subtitle file, and Describe with AI sent that one.

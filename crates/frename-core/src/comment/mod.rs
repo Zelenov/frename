@@ -56,11 +56,19 @@ pub fn save_comment(file_path: &Path, comment: &str) {
     }
 }
 
-/// Like [`save_comment`], but says when the file could not be written or removed.
+/// Like [`save_comment`], but says when the file could not be written or removed. A read-only
+/// comment file is refused for a removal too, as [`crate::write_atomically`] refuses a write:
+/// macOS and Linux let the folder's owner delete it, Windows does not (#601).
 pub fn try_save_comment(file_path: &Path, comment: &str) -> std::io::Result<()> {
     let trimmed = comment.trim();
     let path = comment_path(file_path);
     if trimmed.is_empty() {
+        if std::fs::metadata(&path).is_ok_and(|m| m.permissions().readonly()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("{} is read-only", path.display()),
+            ));
+        }
         match std::fs::remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
             _ => Ok(()),
