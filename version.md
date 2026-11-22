@@ -1,3 +1,7 @@
+# 0.281
+## Fixed
+- With the comment box on the whole panel (⛶), `Delete`, `Enter`, `Shift+Space`, the arrows and letters do nothing to the tags you cannot see, as in fullscreen. Before, `Delete` could remove the selected tag from the folder, and `Shift+Space` could tag or untag the clip, out of sight.
+
 # 0.280
 ## Fixed
 - The subtitle file you picked for a clip stays picked when the clip's tags are changed outside frename (in Explorer, or by the restore after a crash), as its resume point does. Before, the clip went back to its first subtitle file, and Describe with AI sent that one.

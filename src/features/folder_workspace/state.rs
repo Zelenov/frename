@@ -580,8 +580,9 @@ impl FolderWorkspace {
                     Task::batch([task, self.follow_marker_list(false)])
                 }
             },
-            // Fullscreen hides the tag panel: Delete, Enter, Shift+Space and the arrows must not
-            // act on a selection the editor cannot see (#587).
+            // Fullscreen, or the comment box on the whole panel, hides the tag panel: Delete,
+            // Enter, Shift+Space and the arrows must not act on a selection the editor cannot see
+            // (#587, #600).
             Message::RemoveTag
             | Message::SaveSelectedTag
             | Message::TagPanel(
@@ -590,7 +591,7 @@ impl FolderWorkspace {
                 | tag_panel::Message::SelectUp
                 | tag_panel::Message::SelectDown
                 | tag_panel::Message::ToggleSelectedTag,
-            ) if self.media_fullscreen => Task::none(),
+            ) if self.tag_panel_hidden() => Task::none(),
             Message::TagPanel(msg) => self.handle_tag_panel(msg),
             Message::FileNamePanel(msg) => self.handle_file_name_panel(msg),
             Message::SyncPanel(msg) => self.handle_sync_panel(msg),
@@ -613,8 +614,9 @@ impl FolderWorkspace {
                     .set_panel_widths(self.left_width, self.folder_width);
                 Task::none()
             }
-            // Fullscreen hides the tag search: a letter typed there must not go to it (#585).
-            Message::FocusSearchBarAndKey(_) if self.media_fullscreen => Task::none(),
+            // Fullscreen, or the comment box on the whole panel, hides the tag search: a letter
+            // typed there must not go to it (#585, #600).
+            Message::FocusSearchBarAndKey(_) if self.tag_panel_hidden() => Task::none(),
             Message::FocusSearchBarAndKey(key) => self.focus_search_bar_and_key(key),
             Message::Noop => Task::none(),
             Message::RunOnOpenClip(action) => self.run_on_open_clip(action),
@@ -3962,6 +3964,13 @@ impl FolderWorkspace {
     /// True when the media viewer is in fullscreen mode (F5).
     pub fn media_fullscreen(&self) -> bool {
         self.media_fullscreen
+    }
+
+    /// True when the tag search and grid are not drawn: the video is fullscreen (F5), or ⛶ gave
+    /// the open clip's comment box the whole panel (with no clip open the grid shows anyway).
+    fn tag_panel_hidden(&self) -> bool {
+        self.media_fullscreen
+            || (self.file_workspace.comment_expanded() && self.file_workspace.file().is_some())
     }
 
     /// True when a video is active and must be unloaded before rename or close.
@@ -11590,6 +11599,73 @@ mod tests {
                 .tag_id_by_name("pick")
                 .is_some(),
             "Delete keeps the folder's tag"
+        );
+        assert!(
+            !workspace.history.can_undo(),
+            "no step from any of the keys"
+        );
+    }
+
+    /// #600: ⛶ gives the comment box the whole panel and hides the tag search and grid; their
+    /// keys must not change them out of sight, as in fullscreen (#587, #585).
+    #[test]
+    fn the_tag_keys_do_nothing_while_the_comment_has_the_whole_panel() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        workspace.tag_panel.set_selected(Some(pick));
+        let _ = workspace.update(Message::CommentLayout(
+            crate::features::file_workspace::CommentLayout::ToggleExpanded,
+        ));
+        assert!(workspace.file_workspace.comment_expanded());
+
+        for key in [
+            tag_panel::Message::SelectLeft,
+            tag_panel::Message::SelectRight,
+            tag_panel::Message::SelectUp,
+            tag_panel::Message::SelectDown,
+        ] {
+            let _ = workspace.update(Message::TagPanel(key));
+            assert_eq!(workspace.tag_panel.selected_tag_id(), Some(pick), "arrows");
+        }
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleSelectedTag));
+        let list = workspace.file_workspace().tag_list();
+        assert!(
+            list.get_tag(pick).is_some_and(|t| !t.is_checked()),
+            "Shift+Space leaves the clip's tags"
+        );
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .unsave_tag(pick)
+            .expect("unsave");
+        let _ = workspace.update(Message::SaveSelectedTag);
+        let stored = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(pick)
+            .map(|t| t.is_stored());
+        assert_eq!(stored, Some(false), "Enter leaves the unsaved tag unsaved");
+        let _ = workspace.update(Message::RemoveTag);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .is_some(),
+            "Delete keeps the folder's tag"
+        );
+        let _ = workspace.update(Message::FocusSearchBarAndKey(super::GlobalSearchKey::Char(
+            'k',
+        )));
+        assert_eq!(
+            workspace.file_workspace.tag_list().filter_query(),
+            "",
+            "a letter does not go to the hidden tag search"
         );
         assert!(
             !workspace.history.can_undo(),
