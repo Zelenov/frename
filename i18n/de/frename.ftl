@@ -700,6 +700,7 @@ rotate-turned = Gedreht um { $turn } · Drehung jetzt { $flag }
 rotate-failed = Nicht gedreht: { $reason }
 undo-name-taken = Nicht geändert: Eine andere Datei heißt schon { $name }
 undo-name-too-long = Nicht geändert: Die Namen der gespeicherten Bilder, Untertitel oder des Transkripts des Clips wären zu lang
+undo-file-in-use = Nicht geändert: Die Datei ist schreibgeschützt oder in Gebrauch
 undo-back-on-clip = Zurück bei diesem Clip (die Verschiebung wurde rückgängig gemacht). Strg+Z macht seine letzte Änderung rückgängig.
 redo-on-clip = Wieder bei diesem Clip (die Verschiebung wurde wiederholt).
 rotate-reason-in-use = die Datei ist schreibgeschützt oder in Gebrauch

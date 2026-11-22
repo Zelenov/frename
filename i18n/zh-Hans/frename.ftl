@@ -628,6 +628,7 @@ rotate-turned = 已旋转 { $turn } · 当前旋转 { $flag }
 rotate-failed = 未旋转：{ $reason }
 undo-name-taken = 未更改：已有另一个文件名为 { $name }
 undo-name-too-long = 未更改：素材已保存的帧、字幕或转录的名称会过长
+undo-file-in-use = 未更改：文件为只读或正被占用
 undo-back-on-clip = 回到此素材（已撤销移动）。再按 Ctrl+Z 撤销它的上一次更改。
 redo-on-clip = 再次回到此素材（已重做移动）。
 rotate-reason-in-use = 文件为只读或正被占用

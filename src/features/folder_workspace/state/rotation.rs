@@ -61,8 +61,9 @@ impl FolderWorkspace {
     }
 
     /// Say why an undo or redo step did not happen, when the user can do something about it:
-    /// a turn of a file that is read-only or open in another app, or a rename that would replace
-    /// another file or leave a sidecar behind under a name that is too long.
+    /// a turn of a file that is read-only or open in another app, a rename the system refused
+    /// (the file is in use or read-only), or a rename that would replace another file or leave a
+    /// sidecar behind under a name that is too long.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
             UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
@@ -74,6 +75,9 @@ impl FolderWorkspace {
                 Self::notice(&fl!("undo-name-taken", name = name))
             }
             UndoError::NameTooLong(_) => Self::notice(&fl!("undo-name-too-long")),
+            // A rename refused by the system: the clip is open in another app (Premiere) or
+            // read-only (#602).
+            UndoError::Io(_) => Self::notice(&fl!("undo-file-in-use")),
             _ => Task::none(),
         }
     }

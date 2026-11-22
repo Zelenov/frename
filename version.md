@@ -1,3 +1,7 @@
+# 0.282
+## Fixed
+- `Ctrl+Y` that redoes the rename made when you left a clip waits for the clip's video to close first, as a save does. Before, on Windows the clip open in the player could not be renamed, and nothing happened. An undo or redo step the system refuses (the clip is open in another app, or read-only) now says so instead of doing nothing.
+
 # 0.281
 ## Fixed
 - With the comment box on the whole panel (⛶), `Delete`, `Enter`, `Shift+Space`, the arrows and letters do nothing to the tags you cannot see, as in fullscreen. Before, `Delete` could remove the selected tag from the folder, and `Shift+Space` could tag or untag the clip, out of sight.

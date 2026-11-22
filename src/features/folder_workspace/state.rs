@@ -181,6 +181,9 @@ pub struct FolderWorkspace {
     comment_session: Option<FileSnapshot>,
     /// Whether the media viewer is currently shown fullscreen (F5).
     media_fullscreen: bool,
+    /// A redo that renames the clip open in the player waits for its video to let go, as a save
+    /// does (#602); it runs on `MediaViewer::Unloaded`.
+    redo_after_unload: bool,
     /// The marker list's own state: the row being edited and what `F2` did last.
     markers: MarkersState,
     /// The search over the side list (#170).
@@ -350,6 +353,7 @@ impl FolderWorkspace {
             history: WorkspaceHistory::new(HISTORY_DEPTH),
             comment_session: None,
             media_fullscreen: false,
+            redo_after_unload: false,
             markers: MarkersState::default(),
             side_search: Default::default(),
             known_marker_guids: HashSet::new(),
@@ -2312,6 +2316,19 @@ impl FolderWorkspace {
     /// deferred close, a deferred folder scan, or a plain file-switch save — then, for the plain
     /// case, opens the newly selected file.
     fn on_media_unloaded(&mut self) -> Task<Message> {
+        // A redo waiting for this unload (#602) runs only if nothing else came first: a step to
+        // another clip, a folder or a batch item makes it stale, and Ctrl+Y can be pressed again.
+        let redo = std::mem::take(&mut self.redo_after_unload);
+        if redo
+            && self.batch_item_waits_for_unload.is_none()
+            && !self.closing
+            && self.pending_scan.is_none()
+            && self.pending_file_updates.is_empty()
+            && self.navigation_targets.is_empty()
+            && self.history.can_redo()
+        {
+            return self.redo_now();
+        }
         if let Some(item) = self.batch_item_waits_for_unload.take() {
             let item_clip = item.id;
             let run = self.run_batch_item(item);
@@ -3594,9 +3611,19 @@ impl FolderWorkspace {
     }
 
     fn perform_redo(&mut self) -> Task<Message> {
-        if !self.history.can_redo() || self.directory.is_none() {
+        if !self.history.can_redo() || self.directory.is_none() || self.redo_after_unload {
             return Task::none();
         }
+        // Redoing a move renames the clip left, which an undo of it opened again: on Windows the
+        // player holds that file, so the step waits for the video to let go (#602).
+        if self.history.redo_switches_file() && self.media_viewer.needs_unload_before_rename() {
+            self.redo_after_unload = true;
+            return Task::done(Message::MediaViewer(media_viewer::Message::Unload));
+        }
+        self.redo_now()
+    }
+
+    fn redo_now(&mut self) -> Task<Message> {
         let turns_a_video = self.history.redo_turns_a_video();
         let switches_file = self.history.redo_switches_file();
         let markers_only = self.history.redo_edits_open_video() && !turns_a_video;
@@ -8556,6 +8583,69 @@ mod tests {
         assert!(workspace.has_pending_rename(), "the save is waiting");
         let _ = workspace.update(Message::Folder(folder::Message::SelectFile(0)));
         flush_file_opened(workspace);
+    }
+
+    /// #602: Ctrl+Y of the rename made when leaving a clip, after Ctrl+Z took the editor back
+    /// to that clip and opened its video, renames it only once the video has let go (on
+    /// Windows the player holds the file and the rename would fail).
+    #[test]
+    fn redo_of_a_leave_rename_waits_for_the_open_video() {
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = test_workspace();
+        let _ = workspace.update(Message::FolderLoaded {
+            directory: test_dir.directory(),
+            target_file: Some(test_dir.target_file()),
+        });
+        flush_file_opened(&mut workspace);
+        let file_0_id = file_id_at(&workspace, 0);
+        let path_of = |w: &FolderWorkspace| {
+            w.directory()
+                .and_then(|d| d.file_by_id(file_0_id))
+                .map(|f| f.file_path().to_path_buf())
+                .expect("file_0")
+        };
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(pick)));
+        let _ = workspace.update(Message::Folder(folder::Message::SelectFile(1)));
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        let renamed = path_of(&workspace);
+        assert!(
+            renamed.to_string_lossy().contains("pick"),
+            "setup: {renamed:?}"
+        );
+        // The test backend renames in memory only; undo and redo rename on disk.
+        std::fs::write(&renamed, []).expect("the renamed clip on disk");
+
+        let _ = workspace.update(Message::Undo);
+        flush_file_opened(&mut workspace);
+        unload(&mut workspace);
+        let back = path_of(&workspace);
+        assert!(!back.to_string_lossy().contains("pick"), "undone: {back:?}");
+        assert!(workspace.needs_media_unload(), "file_0's video is open");
+
+        let _ = workspace.update(Message::Redo);
+        assert_eq!(path_of(&workspace), back, "not renamed under the player");
+        assert!(back.exists());
+        unload(&mut workspace);
+        assert_eq!(
+            path_of(&workspace),
+            renamed,
+            "renamed once the video let go"
+        );
+        assert!(renamed.exists());
+    }
+
+    /// #602: an undo or redo step the system refused (the file is in use or read-only) says so.
+    #[test]
+    fn an_undo_or_redo_the_system_refused_is_told() {
+        let error =
+            frename_core::UndoError::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert!(FolderWorkspace::undo_failed_notice(&error).units() > 0);
     }
 
     fn unload(workspace: &mut FolderWorkspace) {

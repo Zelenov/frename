@@ -628,6 +628,7 @@ rotate-turned = { $turn } 回転 · 現在の回転: { $flag }
 rotate-failed = 回転できませんでした: { $reason }
 undo-name-taken = 変更しませんでした: すでに別のファイルが { $name } という名前です
 undo-name-too-long = 変更しませんでした: クリップで保存したフレーム、字幕、文字起こしの名前が長すぎます
+undo-file-in-use = 変更しませんでした: ファイルが読み取り専用か使用中です
 undo-back-on-clip = このクリップに戻りました（移動を元に戻しました）。もう一度 Ctrl+Z で直前の変更を元に戻します。
 redo-on-clip = このクリップに再び移動しました（移動をやり直しました）。
 rotate-reason-in-use = ファイルが読み取り専用か使用中です

@@ -722,6 +722,7 @@ rotate-turned = Okrenuto { $turn } · rotacija je sada { $flag }
 rotate-failed = Nije rotirano: { $reason }
 undo-name-taken = Nije promenjeno: druga datoteka se već zove { $name }
 undo-name-too-long = Nije promenjeno: nazivi sačuvanih kadrova, titlova ili transkripta klipa bili bi predugački
+undo-file-in-use = Nije promenjeno: datoteka je samo za čitanje ili je u upotrebi
 undo-back-on-clip = Ponovo na ovom klipu (premeštanje je poništeno). Ctrl+Z još jednom poništava njegovu poslednju izmenu.
 redo-on-clip = Ponovo na ovom klipu (premeštanje je vraćeno).
 rotate-reason-in-use = datoteka je samo za čitanje ili je u upotrebi
