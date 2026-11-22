@@ -1,3 +1,7 @@
+# 0.282
+## Fixed
+- With comments in a text file, clearing the comment of a clip whose `.comment.txt` is read-only keeps the file and says the comment was not saved, as typing a new one does. Before, on macOS and Linux the read-only file was deleted without a word.
+
 # 0.281
 ## Fixed
 - With the comment box on the whole panel (⛶), `Delete`, `Enter`, `Shift+Space`, the arrows and letters do nothing to the tags you cannot see, as in fullscreen. Before, `Delete` could remove the selected tag from the folder, and `Shift+Space` could tag or untag the clip, out of sight.

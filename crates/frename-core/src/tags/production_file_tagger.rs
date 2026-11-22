@@ -840,12 +840,7 @@ mod tests {
         /// `None` where read-only files are writable anyway (running as root): nothing to check
         /// there. CI runs as a normal user, so there that is a broken setup.
         fn set(paths: &[&Path]) -> Option<Self> {
-            let guard = Self(paths.iter().map(|p| p.to_path_buf()).collect());
-            for path in &guard.0 {
-                let mut permissions = std::fs::metadata(path).expect("file").permissions();
-                permissions.set_readonly(true);
-                std::fs::set_permissions(path, permissions).expect("read-only");
-            }
+            let guard = Self::flag(paths);
             let writable = guard
                 .0
                 .iter()
@@ -859,6 +854,18 @@ mod tests {
                 return None;
             }
             Some(guard)
+        }
+
+        /// Only sets the read-only flag, even where the files stay writable (root): for checks
+        /// that go by the flag, as the refusal of a read-only comment file does (#601).
+        fn flag(paths: &[&Path]) -> Self {
+            let guard = Self(paths.iter().map(|p| p.to_path_buf()).collect());
+            for path in &guard.0 {
+                let mut permissions = std::fs::metadata(path).expect("file").permissions();
+                permissions.set_readonly(true);
+                std::fs::set_permissions(path, permissions).expect("read-only");
+            }
+            guard
         }
     }
 
@@ -930,6 +937,51 @@ mod tests {
             crate::recovery::comment_or_points_not_saved(&points_only, &saved, true),
             "points kept in the comment file that did not change are told too"
         );
+    }
+
+    /// #601: clearing the comment of a read-only comment file is refused like writing a new one,
+    /// not done by deleting the file (macOS and Linux let a folder's owner delete a read-only
+    /// file). Checked by the read-only flag, so it holds when running as root too.
+    #[test]
+    fn clearing_a_read_only_comment_file_keeps_it_and_is_told() {
+        let tagger = ProductionFileTagger;
+        let path = saved_clip("read-only-clear", TEXT, "Keep", (None, None));
+        let comment_file = crate::comment::comment_path(&path);
+        assert!(comment_file.exists());
+        let _read_only = ReadOnly::flag(&[&comment_file]);
+
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_comment(String::new());
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), TEXT);
+
+        assert!(comment_file.exists(), "the read-only comment file is kept");
+        assert_eq!(saved.comment(), "Keep");
+        assert!(crate::recovery::comment_or_points_not_saved(
+            &wanted,
+            &saved,
+            report.points_in_comment
+        ));
+    }
+
+    /// #601: with comments in the video, a read-only comment file left over from the text-file
+    /// storage still goes once the comment is in the video: kept, its old text would win over
+    /// the video's when the clip is read back.
+    #[test]
+    fn a_read_only_leftover_comment_file_goes_once_the_comment_is_in_the_video() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("read-only-leftover", "clip.mov");
+        let comment_file = crate::comment::comment_path(&path);
+        std::fs::write(&comment_file, "old leftover").unwrap();
+        let _read_only = ReadOnly::flag(&[&comment_file]);
+
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), BOTH_HOMES);
+        wanted.set_comment("new typed".to_string());
+        let report = tagger.save_reporting_with(&wanted, &path, BOTH_HOMES);
+        let saved = tagger.parse_with(&report.path, &FolderInfo::default(), BOTH_HOMES);
+
+        assert_eq!(saved.comment(), "new typed");
+        assert!(!comment_file.exists(), "the leftover is gone");
     }
 
     /// #425: with the default storage, a video that refuses the XMP (read-only here) has its
