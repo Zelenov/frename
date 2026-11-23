@@ -437,10 +437,73 @@ pub(crate) fn sidecar_name_too_long(old_path: &Path, new_path: &Path) -> Option<
 /// names of `old_path` to those of `new_path`. The one list for the save that renames a clip and
 /// for its undo and redo, so they cannot drift apart; it matches the set `target_name_taken`
 /// and `sidecar_name_too_long` guard.
-pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) {
-    super::production_file_tagger::rename_screenshots(old_path, new_path);
-    crate::comment::rename_comment_file(old_path, new_path);
-    crate::subtitles::rename_subtitle_file(old_path, new_path);
+///
+/// Every file that can move is moved; the result says which did and the first one that could not
+/// (another program holds it open, #622), so the caller can move them back or try again later.
+pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) -> SidecarMove {
+    let mut moves = SidecarMove::default();
+    super::production_file_tagger::rename_screenshots(old_path, new_path, &mut moves);
+    crate::comment::rename_comment_file(old_path, new_path, &mut moves);
+    crate::subtitles::rename_subtitle_file(old_path, new_path, &mut moves);
+    moves
+}
+
+/// What moving a clip's side files did: the files moved (old path, new path) in order, and the
+/// first move the system refused.
+#[derive(Debug, Default)]
+pub struct SidecarMove {
+    moved: Vec<(PathBuf, PathBuf)>,
+    failed: Option<std::io::Error>,
+}
+
+impl SidecarMove {
+    /// Move one side file, recording what happened. `what` names it in the log.
+    pub(crate) fn rename(&mut self, what: &str, old: &Path, new: &Path) {
+        #[cfg(test)]
+        if HELD.with(|held| held.borrow().iter().any(|h| h == old)) {
+            self.failed.get_or_insert(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "held open by another program (test)",
+            ));
+            return;
+        }
+        match std::fs::rename(old, new) {
+            Ok(()) => self.moved.push((old.to_path_buf(), new.to_path_buf())),
+            Err(e) => {
+                log::warn!("{what}: failed to rename {old:?} → {new:?}: {e}");
+                self.failed.get_or_insert(e);
+            }
+        }
+    }
+
+    /// The first move the system refused, if any.
+    pub(crate) fn into_result(self) -> Result<(), (Vec<(PathBuf, PathBuf)>, std::io::Error)> {
+        match self.failed {
+            None => Ok(()),
+            Some(e) => Err((self.moved, e)),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static HELD: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Tests: on this thread, a side file at `path` cannot be moved, as when another program holds
+/// it open on Windows (#622).
+#[cfg(test)]
+pub(crate) fn hold_on_this_thread(path: &Path) {
+    HELD.with(|held| held.borrow_mut().push(path.to_path_buf()));
+}
+
+/// Move the side files in `moved` back to where they were, last first.
+pub(crate) fn move_back(moved: Vec<(PathBuf, PathBuf)>) {
+    for (old, new) in moved.into_iter().rev() {
+        if let Err(e) = std::fs::rename(&new, &old) {
+            log::error!("could not move {new:?} back to {old:?}: {e}");
+        }
+    }
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.

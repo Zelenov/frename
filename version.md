@@ -1,3 +1,7 @@
+# 0.288
+## Fixed
+- When another program holds one of a clip's side files open (its subtitles, transcript, comment text file or a saved frame), tagging no longer renames the clip without it. The clip keeps its name with all its files and says it was not saved, as when the video itself is held. Before, the clip was renamed and that file stayed behind under the old name, with nothing said, and `Ctrl+Z` of the change was refused.
+
 # 0.287
 ## Fixed
 - `Ctrl+Z` brings back a tag you removed that was only in the clip's file name (shown with "+"), in its old place in the name, also after you left the clip or undid a later step. Before, `Ctrl+Z` did nothing, said nothing, and no older step could be undone.

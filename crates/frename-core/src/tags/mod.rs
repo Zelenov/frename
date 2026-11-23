@@ -17,8 +17,12 @@ mod tag_list;
 
 pub use default_tags::{DefaultTag, DEFAULT_TAGS};
 pub use file_snapshot::{set_space_after_tags, space_after_tags, FileSnapshot};
+#[cfg(test)]
+pub(crate) use file_tagger::hold_on_this_thread;
 pub use file_tagger::{install_file_tagger, FileTagger, SaveAndReparse};
-pub(crate) use file_tagger::{rename_sidecars, sidecar_name_too_long, target_name_taken};
+pub(crate) use file_tagger::{
+    move_back, rename_sidecars, sidecar_name_too_long, target_name_taken, SidecarMove,
+};
 pub use file_tagger_backend::{FileTaggerBackend, Saved};
 pub use file_tagger_logging::LoggingFileTagger;
 pub use folder_info::FolderInfo;
