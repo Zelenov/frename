@@ -206,9 +206,11 @@ impl FolderTagStore {
     /// Reads the folder's tags, in file order.
     ///
     /// A folder without a tag file gets one written from the built-in set, so that opening a new
-    /// folder leaves behind a file the user can edit rather than an empty panel. No folder open
-    /// means no tags. A file that cannot be parsed is reported and left untouched — a typo in a
-    /// hand-edited file must not cost the user their tag list.
+    /// folder leaves behind a file the user can edit rather than an empty panel. A folder that
+    /// cannot take the file (a write-protected card, a read-only share) still shows the built-in
+    /// tags; the failed write is only logged (#623). No folder open means no tags. A file that
+    /// cannot be parsed is reported and left untouched — a typo in a hand-edited file must not
+    /// cost the user their tag list.
     fn read_entries(&self) -> Result<Vec<TagEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let Some(path) = self.tag_file_path() else {
             return Ok(Vec::new());
@@ -221,7 +223,12 @@ impl FolderTagStore {
                     path.display()
                 );
                 let entries = Self::default_entries();
-                self.write_entries(&entries)?;
+                if let Err(e) = self.write_entries(&entries) {
+                    log::warn!(
+                        "could not write the built-in tags in {}: {e}",
+                        path.display()
+                    );
+                }
                 return Ok(entries);
             }
             Err(e) => return Err(with_path("read tag file", &path, e)),
@@ -599,6 +606,20 @@ impl StoredTagStore for FolderTagStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #623: a folder that cannot take a tag file (a write-protected card) still shows the
+    /// built-in tags instead of none. A folder that is not there stands in for it here: the read
+    /// finds no file and the write fails, for any user (a read-only folder does not stop root).
+    #[test]
+    fn a_folder_that_cannot_take_the_tag_file_shows_the_built_in_tags() {
+        let folder = std::env::temp_dir().join(format!("frename-tags-gone-{}", Uuid::new_v4()));
+        let store = FolderTagStore::for_folder(&folder);
+        let tags = store
+            .get_stored_tags()
+            .expect("the built-in tags, not an error");
+        assert_eq!(tags.len(), DEFAULT_TAGS.len());
+        assert!(!folder.exists(), "nothing written");
+    }
 
     /// A unique scratch folder; each test gets its own so they can run in parallel.
     struct TempFolder(PathBuf);

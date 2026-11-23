@@ -3465,11 +3465,12 @@ impl FolderWorkspace {
                     let saved = self.file_workspace.reorder_tag_to_index(did, checked_idx);
                     let to_index = self.file_workspace.tag_list().checked_index_of(did);
                     if let Some((fi, ti)) = from_index.zip(to_index).filter(|(f, t)| f != t) {
-                        self.history.push(Box::new(ReorderTagCommand {
-                            moved_id: did,
-                            from_index: fi,
-                            to_index: ti,
-                        }));
+                        self.history.push(Box::new(ReorderTagCommand::new(
+                            self.file_workspace.tag_list(),
+                            did,
+                            fi,
+                            ti,
+                        )));
                     }
                     if !saved {
                         return Self::tags_not_saved();
@@ -3591,11 +3592,12 @@ impl FolderWorkspace {
             // and Redo stays. The step records where the chip really ended up.
             let to_index = self.file_workspace.tag_list().checked_index_of(did);
             if let Some((fi, ti)) = from_index.zip(to_index).filter(|(f, t)| f != t) {
-                self.history.push(Box::new(ReorderTagCommand {
-                    moved_id: did,
-                    from_index: fi,
-                    to_index: ti,
-                }));
+                self.history.push(Box::new(ReorderTagCommand::new(
+                    self.file_workspace.tag_list(),
+                    did,
+                    fi,
+                    ti,
+                )));
             }
         }
         notice
