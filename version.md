@@ -1,6 +1,6 @@
 # 0.287
 ## Fixed
-- `Ctrl+Alt+←` / `→`, `Alt+←` / `→` and `Home` pressed while you type a time, or in batch mode's "Extra line for this run" or "Stop spending at", stay with the text, as in the comment box. Before, they also turned the open clip (and saved the turn), stepped it a frame or sent it back to the start.
+- `Ctrl+Alt+←` / `→`, `Alt+←` / `→` and `Home` now stay with the text while you type a time, or type in "Extra line for this run" or "Stop spending at" in batch mode, as they do in the comment box. Before, they also turned the open clip (and saved the turn), stepped it a frame or sent it back to the start.
 
 # 0.286
 ## Fixed

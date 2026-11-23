@@ -248,7 +248,8 @@ fn column_widths(video: f32, file_list: f32) -> (f32, f32) {
 }
 
 /// The one-line text fields of the main window that iced lets Ctrl+Z and Ctrl+Y through
-/// (#488, #499): while one of them has the focus, Undo and Redo do nothing.
+/// (#488, #499): while one of them has the focus, Undo and Redo do nothing. A new batch one-line
+/// field goes here and in [`WRITING_FIELDS`].
 const LINE_FIELDS: &[&str] = &[
     folder::FOLDER_RENAME_INPUT_ID,
     crate::features::video_controls::view::TIME_EDIT_ID,
@@ -257,14 +258,25 @@ const LINE_FIELDS: &[&str] = &[
 ];
 
 /// The text fields that keep `Ctrl+Alt+←/→`, `Alt+←/→` and `Home` while they have the focus: the
-/// comment box, the time field and batch mode's one-line fields (#621). The rename field is not
-/// among them (`Home` asks it separately), nor the search fields, where the keys still act.
+/// comment box, the time field and batch mode's one-line fields (#621); a new batch one-line
+/// field goes here and in [`LINE_FIELDS`]. Not the search fields, where the keys still act, nor
+/// the rename field: while a file name is typed `Ctrl+Alt+←/→` and `Alt+←/→` still turn and step
+/// the clip, and `Home` asks the rename field separately.
 const WRITING_FIELDS: &[&str] = &[
     crate::features::file_workspace::view::COMMENT_EDITOR_ID,
     crate::features::video_controls::view::TIME_EDIT_ID,
     batch::describe_ai::ONE_OFF_NOTES_ID,
     batch::pipeline::CAP_FIELD_ID,
 ];
+
+/// The answer to "which of [`WRITING_FIELDS`] has the focus?" for a video key: nothing while
+/// one of them is typed in (the key stays with its text), else the key's `message` (#621).
+fn keep_or_send(field: Option<&str>, message: Message) -> Message {
+    match field {
+        Some(_) => Message::Noop,
+        None => message,
+    }
+}
 
 /// Takes the keys from the one focusable widget with this id and leaves every other one as it
 /// is (iced's own `unfocus` takes them from all, the rename field and comment box included).
@@ -1549,13 +1561,8 @@ impl FolderWorkspace {
         }
         // The comment box, the time field and batch mode's one-line fields keep the keys they
         // type with (#621). Unlike `is_focused`, this answers when none of them is on screen.
-        crate::widgets::focus_ring::focused_among(WRITING_FIELDS).map(move |field| {
-            if field.is_some() {
-                Message::Noop
-            } else {
-                message.clone()
-            }
-        })
+        crate::widgets::focus_ring::focused_among(WRITING_FIELDS)
+            .map(move |field| keep_or_send(field, message.clone()))
     }
 
     /// Messages to drop now. Batch mode shows batch actions instead of the open file, so what
@@ -7093,18 +7100,19 @@ mod tests {
         assert_eq!(workspace.update(Message::GoToStartUnlessWriting).units(), 1);
     }
 
-    /// In batch mode the comment box is not shown, so `Ctrl+Alt+→` after typing in the file
-    /// filter turns the video at once instead of asking about a focus nobody can answer.
+    /// In batch mode `Ctrl+Alt+→` after typing in the file filter still turns the video: the
+    /// question about the writing fields gets an answer (none of them has the focus) and the key
+    /// goes on (#621: before, batch mode skipped the question and the batch fields lost it).
     #[test]
-    fn a_turn_while_typing_in_batch_mode_goes_straight_through() {
+    fn a_turn_while_typing_in_batch_mode_still_turns_the_clip() {
         let test_dir = TestDirectory::new(1);
         let mut workspace = marker_workspace(&test_dir, 1);
         let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
         assert!(workspace.batch.is_active());
         let task = workspace.update(Message::RotateVideoWhileTyping(1));
-        // `Task::done`: one message, known without running a widget operation.
+        // One widget operation, which answers even with no writing field on screen.
         assert_eq!(task.units(), 1);
-        let _ = workspace.update(Message::RotateVideo(1));
+        let _ = workspace.update(keep_or_send(None, Message::RotateVideo(1)));
         let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
         assert_eq!(rotation.map(|r| r.degrees()), Ok(90));
     }
@@ -7125,7 +7133,7 @@ mod tests {
         ] {
             assert_eq!(workspace.update(message).units(), 0, "the notes keep it");
         }
-        // Out of the box, the turn goes straight through again.
+        // Out of the box, the writing fields are asked again.
         let _ = workspace.update(Message::NotesFocused(false));
         assert_eq!(
             workspace.update(Message::RotateVideoWhileTyping(1)).units(),
@@ -10983,27 +10991,18 @@ mod tests {
         }
         assert!(!WRITING_FIELDS.contains(&folder::FOLDER_RENAME_INPUT_ID));
 
-        // In batch mode the focus is asked too, not the key sent straight on: before #621 the
-        // one-off field and the cap field turned the clip.
-        let test_dir = TestDirectory::new(1);
-        let mut workspace = marker_workspace(&test_dir, 1);
-        let file = test_dir.target_file();
-        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
-        for key in [
-            Message::RotateVideoWhileTyping(1),
-            Message::StepFrameWhileTyping(1),
-        ] {
-            assert_eq!(
-                workspace.update(key).units(),
-                1,
-                "the fields' focus is asked"
-            );
-        }
-        assert_eq!(
-            frename_core::FileTagger::video_rotation(&file).map(|r| r.degrees()),
-            Ok(0),
-            "nothing turned before the answer"
-        );
+        // The answer decides: a field with the focus keeps the key, none sends it on.
+        assert!(matches!(
+            keep_or_send(
+                Some(batch::describe_ai::ONE_OFF_NOTES_ID),
+                Message::RotateVideo(1)
+            ),
+            Message::Noop
+        ));
+        assert!(matches!(
+            keep_or_send(None, Message::RotateVideo(1)),
+            Message::RotateVideo(1)
+        ));
     }
 
     /// Issue #499: in batch mode, Ctrl+Z in a one-line field ("notes for this run", the clips
