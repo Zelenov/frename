@@ -17,11 +17,11 @@ pub struct DeleteTagCommand {
     /// Key in the file name order at deletion time (it differs from `sort_order` when the name's
     /// tag order differs from the grid's).
     pub selected_order: i64,
-    /// For a tag that was in the clip's name: the checked tag just before it there (`Some(None)`
-    /// when it was first). A list built again in between (an undone comment, the clip opened
-    /// again) has other order keys, so the undo puts the tag back after this one (#636). `None`:
-    /// not recorded, the keys decide.
-    pub name_after: Option<Option<String>>,
+    /// For a tag that was in the clip's name: the checked tag just before it there (`None` when
+    /// it was first). A list built again in between (an undone comment, the clip opened again)
+    /// has other order keys; when they do not put the tag back after this one, the undo does
+    /// (#636).
+    pub name_after: Option<String>,
 }
 
 impl<SD, ST> Undoable<SD, ST> for DeleteTagCommand
@@ -42,9 +42,13 @@ where
                 self.selected_order,
             )
             .map_err(|_| UndoError::TagNotFound(self.tag_id))?;
-        if let (true, Some(after)) = (self.was_checked, &self.name_after) {
-            ctx.tag_list
-                .place_after_in_name(self.tag_id, after.as_deref(), !self.was_stored);
+        // The keys are exact when the list was not built again: only a wrong place is moved.
+        if self.was_checked && ctx.tag_list.checked_name_before(self.tag_id) != self.name_after {
+            ctx.tag_list.place_after_in_name(
+                self.tag_id,
+                self.name_after.as_deref(),
+                !self.was_stored,
+            );
         }
         Ok(())
     }

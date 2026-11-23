@@ -837,6 +837,7 @@ mod tests {
         // Capture before deleting
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
+        let name_after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
         assert!(tag_list.get_tag(id).is_none());
 
@@ -850,7 +851,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after: None,
+            name_after,
         }));
 
         {
@@ -876,6 +877,7 @@ mod tests {
         let id = tag_list.checked_tag_id_at(1).unwrap();
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
+        let name_after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
         assert_eq!(names(&tag_list), ["A"]);
 
@@ -889,7 +891,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after: None,
+            name_after,
         }));
         let mut ctx = UndoContext {
             directory: &mut dir,
@@ -909,6 +911,7 @@ mod tests {
         let id = tag_list.checked_tag_id_at(0).unwrap();
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
+        let name_after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
 
         let mut history = History::new(50);
@@ -921,7 +924,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after: None,
+            name_after,
         }));
 
         {
@@ -1731,6 +1734,45 @@ mod tests {
         assert_eq!(ctx.tag_list.file_snapshot().tags(), ["a", "rough", "b"]);
     }
 
+    /// #636: with no rebuild in between, the undo of a delete gives back exactly the state before
+    /// it, grid order included, also when the name's order differs from the grid's.
+    #[test]
+    fn an_undone_delete_without_a_rebuild_keeps_the_grid_order() {
+        let mut tag_list = TagList::new(
+            FakeAppStorage::new(),
+            snapshot_with_tags(&["a", "rough", "b"]),
+        );
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        tag_list.set_sync_locked(false);
+        tag_list.reorder_tag_to_index(id, 0);
+        let name_before = tag_list.file_snapshot().tags().to_vec();
+        let grid_before = tag_list.filtered_display_tag_ids().to_vec();
+        let (name, color, stored, starred, checked, sort, selected) =
+            tag_list.capture_delete_data(id).expect("data");
+        let name_after = tag_list.checked_name_before(id);
+        tag_list.remove_stored_tag_by_id(id).expect("deleted");
+        let mut history = History::new(50);
+        history.push(Box::new(DeleteTagCommand {
+            tag_id: id,
+            tag_name: name,
+            color_index: color,
+            was_stored: stored,
+            was_starred: starred,
+            was_checked: checked,
+            sort_order: sort,
+            selected_order: selected,
+            name_after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the delete");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), name_before);
+        assert_eq!(ctx.tag_list.filtered_display_tag_ids(), grid_before);
+    }
+
     /// #627, #636: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list
     /// again, giving the tag a new id) puts it back in its place, and Ctrl+Y twice: the redo of
     /// the delete finds the tag by name.
@@ -1745,7 +1787,7 @@ mod tests {
         let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
         let (name, color, stored, starred, checked, sort, selected) =
             tag_list.capture_delete_data(id).expect("data");
-        let name_after = Some(tag_list.checked_name_before(id));
+        let name_after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).expect("deleted");
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
