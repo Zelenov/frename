@@ -1,6 +1,14 @@
-# 0.288
+# 0.290
 ## Fixed
 - When another program holds one of a clip's files open (its subtitles, transcript, `.comment.txt` or a saved frame), tagging no longer renames the clip without it: the clip keeps its name with all its files, and frename says it was not saved, as when the video itself is held. Before, the clip was renamed, that file stayed behind under the old name with nothing said, and `Ctrl+Z` of the change was refused.
+
+# 0.289
+## Fixed
+- `Ctrl+Alt+←` / `→`, `Alt+←` / `→` and `Home` now stay with the text while you type a time, or type in "Extra line for this run" or "Stop spending at" in batch mode, as they do in the comment box. Before, they also turned the open clip (and saved the turn), stepped it a frame or sent it back to the start.
+
+# 0.288
+## Fixed
+- `Delete` and `Enter` leave alone a selected tag that your tag search hides. Before, after you typed a search and clicked away, `Delete` could remove that hidden tag from the folder.
 
 # 0.287
 ## Fixed

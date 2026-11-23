@@ -269,8 +269,8 @@ fn main_window_event(
             } else {
                 1
             };
-            // A text field took the key: the workspace checks it is not the comment box, where
-            // the keys belong to the text.
+            // A text field took the key: the workspace checks it is not a writing field (the
+            // comment box, a time, a batch field), where the keys belong to the text.
             let turn = if matches!(status, event::Status::Ignored) {
                 folder_workspace::Message::RotateVideo(quarter_turns)
             } else {
@@ -316,8 +316,8 @@ fn main_window_event(
             } else {
                 video_controls::FrameStep::Forward
             };
-            // A text field took the key: the workspace checks it is not the comment box, where
-            // the keys belong to the text.
+            // A text field took the key: the workspace checks it is not a writing field (the
+            // comment box, a time, a batch field), where the keys belong to the text.
             let step = if matches!(status, event::Status::Ignored) {
                 folder_workspace::Message::StepFrame(step)
             } else {
