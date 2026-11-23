@@ -83,8 +83,12 @@ fn strip_prefix_as_the_file_system<'a>(name: &'a str, prefix: &str) -> Option<&'
 }
 
 /// Move the screenshots of `old_path` to the names of `new_path`, keeping their times. Never
-/// overwrites; failures are logged only, like the other sidecars.
-pub(crate) fn rename_screenshots(old_path: &Path, new_path: &Path) {
+/// overwrites; a move the system refuses is recorded in `moves` (#622).
+pub(crate) fn rename_screenshots(
+    old_path: &Path,
+    new_path: &Path,
+    moves: &mut super::file_tagger::SidecarMove,
+) {
     for position_ms in screenshot_positions(old_path) {
         let (old, new) = (
             screenshot_path(old_path, position_ms),
@@ -97,9 +101,7 @@ pub(crate) fn rename_screenshots(old_path: &Path, new_path: &Path) {
             log::warn!("screenshot: not renaming {old:?}: {new:?} already exists");
             continue;
         }
-        if let Err(e) = std::fs::rename(&old, &new) {
-            log::warn!("screenshot: failed to rename {old:?} → {new:?}: {e}");
-        }
+        moves.rename("screenshot", &old, &new);
     }
 }
 
@@ -1214,6 +1216,61 @@ mod tests {
         // The rest of the save is written, as when a rename fails.
         let saved = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
         assert_eq!(saved.comment(), "Вода в кадре");
+    }
+
+    /// #622: a side file another program holds open cannot follow the clip, so the clip is not
+    /// renamed and the files that did move go back: the frame, the comment text file and the
+    /// subtitles all stay under the old name, and the rest of the save is written. Before, the
+    /// clip was renamed and the held subtitles stayed behind, said nowhere.
+    #[test]
+    fn a_held_side_file_keeps_the_clip_and_all_its_files_under_the_old_name() {
+        let tagger = ProductionFileTagger;
+        let path = clip_named("held-sidecar", "clip.mov");
+        crate::recovery::use_dir_on_this_thread(path.with_file_name("recovery"));
+        tagger
+            .save_screenshot(&path, 5_000, b"jpeg")
+            .expect("a frame");
+        crate::comment::save_comment(&path, "old note");
+        let srt = crate::subtitles::SubtitleFormat::Srt.path(&path);
+        std::fs::write(&srt, "1\n00:00:00,000 --> 00:00:01,000\nHi\n").unwrap();
+        crate::tags::hold_on_this_thread(&srt);
+        let mut wanted = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        wanted.set_tags(["pick"]);
+        wanted.set_comment("new note".to_string());
+
+        let report = tagger.save_reporting_with(&wanted, &path, TEXT);
+
+        assert_eq!(report.path, path, "not renamed");
+        assert!(path.exists());
+        assert!(!path.with_file_name("pick.clip.mov").exists());
+        assert!(srt.exists(), "the held subtitles stay with it");
+        assert_eq!(
+            screenshot_positions(&path),
+            vec![5_000],
+            "the frame came back"
+        );
+        let dir = path.parent().unwrap();
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.starts_with("pick."))
+            .collect();
+        names.sort();
+        assert!(
+            names.is_empty(),
+            "nothing waits under the new name: {names:?}"
+        );
+        let saved = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        assert_eq!(
+            saved.comment(),
+            "new note",
+            "the rest of the save is written"
+        );
+        let intents = path.with_file_name("recovery").join("renames");
+        assert!(
+            std::fs::read_dir(intents).map_or(true, |mut d| d.next().is_none()),
+            "no rename is left for the next start"
+        );
     }
 
     /// #526: the same for the saved transcript (and the subtitle files next to it): a rename

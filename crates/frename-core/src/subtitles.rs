@@ -472,9 +472,13 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
 /// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
 /// video is renamed, so they keep matching. Does nothing for a file that is not there; never
 /// overwrites an existing one.
-pub fn rename_subtitle_file(old_video_path: &Path, new_video_path: &Path) {
+pub(crate) fn rename_subtitle_file(
+    old_video_path: &Path,
+    new_video_path: &Path,
+    moves: &mut crate::tags::SidecarMove,
+) {
     for (old, new) in companion_paths(old_video_path, new_video_path) {
-        rename_companion(&old, &new);
+        rename_companion(&old, &new, moves);
     }
 }
 
@@ -494,7 +498,7 @@ pub(crate) fn companion_paths(
         )])
 }
 
-fn rename_companion(old_path: &Path, new_path: &Path) {
+fn rename_companion(old_path: &Path, new_path: &Path, moves: &mut crate::tags::SidecarMove) {
     if old_path == new_path || !old_path.is_file() {
         return;
     }
@@ -506,18 +510,7 @@ fn rename_companion(old_path: &Path, new_path: &Path) {
         );
         return;
     }
-    match std::fs::rename(old_path, new_path) {
-        Ok(()) => log::info!(
-            "subtitles: renamed {} → {}",
-            old_path.display(),
-            new_path.display()
-        ),
-        Err(e) => log::warn!(
-            "subtitles: failed to rename {} → {}: {e}",
-            old_path.display(),
-            new_path.display()
-        ),
-    }
+    moves.rename("subtitles", old_path, new_path);
 }
 
 #[cfg(test)]
@@ -594,7 +587,11 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(subtitle_path(&old_video), "old").expect("write srt");
 
-        rename_subtitle_file(&old_video, &new_video);
+        rename_subtitle_file(
+            &old_video,
+            &new_video,
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert!(!subtitle_path(&old_video).exists());
         assert_eq!(
             std::fs::read_to_string(subtitle_path(&new_video))
@@ -605,7 +602,11 @@ mod tests {
 
         // A subtitle file already at the destination is left alone.
         std::fs::write(subtitle_path(&old_video), "other").expect("write srt");
-        rename_subtitle_file(&old_video, &new_video);
+        rename_subtitle_file(
+            &old_video,
+            &new_video,
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert_eq!(
             std::fs::read_to_string(subtitle_path(&new_video))
                 .ok()
@@ -624,7 +625,11 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(capt_path(&old_video), "capt").expect("write capt");
 
-        rename_subtitle_file(&old_video, &new_video);
+        rename_subtitle_file(
+            &old_video,
+            &new_video,
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert!(!capt_path(&old_video).exists());
         assert_eq!(capt_path(&new_video), dir.join("tag.clip.capt"));
         assert!(capt_path(&new_video).is_file());
@@ -639,7 +644,11 @@ mod tests {
         let new_video = dir.join("tag.clip.MP4");
         std::fs::write(transcript_path(&old_video), "{}").expect("write marker");
 
-        rename_subtitle_file(&old_video, &new_video);
+        rename_subtitle_file(
+            &old_video,
+            &new_video,
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert!(!transcript_path(&old_video).exists());
         assert_eq!(
             transcript_path(&new_video),
@@ -747,7 +756,11 @@ mod tests {
         std::fs::write(dir.join("clip.ass"), "a").expect("ass");
         std::fs::write(dir.join("clip.ssa"), "s").expect("ssa");
 
-        rename_subtitle_file(&old_video, &new_video);
+        rename_subtitle_file(
+            &old_video,
+            &new_video,
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert!(!dir.join("clip.ass").exists() && !dir.join("clip.ssa").exists());
         assert_eq!(
             std::fs::read_to_string(dir.join("tag.clip.ass"))
@@ -1088,7 +1101,11 @@ and the gulls follow them home across the quiet water until the lights go out."
             "{bytes} vs the JSON's {json_len}"
         );
 
-        rename_subtitle_file(&video, &dir.join("tag.clip.mp4"));
+        rename_subtitle_file(
+            &video,
+            &dir.join("tag.clip.mp4"),
+            &mut crate::tags::SidecarMove::default(),
+        );
         assert!(!dir.join("clip.premiere.json").exists());
         assert!(dir.join("tag.clip.premiere.json").is_file());
         let _ = std::fs::remove_dir_all(&dir);

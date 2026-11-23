@@ -1,6 +1,14 @@
-# 0.290
+# 0.292
 ## Fixed
 - `Ctrl+Z` of moving a "+" tag (one only in the clip's file name) to another place in the name works after you left the clip or undid a later step, and so do `Ctrl+Y` of deleting one and `Ctrl+Z` of removing one that became a folder tag in between (as "commented" can when you write a comment). Before, nothing happened and no older step could be undone.
+
+# 0.291
+## Fixed
+- A folder on a write-protected card or a read-only share shows the built-in tags (pick, skip, review…) instead of none. Before, the tag panel stayed empty and nothing said why.
+
+# 0.290
+## Fixed
+- When another program holds one of a clip's files open (its subtitles, transcript, `.comment.txt` or a saved frame), tagging no longer renames the clip without it: the clip keeps its name with all its files, and frename says it was not saved, as when the video itself is held. Before, the clip was renamed, that file stayed behind under the old name with nothing said, and `Ctrl+Z` of the change was refused.
 
 # 0.289
 ## Fixed
