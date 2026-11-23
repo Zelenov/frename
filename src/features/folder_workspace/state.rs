@@ -12052,6 +12052,46 @@ mod tests {
         workspace
     }
 
+    /// #609: Ctrl+F takes the keys from the comment box. The typing so far is its own undo
+    /// step, and Ctrl+Z, dropped while the comment box has the keys, undoes it.
+    #[test]
+    fn ctrl_f_takes_the_keys_from_the_comment_box() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = searchable_workspace(&test_dir);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('a'))));
+        assert!(workspace.file_workspace.comment_focused());
+        side_search(&mut workspace, media_viewer_video::SearchMessage::Open);
+        assert!(workspace.side_search().is_open());
+        assert!(!workspace.file_workspace.comment_focused());
+        assert!(
+            workspace.comment_session.is_none(),
+            "the typing is one step"
+        );
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.file_workspace().tag_list().comment(), "");
+    }
+
+    /// #609: Ctrl+R takes the keys from every field, so the comment and notes boxes lose them.
+    #[test]
+    fn ctrl_r_takes_the_keys_from_the_comment_and_notes_boxes() {
+        use iced::widget::text_editor::{Action, Edit};
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let _ = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('a'))));
+        workspace.notes_focused = true;
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(workspace.recent_folders.is_open());
+        assert!(!workspace.file_workspace.comment_focused());
+        assert!(!workspace.notes_focused);
+        assert!(
+            workspace.comment_session.is_none(),
+            "the typing is one step"
+        );
+        let _ = workspace.update(Message::Undo);
+        assert_eq!(workspace.file_workspace().tag_list().comment(), "");
+    }
+
     #[test]
     fn ctrl_f_opens_the_bar_and_the_list_it_searches() {
         let test_dir = TestDirectory::new(2);

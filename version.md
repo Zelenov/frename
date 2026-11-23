@@ -1,3 +1,7 @@
+# 0.284
+## Fixed
+- `Ctrl+F` or `Ctrl+R` pressed while you type a comment now takes the cursor out of the comment box for good: its focus ring goes, and `Ctrl+Z` undoes again. Before, the box still looked active and `Ctrl+Z` did nothing until you clicked somewhere.
+
 # 0.283
 ## Fixed
 - On Windows, `Ctrl+Y` after `Ctrl+Z` undid a move to another clip works again: the clip you left gets its new name back and you are on the next clip. Before, the player held that clip's file and nothing happened.

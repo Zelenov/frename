@@ -55,14 +55,21 @@ impl FolderWorkspace {
         match self.recent_folders.update(message) {
             Effect::None if walked => self.scroll_recent_folders_to_highlight(),
             Effect::None => Task::none(),
-            Effect::Reload => Task::batch([
-                self.reload_recent_folders(),
-                // Ctrl+R can come while a search field has the keys: it would keep Enter.
-                iced::advanced::widget::operate(
-                    iced::advanced::widget::operation::focusable::unfocus::<()>(),
-                )
-                .map(|()| Message::Noop),
-            ]),
+            Effect::Reload => {
+                // No field keeps the keys (below), so neither does the comment or notes box:
+                // the comment's typing so far is its own undo step, and Ctrl+Z undoes (#609).
+                self.end_comment_session();
+                self.file_workspace.set_comment_focused(false);
+                self.notes_focused = false;
+                Task::batch([
+                    self.reload_recent_folders(),
+                    // Ctrl+R can come while a search field has the keys: it would keep Enter.
+                    iced::advanced::widget::operate(
+                        iced::advanced::widget::operation::focusable::unfocus::<()>(),
+                    )
+                    .map(|()| Message::Noop),
+                ])
+            }
             Effect::Open(pair) => Task::done(Message::ScanFolder(pair)),
             Effect::Forget(folder) => {
                 self.app_db.forget_recent_folder(&folder);
