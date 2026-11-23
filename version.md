@@ -1,6 +1,6 @@
 # 0.288
 ## Fixed
-- When another program holds one of a clip's side files open (its subtitles, transcript, comment text file or a saved frame), tagging no longer renames the clip without it. The clip keeps its name with all its files and says it was not saved, as when the video itself is held. Before, the clip was renamed and that file stayed behind under the old name, with nothing said, and `Ctrl+Z` of the change was refused.
+- When another program holds one of a clip's files open (its subtitles, transcript, `.comment.txt` or a saved frame), tagging no longer renames the clip without it: the clip keeps its name with all its files, and frename says it was not saved, as when the video itself is held. Before, the clip was renamed, that file stayed behind under the old name with nothing said, and `Ctrl+Z` of the change was refused.
 
 # 0.287
 ## Fixed

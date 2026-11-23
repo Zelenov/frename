@@ -83,7 +83,7 @@ fn strip_prefix_as_the_file_system<'a>(name: &'a str, prefix: &str) -> Option<&'
 }
 
 /// Move the screenshots of `old_path` to the names of `new_path`, keeping their times. Never
-/// overwrites; failures are logged only, like the other sidecars.
+/// overwrites; a move the system refuses is recorded in `moves` (#622).
 pub(crate) fn rename_screenshots(
     old_path: &Path,
     new_path: &Path,

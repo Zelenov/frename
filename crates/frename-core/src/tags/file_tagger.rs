@@ -451,7 +451,7 @@ pub(crate) fn rename_sidecars(old_path: &Path, new_path: &Path) -> SidecarMove {
 /// What moving a clip's side files did: the files moved (old path, new path) in order, and the
 /// first move the system refused.
 #[derive(Debug, Default)]
-pub struct SidecarMove {
+pub(crate) struct SidecarMove {
     moved: Vec<(PathBuf, PathBuf)>,
     failed: Option<std::io::Error>,
 }
@@ -459,15 +459,7 @@ pub struct SidecarMove {
 impl SidecarMove {
     /// Move one side file, recording what happened. `what` names it in the log.
     pub(crate) fn rename(&mut self, what: &str, old: &Path, new: &Path) {
-        #[cfg(test)]
-        if HELD.with(|held| held.borrow().iter().any(|h| h == old)) {
-            self.failed.get_or_insert(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "held open by another program (test)",
-            ));
-            return;
-        }
-        match std::fs::rename(old, new) {
+        match rename_file(old, new) {
             Ok(()) => self.moved.push((old.to_path_buf(), new.to_path_buf())),
             Err(e) => {
                 log::warn!("{what}: failed to rename {old:?} → {new:?}: {e}");
@@ -490,20 +482,36 @@ thread_local! {
     static HELD: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Tests: on this thread, a side file at `path` cannot be moved, as when another program holds
-/// it open on Windows (#622).
+/// Tests: on this thread, a file at `path` cannot be moved, as when another program holds it
+/// open on Windows (#622).
 #[cfg(test)]
 pub(crate) fn hold_on_this_thread(path: &Path) {
     HELD.with(|held| held.borrow_mut().push(path.to_path_buf()));
 }
 
-/// Move the side files in `moved` back to where they were, last first.
-pub(crate) fn move_back(moved: Vec<(PathBuf, PathBuf)>) {
+/// `std::fs::rename`, which in tests refuses a file held with [`hold_on_this_thread`].
+pub(crate) fn rename_file(old: &Path, new: &Path) -> std::io::Result<()> {
+    #[cfg(test)]
+    if HELD.with(|held| held.borrow().iter().any(|h| h == old)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "held open by another program (test)",
+        ));
+    }
+    std::fs::rename(old, new)
+}
+
+/// Move the side files in `moved` back to where they were, last first. False when one of them
+/// could not go back (it stays under the new name).
+pub(crate) fn move_back(moved: Vec<(PathBuf, PathBuf)>) -> bool {
+    let mut all = true;
     for (old, new) in moved.into_iter().rev() {
-        if let Err(e) = std::fs::rename(&new, &old) {
+        if let Err(e) = rename_file(&new, &old) {
             log::error!("could not move {new:?} back to {old:?}: {e}");
+            all = false;
         }
     }
+    all
 }
 
 /// Extension trait: save this snapshot then re-parse from the new path.

@@ -236,8 +236,8 @@ Sync up, Sync down and the lock, and the rename when you leave a clip. The histo
 the whole folder, so after moving to another clip the first undo goes back to the clip you left
 (a note says so) and the next one undoes its last change. While the clip you left is still being
 saved (its video closing, usually a moment), `Ctrl+Z` and `Ctrl+Y` do nothing. If a step cannot
-be done (the clip is open in another app, read-only, or was renamed, moved or deleted outside
-frename), nothing changes and a note says why; the step stays first in line, so put the file back
+be done (the clip or one of its files, such as its subtitles, is open in another app or
+read-only, or the clip was renamed, moved or deleted outside frename), nothing changes and a note says why; the step stays first in line, so put the file back
 to undo past it. In batch mode only markers and rotation are undone. It does not cover batch actions; opening
 a folder or running a batch action clears the undo history.
 
