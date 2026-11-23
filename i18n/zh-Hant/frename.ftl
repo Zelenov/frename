@@ -629,6 +629,7 @@ rotate-failed = 未旋轉：{ $reason }
 undo-name-taken = 未變更：已有其他檔案名為 { $name }
 undo-name-too-long = 未變更：片段已儲存的影格、字幕或逐字稿的名稱會過長
 undo-file-in-use = 未變更：檔案為唯讀或使用中
+undo-file-gone = 未變更：{ $name } 已不在資料夾中
 undo-back-on-clip = 已回到這個片段（已復原移動）。再按一次 Ctrl+Z 會復原它的上一個變更。
 redo-on-clip = 已再次回到這個片段（已重做移動）。
 rotate-reason-in-use = 檔案為唯讀或使用中
