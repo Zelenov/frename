@@ -57,12 +57,13 @@ impl ToggleTagCommand {
         SD: AppStateStore + Clone,
         ST: StoredTagStore + Clone,
     {
-        // A list built again has the name-only tag under a new id: follow it.
+        // A list built again has the name-only tag under a new id, or it became a folder tag in
+        // between: follow it by name.
         if ctx.tag_list.get_tag(self.tag_id).is_none() {
             if let Some(id) = self
                 .unsaved
                 .as_ref()
-                .and_then(|tag| ctx.tag_list.unsaved_tag_id_named(&tag.name))
+                .and_then(|tag| ctx.tag_list.tag_id_named_exactly(&tag.name))
             {
                 self.tag_id = id;
             }

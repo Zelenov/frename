@@ -787,12 +787,13 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         None
     }
 
-    /// The id of the tag that is not among the folder's tags and is named exactly `name`. A list
-    /// built again gives such a tag a new id, so an undo step finds it by name (#619).
-    pub fn unsaved_tag_id_named(&self, name: &str) -> Option<TagId> {
+    /// The id of the tag named exactly `name` (capitals included), saved or not. A list built
+    /// again gives a tag that is only in the clip's name a new id, and saving it in between makes
+    /// it a folder tag: an undo step that held its old id finds it by name (#619, #627).
+    pub fn tag_id_named_exactly(&self, name: &str) -> Option<TagId> {
         self.tags_by_id
             .values()
-            .find(|t| !t.is_stored() && t.tag() == name)
+            .find(|t| t.tag() == name)
             .map(|t| t.id())
     }
 

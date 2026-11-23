@@ -40,6 +40,12 @@ where
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        // A list built again gives a tag that is only in the clip's name a new id (#627).
+        if ctx.tag_list.get_tag(self.tag_id).is_none() {
+            if let Some(id) = ctx.tag_list.tag_id_named_exactly(&self.tag_name) {
+                self.tag_id = id;
+            }
+        }
         ctx.tag_list
             .remove_stored_tag_by_id(self.tag_id)
             .map_err(|_| UndoError::TagNotFound(self.tag_id))

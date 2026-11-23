@@ -1,3 +1,7 @@
+# 0.290
+## Fixed
+- `Ctrl+Z` of moving a "+" tag (one only in the clip's file name) to another place in the name works after you undo a later step, and so does `Ctrl+Z` of removing one that became a folder tag in between (as "commented" does when you write a comment). Before, `Ctrl+Z` did nothing and no older step could be undone.
+
 # 0.289
 ## Fixed
 - `Ctrl+Alt+←` / `→`, `Alt+←` / `→` and `Home` now stay with the text while you type a time, or type in "Extra line for this run" or "Stop spending at" in batch mode, as they do in the comment box. Before, they also turned the open clip (and saved the turn), stepped it a frame or sent it back to the start.
