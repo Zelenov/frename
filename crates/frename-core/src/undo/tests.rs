@@ -457,6 +457,32 @@ mod tests {
         assert_eq!(directory.selected_index(), Some(0));
     }
 
+    /// #611: an undone move that renamed the clip leaves it with edits not on disk; the redo of
+    /// that step puts them back. A move whose save renamed nothing leaves nothing unsaved.
+    #[test]
+    fn an_undone_move_that_renamed_the_clip_leaves_it_unsaved() {
+        let dir_path = PathBuf::from("C:/test");
+        let file_a = FileId::new();
+        let file_b = FileId::new();
+        let command = |path_after: &str| {
+            Box::new(NavigateFileCommand {
+                file_id: file_a,
+                to_file_id: file_b,
+                path_before: dir_path.join("a.mp4"),
+                path_after: dir_path.join(path_after),
+                snapshot_before: FileSnapshot::new(vec!["pick".into()], "a", ".mp4", "a.mp4"),
+                snapshot_after: FileSnapshot::new(vec!["pick".into()], "a", ".mp4", "pick.a.mp4"),
+            })
+        };
+        let mut history: History<FakeAppStorage, FakeAppStorage> = History::new(50);
+        assert_eq!(history.undo_leaves_unsaved(), None, "empty");
+        history.push(command("a.mp4"));
+        assert_eq!(history.undo_leaves_unsaved(), None, "no rename");
+        history.push(command("pick.a.mp4"));
+        assert_eq!(history.undo_leaves_unsaved(), Some(file_a));
+        assert_eq!(history.redo_saves_again(), None);
+    }
+
     #[test]
     fn navigate_command_redo_re_applies_selection() {
         let dir_path = PathBuf::from("C:/test");

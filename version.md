@@ -1,3 +1,7 @@
+# 0.284
+## Fixed
+- After `Ctrl+Z` takes back a move to the next clip, the clip you return to no longer says "All changes saved" while its new tags are not in its file name yet. Those tags are now kept in the recovery journal, so a crash does not lose them, and `Shift+F11`, `Ctrl+F11` and dragging the clip out save it first.
+
 # 0.283
 ## Fixed
 - On Windows, `Ctrl+Y` after `Ctrl+Z` undid a move to another clip works again: the clip you left gets its new name back and you are on the next clip. Before, the player held that clip's file and nothing happened.

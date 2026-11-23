@@ -2,6 +2,7 @@ use crate::db::{AppStateStore, StoredTagStore};
 
 use super::traits::Undoable;
 use super::{UndoContext, UndoError};
+use crate::FileId;
 
 /// Where a step goes when it is only recorded later: taken with [`History::mark`], given back to
 /// [`History::push_at_mark`].
@@ -146,6 +147,22 @@ where
         self.redo_stack
             .last()
             .is_some_and(|cmd| cmd.switches_file())
+    }
+
+    /// The file the step [`Self::undo`] would take leaves with edits that are not on disk (see
+    /// [`Undoable::undo_leaves_unsaved`]).
+    pub fn undo_leaves_unsaved(&self) -> Option<FileId> {
+        self.undo_stack
+            .last()
+            .and_then(|cmd| cmd.undo_leaves_unsaved())
+    }
+
+    /// The file whose edits the step [`Self::redo`] would take puts back on disk: the redo of
+    /// a step whose undo left them unsaved.
+    pub fn redo_saves_again(&self) -> Option<FileId> {
+        self.redo_stack
+            .last()
+            .and_then(|cmd| cmd.undo_leaves_unsaved())
     }
 
     /// Whether the step [`Self::redo`] would take renames a file on disk (see

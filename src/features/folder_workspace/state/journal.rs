@@ -41,15 +41,16 @@ impl FolderWorkspace {
     }
 
     /// The clip just opened is the reference: only what differs from it is unsaved. A clip
-    /// opened again while its save still waits for the video to unload has edits that are not
-    /// on disk: they count as unsaved from the start.
+    /// opened again while its save still waits for the video to unload, or brought back by an
+    /// undone move with the edits that move had saved (#611), has edits that are not on disk:
+    /// they count as unsaved from the start.
     pub(super) fn journal_reset_baseline(&mut self) {
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
-        self.journal_force = self
-            .journal_baseline
-            .as_ref()
-            .is_some_and(|(id, _)| self.pending_file_updates.iter().any(|(p, _)| p == id));
+        self.journal_force = self.journal_baseline.as_ref().is_some_and(|(id, _)| {
+            self.pending_file_updates.iter().any(|(p, _)| p == id)
+                || self.unsaved_after_undo.contains(id)
+        });
     }
 
     /// Once a second: write the open clip's edits into the journal when they changed, and take
