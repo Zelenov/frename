@@ -30,6 +30,9 @@ where
     ST: StoredTagStore + Clone,
 {
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
+        // Stale keys may briefly make the name's order differ from the grid's, which drops the
+        // lock; it comes back once the tag is in its place (#636).
+        let was_locked = ctx.tag_list.sync_locked();
         ctx.tag_list
             .restore_deleted_tag(
                 self.tag_id,
@@ -49,6 +52,9 @@ where
                 self.name_after.as_deref(),
                 !self.was_stored,
             );
+            if was_locked {
+                ctx.tag_list.set_sync_locked(true);
+            }
         }
         Ok(())
     }
