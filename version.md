@@ -1,4 +1,4 @@
-# 0.288
+# 0.289
 ## Fixed
 - A folder on a write-protected card or a read-only share shows the built-in tags (pick, skip, review…) instead of none. Before, the tag panel stayed empty and nothing said why.
 
