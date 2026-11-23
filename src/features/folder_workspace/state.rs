@@ -269,8 +269,9 @@ const WRITING_FIELDS: &[&str] = &[
     batch::pipeline::CAP_FIELD_ID,
 ];
 
-/// The answer to "which of [`WRITING_FIELDS`] has the focus?" for a video key: nothing while
-/// one of them is typed in (the key stays with its text), else the key's `message` (#621).
+/// The answer to "which of these fields has the focus?" for a key a field may keep: nothing while
+/// one of them is typed in (the key stays with its text), else the key's `message` (#621; Undo and
+/// Redo ask [`LINE_FIELDS`], the video keys [`WRITING_FIELDS`]).
 fn keep_or_send(field: Option<&str>, message: Message) -> Message {
     match field {
         Some(_) => Message::Noop,
@@ -706,13 +707,8 @@ impl FolderWorkspace {
                 } else {
                     Message::RedoUnlessTyping
                 };
-                crate::widgets::focus_ring::focused_among(LINE_FIELDS).map(move |field| {
-                    if field.is_some() {
-                        Message::Noop
-                    } else {
-                        then.clone()
-                    }
-                })
+                crate::widgets::focus_ring::focused_among(LINE_FIELDS)
+                    .map(move |field| keep_or_send(field, then.clone()))
             }
             // What was typed or named is a step first, so it is the one undone.
             Message::Undo | Message::UndoUnlessTyping => {
@@ -4243,7 +4239,10 @@ mod tests {
     };
     use iced::keyboard::Modifiers;
 
-    use super::{Directory, FolderWorkspace, ItemResult, ItemStatus, Message};
+    use super::{
+        keep_or_send, Directory, FolderWorkspace, ItemResult, ItemStatus, Message, LINE_FIELDS,
+        WRITING_FIELDS,
+    };
     use crate::features::{batch, folder, recent_folders, tag_panel};
 
     #[test]
@@ -7100,9 +7099,10 @@ mod tests {
         assert_eq!(workspace.update(Message::GoToStartUnlessWriting).units(), 1);
     }
 
-    /// In batch mode `Ctrl+Alt+→` after typing in the file filter still turns the video: the
-    /// question about the writing fields gets an answer (none of them has the focus) and the key
-    /// goes on (#621: before, batch mode skipped the question and the batch fields lost it).
+    /// In batch mode `Ctrl+Alt+→` after typing in the file filter still turns the video. Batch
+    /// mode no longer skips the question (#621): the key becomes one focus question (one unit;
+    /// `focused_among` always answers, its `finish` gives `Outcome::Some`), and with no field
+    /// focused the turn is applied. Widget operations do not run here, so the answer is fed in.
     #[test]
     fn a_turn_while_typing_in_batch_mode_still_turns_the_clip() {
         let test_dir = TestDirectory::new(1);
@@ -7110,7 +7110,7 @@ mod tests {
         let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
         assert!(workspace.batch.is_active());
         let task = workspace.update(Message::RotateVideoWhileTyping(1));
-        // One widget operation, which answers even with no writing field on screen.
+        // One focus question.
         assert_eq!(task.units(), 1);
         let _ = workspace.update(keep_or_send(None, Message::RotateVideo(1)));
         let rotation = frename_core::FileTagger::video_rotation(&test_dir.target_file());
@@ -10981,14 +10981,14 @@ mod tests {
     /// `Home` as the comment box does: they are among the fields whose focus is asked.
     #[test]
     fn the_line_fields_keep_the_video_keys() {
-        for field in [
-            crate::features::file_workspace::view::COMMENT_EDITOR_ID,
-            crate::features::video_controls::view::TIME_EDIT_ID,
-            batch::describe_ai::ONE_OFF_NOTES_ID,
-            batch::pipeline::CAP_FIELD_ID,
-        ] {
-            assert!(WRITING_FIELDS.contains(&field), "{field} keeps the keys");
+        // Every one-line field Undo waits for, except the rename field, and the comment box.
+        for field in LINE_FIELDS
+            .iter()
+            .filter(|field| **field != folder::FOLDER_RENAME_INPUT_ID)
+        {
+            assert!(WRITING_FIELDS.contains(field), "{field} keeps the keys");
         }
+        assert!(WRITING_FIELDS.contains(&crate::features::file_workspace::view::COMMENT_EDITOR_ID));
         assert!(!WRITING_FIELDS.contains(&folder::FOLDER_RENAME_INPUT_ID));
 
         // The answer decides: a field with the focus keeps the key, none sends it on.

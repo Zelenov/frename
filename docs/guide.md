@@ -216,7 +216,8 @@ the cursor from the box too, so `Space` plays and pauses in fullscreen. `[` and 
 you type in a marker's name. `Ctrl+Z` and `Ctrl+Y` do nothing while you type a comment, a file
 name, a time or a field of batch mode; in the tag and file search they still undo and redo.
 The F-keys always work, and so does `Ctrl+R` (except in fullscreen); so do `Ctrl+Alt+←` / `→`
-except in the comment box, the notes for the AI, a time, a field of batch mode and a marker's name.
+except in the comment box, a time, a field of batch mode (the notes for the AI too) and a
+marker's name.
 
 ## Recovery after a crash
 
