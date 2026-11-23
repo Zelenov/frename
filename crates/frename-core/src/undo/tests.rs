@@ -68,7 +68,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_a, 1);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
-            name: None,
+            name: String::new(),
             from_index: fi,
             to_index: 1,
         }));
@@ -108,14 +108,14 @@ mod tests {
         tag_list.reorder_tag_to_index(id_a, 2);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
         tag_list.reorder_tag_to_index(id_b, 1);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_b,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -133,7 +133,7 @@ mod tests {
         // Push new action → redo stack cleared
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -155,7 +155,7 @@ mod tests {
         for _ in 0..3 {
             history.push(Box::new(ReorderTagCommand {
                 moved_id: id_a,
-                name: None,
+                name: String::new(),
                 from_index: 0,
                 to_index: 0,
             }));
@@ -163,7 +163,7 @@ mod tests {
         // Push one more — should drop the oldest
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 0,
         }));
@@ -232,7 +232,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -265,7 +265,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -314,7 +314,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_summer,
-            name: None,
+            name: String::new(),
             from_index: 2,
             to_index: 0,
         }));
@@ -346,7 +346,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_action, 2);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -358,7 +358,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_summer, 0);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_summer,
-            name: None,
+            name: String::new(),
             from_index: 1,
             to_index: 0,
         }));
@@ -409,7 +409,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
-            name: None,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -1766,7 +1766,12 @@ mod tests {
         };
         history.undo(&mut ctx).expect("the comment");
         history.undo(&mut ctx).expect("the delete");
-        assert_eq!(ctx.tag_list.file_snapshot().tags(), before_delete.tags());
+        // Back in the name (its place after a rebuild is #636).
+        let mut tags = ctx.tag_list.file_snapshot().tags().to_vec();
+        tags.sort();
+        let mut expected = before_delete.tags().to_vec();
+        expected.sort();
+        assert_eq!(tags, expected);
         // Built again from the name, which holds the tag again: a new id.
         let snapshot = ctx.tag_list.file_snapshot();
         ctx.tag_list.reinitialize_from_snapshot(snapshot);

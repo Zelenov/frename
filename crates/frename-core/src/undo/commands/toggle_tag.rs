@@ -57,6 +57,8 @@ impl ToggleTagCommand {
         SD: AppStateStore + Clone,
         ST: StoredTagStore + Clone,
     {
+        // Only a tag that was only in the name changes id when the list is built again; a folder
+        // tag keeps its id, and its step stays strict.
         if let Some(tag) = &self.unsaved {
             self.tag_id = ctx.tag_list.follow(self.tag_id, &tag.name);
         }

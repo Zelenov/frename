@@ -7,8 +7,8 @@ use crate::{TagId, TagList};
 pub struct ReorderTagCommand {
     pub moved_id: TagId,
     /// The moved tag's name: a list built again gives a tag that is only in the clip's name a new
-    /// id, and the step finds it by this name (#627). `None` when not recorded.
-    pub name: Option<String>,
+    /// id, and the step finds it by this name (#627).
+    pub name: String,
     /// Position in the checked-tag list before the drag.
     pub from_index: usize,
     /// Position in the checked-tag list after the drag.
@@ -26,7 +26,10 @@ impl ReorderTagCommand {
     ) -> Self {
         Self {
             moved_id,
-            name: tag_list.get_tag(moved_id).map(|t| t.tag().to_string()),
+            name: tag_list
+                .get_tag(moved_id)
+                .map(|t| t.tag().to_string())
+                .unwrap_or_default(),
             from_index,
             to_index,
         }
@@ -43,9 +46,7 @@ impl ReorderTagCommand {
         SD: AppStateStore + Clone,
         ST: StoredTagStore + Clone,
     {
-        if let Some(name) = &self.name {
-            self.moved_id = ctx.tag_list.follow(self.moved_id, name);
-        }
+        self.moved_id = ctx.tag_list.follow(self.moved_id, &self.name);
         if ctx.tag_list.checked_index_of(self.moved_id).is_none() {
             return Err(UndoError::TagNotFound(self.moved_id));
         }
