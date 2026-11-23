@@ -78,4 +78,10 @@ where
     fn redo_renames_file(&self) -> bool {
         self.path_before != self.path_after
     }
+
+    /// The save renamed the clip: its undo renames it back, but the clip's row keeps
+    /// `snapshot_before`, the edits that rename applied.
+    fn undo_leaves_unsaved(&self) -> Option<FileId> {
+        (self.path_before != self.path_after).then_some(self.file_id)
+    }
 }

@@ -41,15 +41,16 @@ impl FolderWorkspace {
     }
 
     /// The clip just opened is the reference: only what differs from it is unsaved. A clip
-    /// opened again while its save still waits for the video to unload has edits that are not
-    /// on disk: they count as unsaved from the start.
+    /// opened again while its save still waits for the video to unload, or brought back by an
+    /// undone move with the edits that move had saved (#611), has edits that are not on disk:
+    /// they count as unsaved from the start.
     pub(super) fn journal_reset_baseline(&mut self) {
         self.journal_baseline = self.journal_entry();
         self.journal_written = None;
-        self.journal_force = self
-            .journal_baseline
-            .as_ref()
-            .is_some_and(|(id, _)| self.pending_file_updates.iter().any(|(p, _)| p == id));
+        self.journal_force = self.journal_baseline.as_ref().is_some_and(|(id, _)| {
+            self.pending_file_updates.iter().any(|(p, _)| p == id)
+                || self.unsaved_after_undo.contains(id)
+        });
     }
 
     /// Once a second: write the open clip's edits into the journal when they changed, and take
@@ -163,8 +164,10 @@ impl FolderWorkspace {
                 self.journal_written = Some((written_id, entry));
             }
         }
-        self.journal_force = false;
+        // The flag is the open clip's: the save of a clip left a moment ago, landing after the
+        // open one came back with edits not on disk, must not clear it (#611).
         if self.file_workspace.file().is_some_and(|f| f.id() == id) {
+            self.journal_force = false;
             // What was saved is the reference, not what the clip is now: edits made since are
             // not on disk, so they are unsaved. The new name, as the rename reaches the open
             // clip only with its next open.

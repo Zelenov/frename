@@ -156,7 +156,8 @@ impl FolderWorkspace {
     /// the one its edits make, or its markers could not be written. Only decides whether to
     /// save before the drag; whether that save worked is the save's own outcome.
     pub(super) fn open_file_unsaved(&self, id: FileId) -> bool {
-        if self.unsaved_markers.contains_key(&id) {
+        // An undone move brought it back with edits its file does not have (#611).
+        if self.unsaved_markers.contains_key(&id) || self.unsaved_after_undo.contains(&id) {
             return true;
         }
         let Some((_, wanted)) = self.file_workspace.get_snapshot() else {

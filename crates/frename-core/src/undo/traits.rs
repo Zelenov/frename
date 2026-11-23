@@ -1,4 +1,5 @@
 use super::{UndoContext, UndoError};
+use crate::FileId;
 
 /// Trait implemented by every undoable command. Generic over the two store types used by
 /// `UndoContext` (SD for Directory, ST for TagList).
@@ -27,6 +28,13 @@ pub trait Undoable<SD, ST>: Send {
     /// batch mode, unlike tags and the file name.
     fn edits_open_video(&self) -> bool {
         false
+    }
+
+    /// The file undoing it leaves with edits that are not in the file on disk: an undone move
+    /// renames the clip back to its name from before the move's save, while the clip comes back
+    /// with the edits that save applied, to be undone in turn (#611).
+    fn undo_leaves_unsaved(&self) -> Option<FileId> {
+        None
     }
 }
 

@@ -206,6 +206,9 @@ pub struct FolderWorkspace {
     journal_written: Option<(FileId, frename_core::recovery::Entry)>,
     /// The open clip was reopened with edits still waiting to be saved: journal it as it is.
     journal_force: bool,
+    /// Clips an undone move renamed back while they keep the edits that move had saved: their
+    /// rows hold those edits, their files on disk do not, until their next save (#611).
+    unsaved_after_undo: HashSet<FileId>,
     /// The clip whose journal entry is being written (one write at a time).
     journal_in_flight: Option<FileId>,
     /// That clip was saved while its entry was being written: the entry is removed when the
@@ -363,6 +366,7 @@ impl FolderWorkspace {
             journal_baseline: None,
             journal_written: None,
             journal_force: false,
+            unsaved_after_undo: HashSet::new(),
             journal_in_flight: None,
             journal_saved_while_writing: false,
             startup_notes: Vec::new(),
@@ -1197,6 +1201,8 @@ impl FolderWorkspace {
         // entry from a directory this scan is about to replace.
         self.pending_file_updates.clear();
         self.navigation_targets.clear();
+        // The scan reads every row from disk again (#611).
+        self.unsaved_after_undo.clear();
 
         Task::future(async move {
             match Directory::open(&folder, store).await {
@@ -2402,6 +2408,8 @@ impl FolderWorkspace {
         id: FileId,
         snapshot: frename_core::FileSnapshot,
     ) -> Task<Message> {
+        // Saved: the row is read back from disk below (#611).
+        self.unsaved_after_undo.remove(&id);
         // Resolve the current on-disk path via the stable file ID.
         let Some(current_path) = self
             .directory
@@ -3606,6 +3614,7 @@ impl FolderWorkspace {
         let turns_a_video = self.history.undo_turns_a_video();
         let switches_file = self.history.undo_switches_file();
         let markers_only = self.history.undo_edits_open_video() && !turns_a_video;
+        let leaves_unsaved = self.history.undo_leaves_unsaved();
         // Inner block: limits the lifetime of dir/tl borrows so we can use self after.
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
@@ -3616,6 +3625,11 @@ impl FolderWorkspace {
             };
             self.history.undo(&mut ctx)
         };
+        // The clip is renamed back, but comes back with the edits the move saved: they are not
+        // on disk now, so it opens as unsaved and the journal keeps them (#611).
+        if let (Ok(()), Some(id)) = (&result, leaves_unsaved) {
+            self.unsaved_after_undo.insert(id);
+        }
         self.after_undo_redo(
             result,
             UndoKind {
@@ -3661,6 +3675,7 @@ impl FolderWorkspace {
         let turns_a_video = self.history.redo_turns_a_video();
         let switches_file = self.history.redo_switches_file();
         let markers_only = self.history.redo_edits_open_video() && !turns_a_video;
+        let saves_again = self.history.redo_saves_again();
         let result: Result<(), UndoError> = {
             let dir = self.directory.as_mut().expect("checked above");
             let tl = self.file_workspace.tag_list_mut();
@@ -3670,6 +3685,10 @@ impl FolderWorkspace {
             };
             self.history.redo(&mut ctx)
         };
+        // The redo renames the clip to the name its edits make again (#611).
+        if let (Ok(()), Some(id)) = (&result, saves_again) {
+            self.unsaved_after_undo.remove(&id);
+        }
         self.after_undo_redo(
             result,
             UndoKind {
@@ -9712,6 +9731,67 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         tick(&mut workspace);
         assert_eq!(journal_files(&test_dir), 0, "back to what is on disk");
+    }
+
+    /// #611: Ctrl+Z of a move renames the clip back but brings it back with the tag the move
+    /// saved. That tag is not on disk: the clip is not "saved", the journal keeps it, and a
+    /// file action saves first. A redo puts the tag back on disk.
+    #[test]
+    fn an_undone_move_brings_the_clip_back_unsaved() {
+        use crate::features::file_name_panel::SaveStatus;
+        let test_dir = TestDirectory::new(2);
+        let mut workspace = journal_workspace(&test_dir);
+        let a = file_id_at(&workspace, 0);
+        pick_tag(&mut workspace);
+        let _ = workspace.update(Message::Folder(folder::Message::NextFile));
+        flush_file_opened(&mut workspace);
+        let pending = workspace.pending_file_updates.clone();
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let (id, snapshot) = pending.into_iter().next().expect("the left clip's save");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        let renamed = workspace
+            .directory()
+            .and_then(|dir| dir.file_by_id(a))
+            .expect("row")
+            .file_path()
+            .to_path_buf();
+        // Tests use the in-memory tagger: the rename the real one makes is done here.
+        std::fs::rename(test_dir.file_path("file_0.mp4"), &renamed).expect("rename");
+
+        let _ = workspace.update(Message::Undo);
+        flush_file_opened(&mut workspace);
+        assert_eq!(workspace.file_workspace().file().map(|f| f.id()), Some(a));
+        // The clip the undo left is saved once its video lets go, after this one reopened: that
+        // save must not mark this one saved.
+        let pending = workspace.pending_file_updates.clone();
+        assert!(!pending.is_empty(), "the left clip's save waits");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        for (id, snapshot) in pending {
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        }
+        assert!(test_dir.file_path("file_0.mp4").exists(), "renamed back");
+        let tag_list = workspace.file_workspace().tag_list();
+        let pick = tag_list
+            .tag_id_by_name("pick")
+            .and_then(|id| tag_list.get_tag(id));
+        assert!(pick.is_some_and(|t| t.is_checked()), "the tag comes back");
+        assert_ne!(workspace.save_status(), Some(SaveStatus::Saved));
+        assert!(workspace.open_file_unsaved(a), "a file action saves first");
+        tick(&mut workspace);
+        assert_eq!(journal_files(&test_dir), 1, "the tag is journaled");
+        assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
+
+        // The redo renames the open clip: it waits for the video to let go (#602).
+        let _ = workspace.update(Message::Redo);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        assert!(!workspace.history.can_redo(), "redone");
+        assert!(!workspace.unsaved_after_undo.contains(&a), "on disk again");
     }
 
     #[test]
