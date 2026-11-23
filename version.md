@@ -1,6 +1,6 @@
 # 0.284
 ## Fixed
-- `Ctrl+F` or `Ctrl+R` pressed while you type a comment now takes the cursor out of the comment box for good: its focus ring goes, and `Ctrl+Z` undoes again. Before, the box still looked active and `Ctrl+Z` did nothing until you clicked somewhere.
+- `Ctrl+F` or `Ctrl+R` pressed while you type a comment now takes the cursor out of the comment box: its focus ring goes, and `Ctrl+Z` undoes what you typed as one step. Before, the box still looked active and `Ctrl+Z` did nothing until you clicked somewhere.
 
 # 0.283
 ## Fixed
