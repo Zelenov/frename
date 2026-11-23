@@ -1,3 +1,7 @@
+# 0.291
+## Fixed
+- A folder on a write-protected card or a read-only share shows the built-in tags (pick, skip, review…) instead of none. Before, the tag panel stayed empty and nothing said why.
+
 # 0.290
 ## Fixed
 - When another program holds one of a clip's files open (its subtitles, transcript, `.comment.txt` or a saved frame), tagging no longer renames the clip without it: the clip keeps its name with all its files, and frename says it was not saved, as when the video itself is held. Before, the clip was renamed, that file stayed behind under the old name with nothing said, and `Ctrl+Z` of the change was refused.
