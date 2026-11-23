@@ -1,6 +1,6 @@
 # 0.287
 ## Fixed
-- `Ctrl+Z` brings back a tag you removed that was only in the clip's file name (shown with "+"), in its old place in the name, also after you left the clip or undid a later comment. Before, `Ctrl+Z` did nothing, said nothing, and no older step could be undone.
+- `Ctrl+Z` brings back a tag you removed that was only in the clip's file name (shown with "+"), in its old place in the name, also after you left the clip or undid a later step. Before, `Ctrl+Z` did nothing, said nothing, and no older step could be undone.
 
 # 0.286
 ## Fixed
