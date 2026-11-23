@@ -1,3 +1,7 @@
+# 0.286
+## Fixed
+- `Ctrl+Z` or `Ctrl+Y` of a move to another clip whose file was renamed, moved or deleted outside frename now says so in a note, with the file's name. Before, nothing happened and nothing was said.
+
 # 0.285
 ## Fixed
 - After `Ctrl+Z` takes back a move to the next clip, the clip you return to no longer says "All changes saved" while its new tags are not in its file name yet. Those tags are now kept in the recovery journal, so a crash does not lose them, and `Shift+F11`, `Ctrl+F11` and dragging the clip out save it first.

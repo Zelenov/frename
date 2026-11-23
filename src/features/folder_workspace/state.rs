@@ -8707,6 +8707,13 @@ mod tests {
         );
     }
 
+    /// #612: an undo or redo step whose file was renamed or deleted outside frename says so.
+    #[test]
+    fn an_undo_or_redo_of_a_file_that_is_gone_is_told() {
+        let gone = frename_core::UndoError::FileNotFound(PathBuf::from("/clips/pick.A001.mp4"));
+        assert!(FolderWorkspace::undo_failed_notice(&gone).units() > 0);
+    }
+
     /// #602: batch mode turned on while a redo waits for the video drops the redo (a batch
     /// Ctrl+Y would not rename either) and opens the clip's video again.
     #[test]

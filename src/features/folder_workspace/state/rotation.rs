@@ -63,18 +63,18 @@ impl FolderWorkspace {
     /// Say why an undo or redo step did not happen, when the user can do something about it:
     /// a turn of a file that is read-only or open in another app, a rename the system refused
     /// (the file is in use or read-only), or a rename that would replace another file or leave a
-    /// sidecar behind under a name that is too long.
+    /// sidecar behind under a name that is too long, or a step whose file is gone.
     pub(super) fn undo_failed_notice(error: &UndoError) -> Task<Message> {
         match error {
             UndoError::Rotation(_, error) => Self::notice(&not_rotated(error)),
             UndoError::NameTaken(path) => {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                Self::notice(&fl!("undo-name-taken", name = name))
+                Self::notice(&fl!("undo-name-taken", name = file_name(path)))
             }
             UndoError::NameTooLong(_) => Self::notice(&fl!("undo-name-too-long")),
+            // The clip was renamed, moved or deleted outside frename since the step (#612).
+            UndoError::FileNotFound(path) => {
+                Self::notice(&fl!("undo-file-gone", name = file_name(path)))
+            }
             // A rename refused by the system: the clip is open in another app (Premiere) or
             // read-only (#602). Other I/O errors (a database, a lost drive) say nothing of a file
             // in use, so they stay in the log.
@@ -82,6 +82,13 @@ impl FolderWorkspace {
             _ => Task::none(),
         }
     }
+}
+
+/// The name of the file at `path`, as a note shows it.
+fn file_name(path: &std::path::Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// A file the system would not change: read-only, or held by another program (Windows' sharing

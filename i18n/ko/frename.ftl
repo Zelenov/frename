@@ -629,6 +629,7 @@ rotate-failed = 회전하지 못했습니다: { $reason }
 undo-name-taken = 변경하지 않음: 다른 파일의 이름이 이미 { $name }입니다
 undo-name-too-long = 변경하지 않음: 클립에서 저장한 프레임, 자막 또는 변환 결과의 이름이 너무 길어집니다
 undo-file-in-use = 변경하지 않음: 파일이 읽기 전용이거나 사용 중입니다
+undo-file-gone = 변경하지 않음: { $name } 파일이 더 이상 폴더에 없습니다
 undo-back-on-clip = 이 클립으로 돌아왔습니다 (이동을 취소함). Ctrl+Z를 다시 누르면 마지막 변경을 취소합니다.
 redo-on-clip = 다시 이 클립으로 왔습니다 (이동을 다시 실행함).
 rotate-reason-in-use = 파일이 읽기 전용이거나 사용 중입니다

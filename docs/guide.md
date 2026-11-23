@@ -235,9 +235,10 @@ marker or a tag while typing ends that step and starts a new one), a rename by h
 Sync up, Sync down and the lock, and the rename when you leave a clip. The history is shared by
 the whole folder, so after moving to another clip the first undo goes back to the clip you left
 (a note says so) and the next one undoes its last change. While the clip you left is still being
-saved (its video closing, usually a moment), `Ctrl+Z` and `Ctrl+Y` do nothing. If the system
-refuses a step (the clip is open in another app, or read-only), nothing changes and a note says
-why. In batch mode only markers and rotation are undone. It does not cover batch actions; opening
+saved (its video closing, usually a moment), `Ctrl+Z` and `Ctrl+Y` do nothing. If a step cannot
+be done (the clip is open in another app, read-only, or was renamed, moved or deleted outside
+frename), nothing changes and a note says why; the step stays first in line, so put the file back
+to undo past it. In batch mode only markers and rotation are undone. It does not cover batch actions; opening
 a folder or running a batch action clears the undo history.
 
 ---

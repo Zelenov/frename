@@ -719,6 +719,7 @@ rotate-failed = Non pivoté : { $reason }
 undo-name-taken = Non modifié : un autre fichier s’appelle déjà { $name }
 undo-name-too-long = Non modifié : les noms des images enregistrées, sous-titres ou transcription du clip seraient trop longs
 undo-file-in-use = Non modifié : le fichier est en lecture seule ou utilisé
+undo-file-gone = Non modifié : { $name } n’est plus dans le dossier
 undo-back-on-clip = De retour sur ce clip (le déplacement est annulé). Ctrl+Z de nouveau annule sa dernière modification.
 redo-on-clip = De nouveau sur ce clip (le déplacement est rétabli).
 rotate-reason-in-use = le fichier est en lecture seule ou utilisé
