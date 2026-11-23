@@ -43,14 +43,8 @@ impl ReorderTagCommand {
         SD: AppStateStore + Clone,
         ST: StoredTagStore + Clone,
     {
-        if ctx.tag_list.checked_index_of(self.moved_id).is_none() {
-            if let Some(id) = self
-                .name
-                .as_deref()
-                .and_then(|name| ctx.tag_list.tag_id_named_exactly(name))
-            {
-                self.moved_id = id;
-            }
+        if let Some(name) = &self.name {
+            self.moved_id = ctx.tag_list.follow(self.moved_id, name);
         }
         if ctx.tag_list.checked_index_of(self.moved_id).is_none() {
             return Err(UndoError::TagNotFound(self.moved_id));

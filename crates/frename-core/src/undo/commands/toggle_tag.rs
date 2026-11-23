@@ -11,8 +11,8 @@ pub struct ToggleTagCommand {
     pub was_checked: bool,
     /// For a tag that is not among the folder's tags (only in the clip's name): what finds it, or
     /// puts it back, once the tag list was built again (the clip opened again, or an undone
-    /// comment or paste), which gives such a tag a new id or leaves it out (#619). `None` for the
-    /// folder's own tags.
+    /// comment or paste), which gives such a tag a new id or leaves it out (#619), also when it was
+    /// saved as a folder tag in between (#627). `None` for the folder's own tags.
     pub unsaved: Option<UnsavedTag>,
 }
 
@@ -57,16 +57,8 @@ impl ToggleTagCommand {
         SD: AppStateStore + Clone,
         ST: StoredTagStore + Clone,
     {
-        // A list built again has the name-only tag under a new id, or it became a folder tag in
-        // between: follow it by name.
-        if ctx.tag_list.get_tag(self.tag_id).is_none() {
-            if let Some(id) = self
-                .unsaved
-                .as_ref()
-                .and_then(|tag| ctx.tag_list.tag_id_named_exactly(&tag.name))
-            {
-                self.tag_id = id;
-            }
+        if let Some(tag) = &self.unsaved {
+            self.tag_id = ctx.tag_list.follow(self.tag_id, &tag.name);
         }
         let current = ctx.tag_list.get_tag(self.tag_id).map(|t| t.is_checked());
         match (current, &self.unsaved, checked) {

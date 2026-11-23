@@ -1728,6 +1728,55 @@ mod tests {
         assert_eq!(ctx.tag_list.file_snapshot().tags(), ["a", "rough", "b"]);
     }
 
+    /// #627: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list again,
+    /// giving the tag a new id) and Ctrl+Y twice: the redo of the delete finds the tag by name.
+    #[test]
+    fn the_redo_of_a_deleted_name_only_tag_finds_it_after_a_rebuild() {
+        let mut tag_list = TagList::new(
+            FakeAppStorage::new(),
+            snapshot_with_tags(&["rough", "last"]),
+        );
+        let mut dir = empty_directory();
+        let before_delete = tag_list.file_snapshot();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        let (name, color, stored, starred, checked, sort, selected) =
+            tag_list.capture_delete_data(id).expect("data");
+        tag_list.remove_stored_tag_by_id(id).expect("deleted");
+        let mut history = History::new(50);
+        history.push(Box::new(DeleteTagCommand {
+            tag_id: id,
+            tag_name: name,
+            color_index: color,
+            was_stored: stored,
+            was_starred: starred,
+            was_checked: checked,
+            sort_order: sort,
+            selected_order: selected,
+        }));
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the comment");
+        history.undo(&mut ctx).expect("the delete");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), before_delete.tags());
+        // Built again from the name, which holds the tag again: a new id.
+        let snapshot = ctx.tag_list.file_snapshot();
+        ctx.tag_list.reinitialize_from_snapshot(snapshot);
+        assert_ne!(ctx.tag_list.tag_id_by_name("rough"), Some(id));
+        history
+            .redo(&mut ctx)
+            .expect("the delete again, found by name");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["last"]);
+    }
+
     /// #627: a name-only "commented" is removed; after the clip is opened again a comment saves
     /// "commented" as a folder tag (with comments in the video). Undoing the comment, then the
     /// removal, finds the tag by its name and checks it again.
