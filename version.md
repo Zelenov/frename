@@ -1,3 +1,7 @@
+# 0.293
+## Fixed
+- `Ctrl+Z` of deleting a "+" tag (one only in the clip's file name) puts it back in its old place in the name, also after you undid a later step. Before, it could come back at another place.
+
 # 0.292
 ## Fixed
 - `Ctrl+Z` of moving a "+" tag (one only in the clip's file name) to another place in the name works after you left the clip or undid a later step, and so do `Ctrl+Y` of deleting one and `Ctrl+Z` of removing one that became a folder tag in between (as "commented" can when you write a comment). Before, nothing happened and no older step could be undone.

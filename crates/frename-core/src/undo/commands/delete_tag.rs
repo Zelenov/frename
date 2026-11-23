@@ -17,6 +17,11 @@ pub struct DeleteTagCommand {
     /// Key in the file name order at deletion time (it differs from `sort_order` when the name's
     /// tag order differs from the grid's).
     pub selected_order: i64,
+    /// For a tag that was in the clip's name: the checked tag just before it there (`Some(None)`
+    /// when it was first). A list built again in between (an undone comment, the clip opened
+    /// again) has other order keys, so the undo puts the tag back after this one (#636). `None`:
+    /// not recorded, the keys decide.
+    pub name_after: Option<Option<String>>,
 }
 
 impl<SD, ST> Undoable<SD, ST> for DeleteTagCommand
@@ -36,7 +41,12 @@ where
                 self.sort_order,
                 self.selected_order,
             )
-            .map_err(|_| UndoError::TagNotFound(self.tag_id))
+            .map_err(|_| UndoError::TagNotFound(self.tag_id))?;
+        if let (true, Some(after)) = (self.was_checked, &self.name_after) {
+            ctx.tag_list
+                .place_after_in_name(self.tag_id, after.as_deref(), !self.was_stored);
+        }
+        Ok(())
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {

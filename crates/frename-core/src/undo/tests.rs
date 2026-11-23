@@ -850,6 +850,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
+            name_after: None,
         }));
 
         {
@@ -888,6 +889,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
+            name_after: None,
         }));
         let mut ctx = UndoContext {
             directory: &mut dir,
@@ -919,6 +921,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
+            name_after: None,
         }));
 
         {
@@ -1728,8 +1731,9 @@ mod tests {
         assert_eq!(ctx.tag_list.file_snapshot().tags(), ["a", "rough", "b"]);
     }
 
-    /// #627: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list again,
-    /// giving the tag a new id) and Ctrl+Y twice: the redo of the delete finds the tag by name.
+    /// #627, #636: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list
+    /// again, giving the tag a new id) puts it back in its place, and Ctrl+Y twice: the redo of
+    /// the delete finds the tag by name.
     #[test]
     fn the_redo_of_a_deleted_name_only_tag_finds_it_after_a_rebuild() {
         let mut tag_list = TagList::new(
@@ -1741,6 +1745,7 @@ mod tests {
         let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
         let (name, color, stored, starred, checked, sort, selected) =
             tag_list.capture_delete_data(id).expect("data");
+        let name_after = Some(tag_list.checked_name_before(id));
         tag_list.remove_stored_tag_by_id(id).expect("deleted");
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
@@ -1752,6 +1757,7 @@ mod tests {
             was_checked: checked,
             sort_order: sort,
             selected_order: selected,
+            name_after,
         }));
         let before = tag_list.file_snapshot();
         tag_list.set_comment("a note".to_string());
@@ -1766,12 +1772,8 @@ mod tests {
         };
         history.undo(&mut ctx).expect("the comment");
         history.undo(&mut ctx).expect("the delete");
-        // Back in the name (its place after a rebuild is #636).
-        let mut tags = ctx.tag_list.file_snapshot().tags().to_vec();
-        tags.sort();
-        let mut expected = before_delete.tags().to_vec();
-        expected.sort();
-        assert_eq!(tags, expected);
+        // Back in its place in the name, though the list was built again in between (#636).
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), before_delete.tags());
         // Built again from the name, which holds the tag again: a new id.
         let snapshot = ctx.tag_list.file_snapshot();
         ctx.tag_list.reinitialize_from_snapshot(snapshot);
