@@ -208,9 +208,9 @@ impl FolderTagStore {
     /// A folder without a tag file gets one written from the built-in set, so that opening a new
     /// folder leaves behind a file the user can edit rather than an empty panel. A folder that
     /// cannot take the file (a write-protected card, a read-only share) still shows the built-in
-    /// tags; the failed write is only logged (#623). No folder open
-    /// means no tags. A file that cannot be parsed is reported and left untouched — a typo in a
-    /// hand-edited file must not cost the user their tag list.
+    /// tags; the failed write is only logged (#623). No folder open means no tags. A file that
+    /// cannot be parsed is reported and left untouched — a typo in a hand-edited file must not
+    /// cost the user their tag list.
     fn read_entries(&self) -> Result<Vec<TagEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let Some(path) = self.tag_file_path() else {
             return Ok(Vec::new());
@@ -224,7 +224,10 @@ impl FolderTagStore {
                 );
                 let entries = Self::default_entries();
                 if let Err(e) = self.write_entries(&entries) {
-                    log::warn!("The built-in tags are shown but not written: {e}");
+                    log::warn!(
+                        "could not write the built-in tags in {}: {e}",
+                        path.display()
+                    );
                 }
                 return Ok(entries);
             }
