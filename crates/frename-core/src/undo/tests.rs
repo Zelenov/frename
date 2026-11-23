@@ -68,6 +68,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_a, 1);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
+            name: String::new(),
             from_index: fi,
             to_index: 1,
         }));
@@ -107,12 +108,14 @@ mod tests {
         tag_list.reorder_tag_to_index(id_a, 2);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
         tag_list.reorder_tag_to_index(id_b, 1);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_b,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -130,6 +133,7 @@ mod tests {
         // Push new action → redo stack cleared
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -151,6 +155,7 @@ mod tests {
         for _ in 0..3 {
             history.push(Box::new(ReorderTagCommand {
                 moved_id: id_a,
+                name: String::new(),
                 from_index: 0,
                 to_index: 0,
             }));
@@ -158,6 +163,7 @@ mod tests {
         // Push one more — should drop the oldest
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_a,
+            name: String::new(),
             from_index: 0,
             to_index: 0,
         }));
@@ -226,6 +232,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -258,6 +265,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -306,6 +314,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_summer,
+            name: String::new(),
             from_index: 2,
             to_index: 0,
         }));
@@ -337,6 +346,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_action, 2);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
+            name: String::new(),
             from_index: 0,
             to_index: 2,
         }));
@@ -348,6 +358,7 @@ mod tests {
         tag_list.reorder_tag_to_index(id_summer, 0);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_summer,
+            name: String::new(),
             from_index: 1,
             to_index: 0,
         }));
@@ -398,6 +409,7 @@ mod tests {
         let mut history = History::new(50);
         history.push(Box::new(ReorderTagCommand {
             moved_id: id_action,
+            name: String::new(),
             from_index: 0,
             to_index: 1,
         }));
@@ -1667,7 +1679,7 @@ mod tests {
         let mut tag_list = TagList::new(store.clone(), snapshot_with_tags(&["rough"]));
         let mut dir = empty_directory();
         let id = tag_list
-            .unsaved_tag_id_named("rough")
+            .tag_id_named_exactly("rough")
             .expect("the name's own tag");
         assert!(tag_list.toggle_by_id(id));
         let mut history = History::new(50);
@@ -1679,6 +1691,128 @@ mod tests {
         };
         history.undo(&mut ctx).expect("the tag comes back");
         assert_eq!(ctx.tag_list.file_snapshot().tags(), ["rough"]);
+    }
+
+    /// #627: moving a name-only tag in the name, then a later step that builds the list again
+    /// (an undone comment): Ctrl+Z of the move finds the tag by its name and moves it back.
+    #[test]
+    fn a_reorder_of_a_name_only_tag_is_undone_after_a_rebuild() {
+        let mut tag_list = TagList::new(
+            FakeAppStorage::new(),
+            snapshot_with_tags(&["a", "rough", "b"]),
+        );
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        let from = tag_list.checked_index_of(id).expect("checked");
+        tag_list.reorder_tag_to_index(id, 0);
+        let to = tag_list.checked_index_of(id).expect("checked");
+        let mut history = History::new(50);
+        history.push(Box::new(ReorderTagCommand::new(&tag_list, id, from, to)));
+        assert_eq!(tag_list.file_snapshot().tags(), ["rough", "a", "b"]);
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history
+            .undo(&mut ctx)
+            .expect("the comment, which builds the list again");
+        assert_ne!(ctx.tag_list.tag_id_by_name("rough"), Some(id));
+        history.undo(&mut ctx).expect("the move, found by name");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["a", "rough", "b"]);
+    }
+
+    /// #627: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list again,
+    /// giving the tag a new id) and Ctrl+Y twice: the redo of the delete finds the tag by name.
+    #[test]
+    fn the_redo_of_a_deleted_name_only_tag_finds_it_after_a_rebuild() {
+        let mut tag_list = TagList::new(
+            FakeAppStorage::new(),
+            snapshot_with_tags(&["rough", "last"]),
+        );
+        let mut dir = empty_directory();
+        let before_delete = tag_list.file_snapshot();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        let (name, color, stored, starred, checked, sort, selected) =
+            tag_list.capture_delete_data(id).expect("data");
+        tag_list.remove_stored_tag_by_id(id).expect("deleted");
+        let mut history = History::new(50);
+        history.push(Box::new(DeleteTagCommand {
+            tag_id: id,
+            tag_name: name,
+            color_index: color,
+            was_stored: stored,
+            was_starred: starred,
+            was_checked: checked,
+            sort_order: sort,
+            selected_order: selected,
+        }));
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the comment");
+        history.undo(&mut ctx).expect("the delete");
+        // Back in the name (its place after a rebuild is #636).
+        let mut tags = ctx.tag_list.file_snapshot().tags().to_vec();
+        tags.sort();
+        let mut expected = before_delete.tags().to_vec();
+        expected.sort();
+        assert_eq!(tags, expected);
+        // Built again from the name, which holds the tag again: a new id.
+        let snapshot = ctx.tag_list.file_snapshot();
+        ctx.tag_list.reinitialize_from_snapshot(snapshot);
+        assert_ne!(ctx.tag_list.tag_id_by_name("rough"), Some(id));
+        history
+            .redo(&mut ctx)
+            .expect("the delete again, found by name");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["last"]);
+    }
+
+    /// #627: a name-only "commented" is removed; after the clip is opened again a comment saves
+    /// "commented" as a folder tag (with comments in the video). Undoing the comment, then the
+    /// removal, finds the tag by its name and checks it again.
+    #[test]
+    fn a_removed_tag_that_became_a_folder_tag_is_brought_back() {
+        let store = FakeAppStorage::new();
+        let mut tag_list = TagList::new(store.clone(), snapshot_with_tags(&["commented", "last"]));
+        let mut dir = empty_directory();
+        let id = tag_list
+            .tag_id_by_name("commented")
+            .expect("the name's tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        let mut tag_list = TagList::new(store, tag_list.file_snapshot());
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        tag_list.set_checked_by_name("commented", true);
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the comment");
+        history.undo(&mut ctx).expect("the removal, found by name");
+        let tags = ctx.tag_list.file_snapshot().tags().to_vec();
+        assert!(tags.iter().any(|t| t == "commented"), "{tags:?}");
     }
 
     #[test]
