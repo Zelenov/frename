@@ -208,7 +208,7 @@ Nothing is moved.
 
 ## When a text box has the cursor
 
-While a text box (tag search, file search, comment, notes for the AI) has the cursor, it takes the keys it needs:
+While a text box (tag search, file search, comment, notes for the AI, a time, a field of batch mode) has the cursor, it takes the keys it needs:
 arrows, `Delete`, `Space`, `Home` (except in a search field while the "Resumed at" note shows),
 `Enter`, `Ctrl+C`, and in the comment box also `PageUp` / `PageDown`.
 Press `Esc` first to give the keys back to the app. `F5` (fullscreen), `Ctrl+F` and `Ctrl+R` take
@@ -216,7 +216,8 @@ the cursor from the box too, so `Space` plays and pauses in fullscreen. `[` and 
 you type in a marker's name. `Ctrl+Z` and `Ctrl+Y` do nothing while you type a comment, a file
 name, a time or a field of batch mode; in the tag and file search they still undo and redo.
 The F-keys always work, and so does `Ctrl+R` (except in fullscreen); so do `Ctrl+Alt+←` / `→`
-except in the comment box, the notes for the AI and a marker's name.
+except in the comment box, a time, a field of batch mode (the notes for the AI too) and a
+marker's name.
 
 ## Recovery after a crash
 
@@ -236,8 +237,8 @@ Sync up, Sync down and the lock, and the rename when you leave a clip. The histo
 the whole folder, so after moving to another clip the first undo goes back to the clip you left
 (a note says so) and the next one undoes its last change. While the clip you left is still being
 saved (its video closing, usually a moment), `Ctrl+Z` and `Ctrl+Y` do nothing. If a step cannot
-be done (the clip is open in another app, read-only, or was renamed, moved or deleted outside
-frename), nothing changes and a note says why; the step stays first in line, so put the file back
+be done (the clip or one of its files, such as its subtitles, is open in another app or
+read-only, or the clip was renamed, moved or deleted outside frename), nothing changes and a note says why; the step stays first in line, so put the file back
 to undo past it. In batch mode only markers and rotation are undone. It does not cover batch actions; opening
 a folder or running a batch action clears the undo history.
 
@@ -306,9 +307,9 @@ The progress bar shows what you have noted about a clip:
   rotation flag inside the MP4/MOV changes, right away: the picture is not re-encoded. Premiere
   Pro shows the clip turned when it imports it. A clip Premiere imported before the turn keeps its
   old orientation until you clear its media cache (Media Cache ▸ Delete in its preferences) and import it
-  again. Other formats cannot be turned. While you write a comment or notes for the AI,
-  the keys stay with the text. If `Ctrl+Alt+←` / `→` turns your whole screen, switch off the graphics
-  driver's rotation hotkeys or use ↺ / ↻.
+  again. Other formats cannot be turned. While you write a comment, notes for the AI, a time or a
+  field of batch mode, the keys stay with the text. If `Ctrl+Alt+←` / `→` turns your whole
+  screen, switch off the graphics driver's rotation hotkeys or use ↺ / ↻.
 - **In and out points:** `[` and `]` mark the usable segment, highlighted on the progress bar.
   By default they are saved inside the video as a marker that Premiere Pro turns into a subclip.
   Settings can keep them in the comment instead, as a line after your own text

@@ -724,7 +724,11 @@ fn renames_dir(journal: &Path) -> PathBuf {
 /// An intent is written first, so a crash or a kill between the two steps is finished at the
 /// next start ([`restore_all`]) instead of leaving the sidecars under the old name for good.
 /// The caller has checked that `to` and its sidecars are free. An error means the video was not
-/// renamed, and nothing else was. `comment_in_video`: the save has just written the comment into
+/// renamed, and nothing else was: a side file that cannot follow (another program holds it,
+/// #622) sends the video and the files that had moved back; the comment text file deleted for
+/// `comment_in_video` stays deleted (the video holds that comment). When the video cannot go
+/// back either, the clip stays under `to` with the files that followed, `Ok` is returned and the
+/// intent stays for the next start. `comment_in_video`: the save has just written the comment into
 /// the video, so its text file is to go (see [`RenameIntent::comment_in_video`]).
 pub(crate) fn rename_clip(from: &Path, to: &Path, comment_in_video: bool) -> std::io::Result<()> {
     rename_clip_in(&journal_dir(), from, to, comment_in_video)
@@ -747,7 +751,28 @@ fn rename_clip_in(
     if comment_in_video {
         crate::comment::remove_comment_file(from);
     }
-    crate::tags::rename_sidecars(from, to);
+    // A side file another program holds open cannot follow (#622): everything goes back, so the
+    // clip keeps its old name with all its files, and the save says it was not renamed. The
+    // comment text file removed above is not needed back: the video holds that comment.
+    if let Err((moved, e)) = crate::tags::rename_sidecars(from, to).into_result() {
+        // The video first: if it cannot go back, the files that followed stay with it, and only
+        // the held one waits under the old name for the next start (the intent stays).
+        if let Err(back) = crate::tags::rename_file(to, from) {
+            log::error!("recovery: {to:?} could not go back to {from:?}: {back}");
+            return Ok(());
+        }
+        if !crate::tags::move_back(moved) {
+            // A file that went with it would be left under the new name: the video goes forward
+            // again to join it, the others follow as they can, and the intent stays.
+            if crate::tags::rename_file(from, to).is_ok() {
+                let _ = crate::tags::rename_sidecars(from, to);
+                return Ok(());
+            }
+            log::error!("recovery: {from:?} is back, but a side file stays under {to:?}");
+        }
+        remove_intent(intent.as_deref());
+        return Err(e);
+    }
     remove_intent(intent.as_deref());
     Ok(())
 }
@@ -829,13 +854,21 @@ fn finish_renames_in(journal: &Path) -> Vec<RenameIntent> {
             if intent.comment_in_video {
                 crate::comment::remove_comment_file(&intent.from);
             }
-            crate::tags::rename_sidecars(&intent.from, &intent.to);
+            // The video is renamed: the journal's entries follow it whether or not every side
+            // file did. One still held open waits for the next start, intent and all (#622).
+            let done = crate::tags::rename_sidecars(&intent.from, &intent.to)
+                .into_result()
+                .is_ok();
             log::info!(
-                "recovery: finished the rename {:?} → {:?}",
+                "recovery: finished the rename {:?} → {:?}{}",
                 intent.from,
-                intent.to
+                intent.to,
+                if done { "" } else { " (a side file waits)" }
             );
             finished.push(intent);
+            if !done {
+                continue;
+            }
         }
         let _ = std::fs::remove_file(&file);
     }
@@ -1339,6 +1372,100 @@ mod tests {
         assert!(!crate::comment::comment_path(&to).exists());
         assert!(!crate::comment::comment_path(&from).exists());
         assert!(dir.join("pick.clip.srt").exists(), "the subtitles follow");
+    }
+
+    /// #622: a side file another program holds open sends everything back: the video and the
+    /// files that had moved are under the old name again, the rename is refused, and no intent
+    /// is left.
+    #[test]
+    fn a_held_side_file_sends_the_rename_back() {
+        let dir = temp_dir("rename-held");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        crate::tags::hold_on_this_thread(&dir.join("clip.srt"));
+
+        assert!(rename_clip_in(&journal, &from, &to, false).is_err());
+
+        assert!(from.exists() && !to.exists());
+        assert!(crate::comment::comment_path(&from).exists(), "moved back");
+        assert!(!crate::comment::comment_path(&to).exists());
+        assert!(dir.join("clip.srt").exists());
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal)).map_or(0, |d| d.count()),
+            0
+        );
+    }
+
+    /// #622: finishing an earlier rename at start keeps its intent while a side file is still
+    /// held, so a later start moves it.
+    #[test]
+    fn finishing_a_rename_waits_for_a_held_side_file() {
+        let dir = temp_dir("finish-held");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        let intent = write_intent(&journal, &from, &to, false).expect("intent");
+        std::fs::rename(&from, &to).expect("the video moved before a crash");
+        crate::tags::hold_on_this_thread(&dir.join("clip.srt"));
+
+        let renamed = finish_renames_in(&journal);
+        assert_eq!(renamed.len(), 1, "the journal follows the renamed video");
+        assert!(intent.exists(), "kept for the next start");
+        assert!(dir.join("clip.srt").exists());
+    }
+
+    /// #622: when the video cannot go back either, the files that followed stay with it under the
+    /// new name, only the held one waits under the old name, and the intent stays for the next
+    /// start.
+    #[test]
+    fn a_video_that_cannot_go_back_keeps_the_files_that_followed() {
+        let dir = temp_dir("rename-held-both");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        crate::tags::hold_on_this_thread(&dir.join("clip.srt"));
+        crate::tags::hold_on_this_thread(&to);
+
+        assert!(rename_clip_in(&journal, &from, &to, false).is_ok());
+
+        assert!(to.exists() && !from.exists());
+        assert!(crate::comment::comment_path(&to).exists(), "followed it");
+        assert!(dir.join("clip.srt").exists(), "the held one waits");
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal)).map_or(0, |d| d.count()),
+            1,
+            "the intent stays"
+        );
+    }
+
+    /// #622: a file that went along and cannot come back sends the video forward again to it, so
+    /// nothing is left alone under the new name; the intent stays for the held one.
+    #[test]
+    fn a_file_that_cannot_come_back_takes_the_video_forward_again() {
+        let dir = temp_dir("rename-held-back");
+        let from = clip(&dir);
+        let to = dir.join("pick.clip.mp4");
+        let journal = dir.join("recovery");
+        std::fs::write(crate::comment::comment_path(&from), "A note").expect("comment");
+        std::fs::write(dir.join("clip.srt"), "1").expect("srt");
+        crate::tags::hold_on_this_thread(&dir.join("clip.srt"));
+        crate::tags::hold_on_this_thread(&crate::comment::comment_path(&to));
+
+        assert!(rename_clip_in(&journal, &from, &to, false).is_ok());
+
+        assert!(to.exists() && !from.exists());
+        assert!(crate::comment::comment_path(&to).exists());
+        assert!(dir.join("clip.srt").exists(), "the held one waits");
+        assert_eq!(
+            std::fs::read_dir(renames_dir(&journal)).map_or(0, |d| d.count()),
+            1
+        );
     }
 
     /// A whole rename moves the video and its sidecars and leaves no intent behind; a failed

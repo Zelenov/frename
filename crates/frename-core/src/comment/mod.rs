@@ -93,7 +93,11 @@ pub fn remove_comment_file(file_path: &Path) {
 /// Rename the comment file when its parent file is renamed.
 /// If no comment file exists, does nothing. Does not overwrite a comment under the new name,
 /// except one spelled the same in other case (on Windows and macOS that is this file).
-pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
+pub(crate) fn rename_comment_file(
+    old_file_path: &Path,
+    new_file_path: &Path,
+    moves: &mut crate::tags::SidecarMove,
+) {
     let old_comment = comment_path(old_file_path);
     let new_comment = comment_path(new_file_path);
     if !old_comment.exists() {
@@ -109,9 +113,7 @@ pub fn rename_comment_file(old_file_path: &Path, new_file_path: &Path) {
         log::warn!("comment: not renaming {old_comment:?}: {new_comment:?} already exists");
         return;
     }
-    if let Err(e) = std::fs::rename(&old_comment, &new_comment) {
-        log::warn!("comment: failed to rename {old_comment:?} → {new_comment:?}: {e}");
-    }
+    moves.rename("comment", &old_comment, &new_comment);
 }
 
 #[cfg(test)]
