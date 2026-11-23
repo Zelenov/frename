@@ -12039,7 +12039,7 @@ mod tests {
             Message::TagPanel(tag_panel::Message::ToggleStar(pick)),
             Message::TagPanel(tag_panel::Message::SaveTag(fresh)),
             Message::TagPanel(tag_panel::Message::DeleteTag(pick)),
-            Message::SyncPanel(sync_panel::Message::SyncUp),
+            Message::SyncPanel(crate::features::sync_panel::Message::SyncUp),
         ] {
             let what = format!("{message:?}");
             assert_eq!(workspace.update(message).units(), 1, "a note for {what}");
