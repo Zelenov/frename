@@ -772,6 +772,53 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         Ok(())
     }
 
+    /// The name of the checked tag just before `id` in the file name order, `None` when `id` is
+    /// first or not in the list. Where [`Self::restore_unsaved_tag`] puts a tag back (#619).
+    pub fn checked_name_before(&self, id: TagId) -> Option<String> {
+        let mut before = None;
+        for (other, _, _) in self.selected_tag_ids.iter() {
+            if *other == id {
+                return before;
+            }
+            if let Some(tag) = self.tags_by_id.get(other).filter(|t| t.is_checked()) {
+                before = Some(tag.tag().to_string());
+            }
+        }
+        None
+    }
+
+    /// The id of the tag that is not among the folder's tags and is named exactly `name`. A list
+    /// built again gives such a tag a new id, so an undo step finds it by name (#619).
+    pub fn unsaved_tag_id_named(&self, name: &str) -> Option<TagId> {
+        self.tags_by_id
+            .values()
+            .find(|t| !t.is_stored() && t.tag() == name)
+            .map(|t| t.id())
+    }
+
+    /// Put back a checked tag that is only in the clip's name (not one of the folder's tags) into
+    /// a list built without it: right after the tag named `after` in the name and in the grid, or
+    /// first when there is no such tag (#619). Returns false, changing nothing, when the list
+    /// already has the id or a tag of exactly that name (a folder tag differing only in capitals
+    /// can sit beside it, as when the list is built from the name).
+    pub fn restore_unsaved_tag(&mut self, id: TagId, name: &str, after: Option<&str>) -> bool {
+        if self.tags_by_id.contains_key(&id) || self.tags_by_id.values().any(|t| t.tag() == name) {
+            return false;
+        }
+        let anchor = after.and_then(|after| self.tag_id_by_name(after));
+        let tag = Tag::with_id_order_checked(id, name, 0, false, 0, true);
+        self.tags_by_id.insert(id, tag);
+        self.display_tags_rebalanced |= self.display_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
+        let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        if let Some(t) = self.tags_by_id.get_mut(&id) {
+            t.set_order(order);
+        }
+        self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
+        true
+    }
+
     /// Create a new unsaved tag with a specific id (for redo of CreateTagCommand so the UUID
     /// is stable across redo). Returns false if a tag with that name already exists.
     pub fn create_tag_with_id(&mut self, id: TagId, name: impl Into<String>) -> bool {
