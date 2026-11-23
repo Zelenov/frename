@@ -31,4 +31,4 @@ pub use set_comment::SetCommentCommand;
 pub use set_segment::{SetSegmentCommand, SetSegmentEndCommand, SetSegmentStartCommand};
 pub use star_tag::StarTagCommand;
 pub use sync_order::SyncTagOrderCommand;
-pub use toggle_tag::ToggleTagCommand;
+pub use toggle_tag::{ToggleTagCommand, UnsavedTag};
