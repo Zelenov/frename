@@ -1,3 +1,7 @@
+# 0.287
+## Fixed
+- `Delete` and `Enter` leave alone a selected tag that your tag search hides. Before, after you typed a search and clicked away, `Delete` could remove that hidden tag from the folder.
+
 # 0.286
 ## Fixed
 - `Ctrl+Z` or `Ctrl+Y` of a move to another clip whose file was renamed, moved or deleted outside frename now says so in a note, with the file's name. Before, nothing happened and nothing was said.

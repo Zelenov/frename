@@ -641,7 +641,7 @@ impl FolderWorkspace {
             }
             Message::RemoveTag => self.handle_tag_panel(tag_panel::Message::DeleteSelectedTag),
             Message::SaveSelectedTag => {
-                if let Some(id) = self.tag_panel.selected_tag_id() {
+                if let Some(id) = self.visible_selected_tag() {
                     self.handle_tag_panel(tag_panel::Message::SaveTag(id))
                 } else {
                     Task::none()
@@ -3364,7 +3364,7 @@ impl FolderWorkspace {
                 Task::none()
             }
             tag_panel::Message::DeleteSelectedTag => {
-                if let Some(id) = self.tag_panel.selected_tag_id() {
+                if let Some(id) = self.visible_selected_tag() {
                     self.handle_tag_panel(tag_panel::Message::DeleteTag(id))
                 } else {
                     Task::none()
@@ -3751,6 +3751,16 @@ impl FolderWorkspace {
     }
 
     /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
+    /// The selected tag when the grid shows it. A tag search keeps a selection it hides (the
+    /// editor may clear the search and come back to it), but Delete and Enter must not act on a
+    /// tag nobody can see (#620).
+    fn visible_selected_tag(&self) -> Option<frename_core::TagId> {
+        let tag_list = self.file_workspace.tag_list();
+        self.tag_panel
+            .selected_tag_id()
+            .filter(|id| tag_list.filtered_display_tag_ids().contains(id))
+    }
+
     fn clamp_selection_to_filtered(&mut self) {
         let tag_list = self.file_workspace.tag_list();
         let visible = self
@@ -11923,6 +11933,65 @@ mod tests {
         assert!(
             !workspace.history.can_undo(),
             "no step from any of the keys"
+        );
+    }
+
+    /// #620: a tag search keeps the selection it hides; once the search lets go of the keys,
+    /// Delete and Enter must not act on that tag out of sight.
+    #[test]
+    fn delete_and_enter_leave_a_tag_the_search_hides() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        workspace.tag_panel.set_selected(Some(pick));
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SetFilter(
+            "zzz".into(),
+        )));
+        assert!(!workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()
+            .contains(&pick));
+        assert_eq!(workspace.tag_panel.selected_tag_id(), Some(pick));
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .unsave_tag(pick)
+            .expect("unsave");
+        let _ = workspace.update(Message::SaveSelectedTag);
+        let stored = workspace
+            .file_workspace()
+            .tag_list()
+            .get_tag(pick)
+            .map(|t| t.is_stored());
+        assert_eq!(stored, Some(false), "Enter leaves the hidden tag unsaved");
+        let _ = workspace.update(Message::RemoveTag);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .is_some(),
+            "Delete keeps the tag the grid does not show"
+        );
+        assert!(!workspace.history.can_undo(), "no step from either key");
+
+        // Shown again, the same tag is deleted as before.
+        let _ = workspace.update(Message::TagPanel(tag_panel::Message::SetFilter(
+            String::new(),
+        )));
+        let _ = workspace.update(Message::RemoveTag);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .tag_id_by_name("pick")
+                .is_none(),
+            "a visible selection is deleted"
         );
     }
 
