@@ -222,7 +222,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .iter()
             .filter(|name| !stored_values.contains(name.as_str()))
         {
-            let id = TagId::for_unsaved_name(name);
+            let id = TagId::new();
             let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, true);
             tags_by_id.insert(id, tag);
             value_to_id.insert(name.clone(), id);
@@ -673,7 +673,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             log::warn!("TagList: not creating the tag {name:?}: a file name cannot hold it");
             return None;
         }
-        let id = TagId::for_unsaved_name(&name);
+        let id = TagId::new();
         let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
         self.tags_by_id.insert(id, tag);
         match position {
@@ -787,22 +787,26 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         None
     }
 
+    /// The id of the tag that is not among the folder's tags and is named exactly `name`. A list
+    /// built again gives such a tag a new id, so an undo step finds it by name (#619).
+    pub fn unsaved_tag_id_named(&self, name: &str) -> Option<TagId> {
+        self.tags_by_id
+            .values()
+            .find(|t| !t.is_stored() && t.tag() == name)
+            .map(|t| t.id())
+    }
+
     /// Put back a checked tag that is only in the clip's name (not one of the folder's tags) into
     /// a list built without it: right after the tag named `after` in the name and in the grid, or
     /// first when there is no such tag (#619). Returns false, changing nothing, when the list
-    /// already has the id or a tag of that name.
-    pub fn restore_unsaved_tag(
-        &mut self,
-        id: TagId,
-        name: &str,
-        color_index: u8,
-        after: Option<&str>,
-    ) -> bool {
-        if self.tags_by_id.contains_key(&id) || self.has_tag_with_name(name) {
+    /// already has the id or a tag of exactly that name (a folder tag differing only in capitals
+    /// can sit beside it, as when the list is built from the name).
+    pub fn restore_unsaved_tag(&mut self, id: TagId, name: &str, after: Option<&str>) -> bool {
+        if self.tags_by_id.contains_key(&id) || self.tags_by_id.values().any(|t| t.tag() == name) {
             return false;
         }
         let anchor = after.and_then(|after| self.tag_id_by_name(after));
-        let tag = Tag::with_id_order_checked(id, name, color_index, false, 0, true);
+        let tag = Tag::with_id_order_checked(id, name, 0, false, 0, true);
         self.tags_by_id.insert(id, tag);
         self.display_tags_rebalanced |= self.display_tag_ids.insert_after(id, (), anchor.as_ref());
         self.selected_tag_ids.insert_after(id, (), anchor.as_ref());

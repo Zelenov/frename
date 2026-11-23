@@ -1635,6 +1635,52 @@ mod tests {
         assert_eq!(ctx.tag_list.file_snapshot().tags(), ["first", "last"]);
     }
 
+    /// A name-only tag still in the name after the list was built again (a later comment undone)
+    /// has a new id: the step finds it by its name, and undo and redo keep working (#619).
+    #[test]
+    fn a_name_only_tag_still_in_the_name_is_found_after_a_rebuild() {
+        let mut tag_list = TagList::new(FakeAppStorage::new(), snapshot_with_tags(&["rough"]));
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("back in the name");
+        // Built again from the name, which holds the tag: a new id.
+        let snapshot = ctx.tag_list.file_snapshot();
+        ctx.tag_list.reinitialize_from_snapshot(snapshot);
+        assert_ne!(ctx.tag_list.tag_id_by_name("rough"), Some(id));
+        history.redo(&mut ctx).expect("found by its name");
+        assert!(ctx.tag_list.file_snapshot().tags().is_empty());
+    }
+
+    /// A folder tag that differs only in capitals ("Rough") does not keep the clip's own "rough"
+    /// from coming back (#619).
+    #[test]
+    fn a_name_only_tag_comes_back_beside_a_folder_tag_in_other_capitals() {
+        let store = FakeAppStorage::new()
+            .add_stored_tag(StoredTag::with_all(Uuid::new_v4(), "Rough", 1, false), 0);
+        let mut tag_list = TagList::new(store.clone(), snapshot_with_tags(&["rough"]));
+        let mut dir = empty_directory();
+        let id = tag_list
+            .unsaved_tag_id_named("rough")
+            .expect("the name's own tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        let mut tag_list = TagList::new(store, tag_list.file_snapshot());
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the tag comes back");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["rough"]);
+    }
+
     #[test]
     fn marker_name_command_undoes_and_redoes_the_name() {
         let mut tag_list = marker_list();
