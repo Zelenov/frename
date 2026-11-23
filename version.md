@@ -1,5 +1,9 @@
 # 0.288
 ## Fixed
+- A folder on a write-protected card or a read-only share shows the built-in tags (pick, skip, review…) instead of none. Before, the tag panel stayed empty and nothing said why.
+
+# 0.288
+## Fixed
 - `Delete` and `Enter` leave alone a selected tag that your tag search hides. Before, after you typed a search and clicked away, `Delete` could remove that hidden tag from the folder.
 
 # 0.287
