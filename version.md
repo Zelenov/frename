@@ -1,6 +1,6 @@
 # 0.286
 ## Fixed
-- `Ctrl+Z` or `Ctrl+Y` of a move to another clip whose file was renamed or deleted outside frename now says so in a note, with the file's name. Before, nothing happened and nothing was said.
+- `Ctrl+Z` or `Ctrl+Y` of a move to another clip whose file was renamed, moved or deleted outside frename now says so in a note, with the file's name. Before, nothing happened and nothing was said.
 
 # 0.285
 ## Fixed
