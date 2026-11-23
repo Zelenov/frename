@@ -222,7 +222,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             .iter()
             .filter(|name| !stored_values.contains(name.as_str()))
         {
-            let id = TagId::new();
+            let id = TagId::for_unsaved_name(name);
             let tag = Tag::with_id_order_checked(id, name.as_str(), 0, false, 0, true);
             tags_by_id.insert(id, tag);
             value_to_id.insert(name.clone(), id);
@@ -673,7 +673,7 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             log::warn!("TagList: not creating the tag {name:?}: a file name cannot hold it");
             return None;
         }
-        let id = TagId::new();
+        let id = TagId::for_unsaved_name(&name);
         let tag = Tag::with_id_order_checked(id, &name, 0, false, 0, true);
         self.tags_by_id.insert(id, tag);
         match position {
@@ -770,6 +770,49 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         self.rebuild_filtered_display_tag_ids();
         self.update_is_selected_match_display_order();
         Ok(())
+    }
+
+    /// The name of the checked tag just before `id` in the file name order, `None` when `id` is
+    /// first or not in the list. Where [`Self::restore_unsaved_tag`] puts a tag back (#619).
+    pub fn checked_name_before(&self, id: TagId) -> Option<String> {
+        let mut before = None;
+        for (other, _, _) in self.selected_tag_ids.iter() {
+            if *other == id {
+                return before;
+            }
+            if let Some(tag) = self.tags_by_id.get(other).filter(|t| t.is_checked()) {
+                before = Some(tag.tag().to_string());
+            }
+        }
+        None
+    }
+
+    /// Put back a checked tag that is only in the clip's name (not one of the folder's tags) into
+    /// a list built without it: right after the tag named `after` in the name and in the grid, or
+    /// first when there is no such tag (#619). Returns false, changing nothing, when the list
+    /// already has the id or a tag of that name.
+    pub fn restore_unsaved_tag(
+        &mut self,
+        id: TagId,
+        name: &str,
+        color_index: u8,
+        after: Option<&str>,
+    ) -> bool {
+        if self.tags_by_id.contains_key(&id) || self.has_tag_with_name(name) {
+            return false;
+        }
+        let anchor = after.and_then(|after| self.tag_id_by_name(after));
+        let tag = Tag::with_id_order_checked(id, name, color_index, false, 0, true);
+        self.tags_by_id.insert(id, tag);
+        self.display_tags_rebalanced |= self.display_tag_ids.insert_after(id, (), anchor.as_ref());
+        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
+        let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+        if let Some(t) = self.tags_by_id.get_mut(&id) {
+            t.set_order(order);
+        }
+        self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
+        true
     }
 
     /// Create a new unsaved tag with a specific id (for redo of CreateTagCommand so the UUID

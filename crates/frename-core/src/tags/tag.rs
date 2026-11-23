@@ -14,10 +14,28 @@ impl TagId {
         format!("tag-{}", self.0)
     }
 
-    /// Create a new TagId (random UUID). Used for snapshot-only tags.
+    /// Create a new TagId (random UUID).
     #[allow(clippy::new_without_default)] // a random id is not a meaningful default
     pub fn new() -> Self {
         TagId(Uuid::new_v4())
+    }
+
+    /// The id of a tag that is not among the folder's tags (only in a clip's name, or just
+    /// created): the same for the same name every time a tag list is built, so an undo step that
+    /// holds it still finds the tag after the clip is opened again or a step rebuilt its list
+    /// (#619). Saving the tag keeps this id. FNV-1a of the name, twice with different offsets for
+    /// 128 bits: stable across runs and Rust versions, unlike `DefaultHasher`.
+    pub fn for_unsaved_name(name: &str) -> Self {
+        fn fnv1a(offset: u64, bytes: &[u8]) -> u64 {
+            bytes.iter().fold(offset, |hash, byte| {
+                (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+            })
+        }
+        let bytes = name.as_bytes();
+        TagId(Uuid::from_u64_pair(
+            fnv1a(0xcbf2_9ce4_8422_2325, bytes),
+            fnv1a(0x6c62_272e_07bb_0142, bytes),
+        ))
     }
 }
 
@@ -156,7 +174,24 @@ impl OrderedThing for Tag {
 
 #[cfg(test)]
 mod tests {
-    use super::same_tag_name;
+    use super::{same_tag_name, TagId};
+
+    /// #619: a tag that is not among the folder's tags gets the same id each time a list is built.
+    #[test]
+    fn an_unsaved_tag_has_the_same_id_for_the_same_name() {
+        assert_eq!(
+            TagId::for_unsaved_name("rough"),
+            TagId::for_unsaved_name("rough")
+        );
+        assert_ne!(
+            TagId::for_unsaved_name("rough"),
+            TagId::for_unsaved_name("Rough")
+        );
+        assert_ne!(
+            TagId::for_unsaved_name("rough"),
+            TagId::for_unsaved_name("roug")
+        );
+    }
 
     /// #494: one tag whatever the capitals, in any alphabet, folded as the tag filter folds.
     #[test]

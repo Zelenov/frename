@@ -605,12 +605,14 @@ mod tests {
         history.push(Box::new(ToggleTagCommand {
             tag_id: id_b,
             was_checked: true,
+            unsaved: None,
         }));
         history.push_at_mark(
             mark,
             Box::new(ToggleTagCommand {
                 tag_id: id_a,
                 was_checked: true,
+                unsaved: None,
             }),
         );
 
@@ -656,6 +658,7 @@ mod tests {
             Box::new(ToggleTagCommand {
                 tag_id: id,
                 was_checked: true,
+                unsaved: None,
             })
         };
 
@@ -700,6 +703,7 @@ mod tests {
         history.push(Box::new(ToggleTagCommand {
             tag_id: id,
             was_checked,
+            unsaved: None,
         }));
 
         {
@@ -727,6 +731,7 @@ mod tests {
         history.push(Box::new(ToggleTagCommand {
             tag_id: id,
             was_checked: true,
+            unsaved: None,
         }));
 
         {
@@ -1551,6 +1556,85 @@ mod tests {
         assert_eq!(tag_list.comment(), "a note");
     }
 
+    /// A tag that is only in the file name (not one of the folder's tags) keeps its id when a
+    /// later step (a comment) builds the tag list again, so the step that removed it is still
+    /// undone and the steps under it stay reachable (#619).
+    #[test]
+    fn removing_a_name_only_tag_is_undone_after_a_comment_step() {
+        let mut tag_list = TagList::new(FakeAppStorage::new(), snapshot_with_tags(&["rough"]));
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the comment");
+        let second = history.undo(&mut ctx);
+        assert!(second.is_ok(), "the removed tag comes back");
+        assert!(tag_list
+            .tag_id_by_name("rough")
+            .and_then(|id| tag_list.get_tag(id))
+            .is_some_and(|t| t.is_checked()));
+    }
+
+    /// The same after leaving the clip and Ctrl+Z of the move: the clip is opened again, which
+    /// builds its tag list anew (#619).
+    #[test]
+    fn removing_a_name_only_tag_is_undone_after_the_clip_was_opened_again() {
+        let mut tag_list = TagList::new(FakeAppStorage::new(), snapshot_with_tags(&["rough"]));
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        // Left and opened again (an undo of the move reopens it from its row).
+        let mut tag_list = TagList::new(FakeAppStorage::new(), tag_list.file_snapshot());
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        let undo = history.undo(&mut ctx);
+        assert!(undo.is_ok(), "the removed tag comes back");
+    }
+
+    /// A name-only tag put back after the clip was opened again takes its old place in the name,
+    /// and Ctrl+Y takes it out again (#619).
+    #[test]
+    fn a_name_only_tag_comes_back_in_its_place_and_redo_removes_it() {
+        let mut tag_list = TagList::new(
+            FakeAppStorage::new(),
+            snapshot_with_tags(&["first", "rough", "last"]),
+        );
+        let mut dir = empty_directory();
+        let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
+        assert!(tag_list.toggle_by_id(id));
+        let mut history = History::new(50);
+        history.push(Box::new(ToggleTagCommand::new(&tag_list, id, true)));
+        let mut tag_list = TagList::new(FakeAppStorage::new(), tag_list.file_snapshot());
+        assert_eq!(tag_list.file_snapshot().tags(), ["first", "last"]);
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the tag comes back");
+        assert_eq!(
+            ctx.tag_list.file_snapshot().tags(),
+            ["first", "rough", "last"]
+        );
+        history.redo(&mut ctx).expect("and goes again");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["first", "last"]);
+    }
+
     #[test]
     fn marker_name_command_undoes_and_redoes_the_name() {
         let mut tag_list = marker_list();
@@ -1738,6 +1822,7 @@ mod tests {
         history.push(Box::new(crate::undo::ToggleTagCommand {
             tag_id: id,
             was_checked: true,
+            unsaved: None,
         }));
         let mut ctx = UndoContext {
             directory: &mut directory,
