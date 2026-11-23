@@ -9763,6 +9763,16 @@ mod tests {
         let _ = workspace.update(Message::Undo);
         flush_file_opened(&mut workspace);
         assert_eq!(workspace.file_workspace().file().map(|f| f.id()), Some(a));
+        // The clip the undo left is saved once its video lets go, after this one reopened: that
+        // save must not mark this one saved.
+        let pending = workspace.pending_file_updates.clone();
+        assert!(!pending.is_empty(), "the left clip's save waits");
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        for (id, snapshot) in pending {
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        }
         assert!(test_dir.file_path("file_0.mp4").exists(), "renamed back");
         let tag_list = workspace.file_workspace().tag_list();
         let pick = tag_list
@@ -9775,15 +9785,6 @@ mod tests {
         assert_eq!(journal_files(&test_dir), 1, "the tag is journaled");
         assert_eq!(workspace.save_status(), Some(SaveStatus::InRecovery));
 
-        // The clip the undo left (the second one) is saved first.
-        let pending = workspace.pending_file_updates.clone();
-        let _ = workspace.update(Message::MediaViewer(
-            crate::features::media_viewer::Message::Unloaded,
-        ));
-        for (id, snapshot) in pending {
-            let _ = workspace.update(Message::FileUpdated { id, snapshot });
-        }
-        assert!(workspace.unsaved_after_undo.contains(&a), "not saved yet");
         // The redo renames the open clip: it waits for the video to let go (#602).
         let _ = workspace.update(Message::Redo);
         let _ = workspace.update(Message::MediaViewer(

@@ -164,8 +164,10 @@ impl FolderWorkspace {
                 self.journal_written = Some((written_id, entry));
             }
         }
-        self.journal_force = false;
+        // The flag is the open clip's: the save of a clip left a moment ago, landing after the
+        // open one came back with edits not on disk, must not clear it (#611).
         if self.file_workspace.file().is_some_and(|f| f.id() == id) {
+            self.journal_force = false;
             // What was saved is the reference, not what the clip is now: edits made since are
             // not on disk, so they are unsaved. The new name, as the rename reaches the open
             // clip only with its next open.
