@@ -12010,7 +12010,10 @@ mod tests {
 
         let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleStar(pick)));
         assert_eq!(task.units(), 1, "a notice says the star was not saved");
-        assert!(!workspace.history.can_undo(), "no step for a change that did not happen");
+        assert!(
+            !workspace.history.can_undo(),
+            "no step for a change that did not happen"
+        );
 
         // A tag file that takes the change: no notice.
         std::fs::remove_dir(&tag_file).expect("out of the way");
