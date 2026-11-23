@@ -11974,10 +11974,20 @@ mod tests {
         );
         assert!(!workspace.history.can_undo(), "no step from either key");
 
-        // Shown again, the same tag is deleted as before.
+        // Shown again, Enter saves it and Delete removes the folder's tag, as before.
         let _ = workspace.update(Message::TagPanel(tag_panel::Message::SetFilter(
             String::new(),
         )));
+        let _ = workspace.update(Message::SaveSelectedTag);
+        assert!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .get_tag(pick)
+                .is_some_and(|t| t.is_stored()),
+            "Enter saves a visible selection"
+        );
+        assert!(workspace.history.can_undo(), "saving is a step");
         let _ = workspace.update(Message::RemoveTag);
         assert!(
             workspace
