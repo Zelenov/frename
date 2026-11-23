@@ -3168,8 +3168,7 @@ impl FolderWorkspace {
             .tag_list()
             .filtered_display_tag_ids()
             .to_vec();
-        let selected_id = self.tag_panel.selected_tag_id();
-        let selected_visible = selected_id.filter(|id| filtered.contains(id));
+        let selected_visible = self.visible_selected_tag();
         let id_to_toggle = selected_visible.or_else(|| filtered.first().copied());
         let mut notice = Task::none();
         if let Some(id) = id_to_toggle {
@@ -3750,7 +3749,6 @@ impl FolderWorkspace {
         }
     }
 
-    /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
     /// The selected tag when the grid shows it. A tag search keeps a selection it hides (the
     /// editor may clear the search and come back to it), but Delete and Enter must not act on a
     /// tag nobody can see (#620).
@@ -3761,13 +3759,9 @@ impl FolderWorkspace {
             .filter(|id| tag_list.filtered_display_tag_ids().contains(id))
     }
 
+    /// Clear selection if the selected tag is not in the current filtered list (selection must be visible).
     fn clamp_selection_to_filtered(&mut self) {
-        let tag_list = self.file_workspace.tag_list();
-        let visible = self
-            .tag_panel
-            .selected_tag_id()
-            .filter(|id| tag_list.filtered_display_tag_ids().contains(id));
-        if visible.is_none() && self.tag_panel.selected_tag_id().is_some() {
+        if self.visible_selected_tag().is_none() && self.tag_panel.selected_tag_id().is_some() {
             self.tag_panel.set_selected(None);
         }
     }
