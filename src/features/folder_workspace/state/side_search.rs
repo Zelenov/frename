@@ -28,8 +28,11 @@ impl FolderWorkspace {
                     return Task::none();
                 }
                 self.side_search.open();
-                // The search field takes the keys from the notes box (#591).
+                // The search field takes the keys from the notes box (#591) and the comment box:
+                // the comment's typing so far is its own undo step, and Ctrl+Z undoes again (#609).
                 self.notes_focused = false;
+                self.end_comment_session();
+                self.file_workspace.set_comment_focused(false);
                 let show = self.media_viewer.shown_overlay() == Overlay::Closed;
                 let show = show.then(|| self.show_a_list());
                 Task::batch([

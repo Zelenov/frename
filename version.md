@@ -1,6 +1,10 @@
-# 0.284
+# 0.285
 ## Fixed
 - After `Ctrl+Z` takes back a move to the next clip, the clip you return to no longer says "All changes saved" while its new tags are not in its file name yet. Those tags are now kept in the recovery journal, so a crash does not lose them, and `Shift+F11`, `Ctrl+F11` and dragging the clip out save it first.
+
+# 0.284
+## Fixed
+- `Ctrl+F` or `Ctrl+R` pressed while you type a comment now takes the cursor out of the comment box: its focus ring goes, and `Ctrl+Z` undoes what you typed as one step. Before, the box still looked active and `Ctrl+Z` did nothing until you clicked somewhere.
 
 # 0.283
 ## Fixed
