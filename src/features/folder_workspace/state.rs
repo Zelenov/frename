@@ -1043,10 +1043,11 @@ impl FolderWorkspace {
         }
         match ids.as_slice() {
             [] => {}
-            [id] => self.history.push(Box::new(ToggleTagCommand {
-                tag_id: *id,
-                was_checked: false,
-            })),
+            [id] => self.history.push(Box::new(ToggleTagCommand::new(
+                self.file_workspace.tag_list(),
+                *id,
+                false,
+            ))),
             _ => self
                 .history
                 .push(Box::new(CheckTagsCommand { tag_ids: ids })),
@@ -3178,10 +3179,11 @@ impl FolderWorkspace {
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
             if self.file_workspace.toggle_tag_by_id(id) {
-                self.history.push(Box::new(ToggleTagCommand {
-                    tag_id: id,
+                self.history.push(Box::new(ToggleTagCommand::new(
+                    self.file_workspace.tag_list(),
+                    id,
                     was_checked,
-                }));
+                )));
             } else {
                 notice = self.tag_not_usable(id);
             }
@@ -3273,10 +3275,11 @@ impl FolderWorkspace {
                 if !self.file_workspace.toggle_tag_by_id(id) {
                     return self.tag_not_usable(id);
                 }
-                self.history.push(Box::new(ToggleTagCommand {
-                    tag_id: id,
+                self.history.push(Box::new(ToggleTagCommand::new(
+                    self.file_workspace.tag_list(),
+                    id,
                     was_checked,
-                }));
+                )));
                 Task::none()
             }
             tag_panel::Message::SelectLeft => {
@@ -3462,10 +3465,11 @@ impl FolderWorkspace {
                 .is_some_and(|t| t.is_checked());
             if was_checked {
                 self.file_workspace.toggle_tag_by_id(id);
-                self.history.push(Box::new(ToggleTagCommand {
-                    tag_id: id,
+                self.history.push(Box::new(ToggleTagCommand::new(
+                    self.file_workspace.tag_list(),
+                    id,
                     was_checked,
-                }));
+                )));
             }
             return Task::none();
         }
@@ -3530,10 +3534,11 @@ impl FolderWorkspace {
                 .get_tag(id)
                 .is_some_and(|t| t.is_checked());
             if self.file_workspace.toggle_tag_by_id(id) {
-                self.history.push(Box::new(ToggleTagCommand {
-                    tag_id: id,
+                self.history.push(Box::new(ToggleTagCommand::new(
+                    self.file_workspace.tag_list(),
+                    id,
                     was_checked,
-                }));
+                )));
             } else {
                 notice = self.tag_not_usable(id);
             }
