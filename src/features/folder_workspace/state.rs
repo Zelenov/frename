@@ -256,6 +256,16 @@ const LINE_FIELDS: &[&str] = &[
     batch::pipeline::CAP_FIELD_ID,
 ];
 
+/// The text fields that keep `Ctrl+Alt+←/→`, `Alt+←/→` and `Home` while they have the focus: the
+/// comment box, the time field and batch mode's one-line fields (#621). The rename field is not
+/// among them (`Home` asks it separately), nor the search fields, where the keys still act.
+const WRITING_FIELDS: &[&str] = &[
+    crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+    crate::features::video_controls::view::TIME_EDIT_ID,
+    batch::describe_ai::ONE_OFF_NOTES_ID,
+    batch::pipeline::CAP_FIELD_ID,
+];
+
 /// Takes the keys from the one focusable widget with this id and leaves every other one as it
 /// is (iced's own `unfocus` takes them from all, the rename field and comment box included).
 fn unfocus_only(target: iced::widget::Id) -> impl iced::advanced::widget::Operation<()> {
@@ -1521,11 +1531,6 @@ impl FolderWorkspace {
         }
     }
 
-    /// A video key (`Ctrl+Alt+←/→` turns, `Alt+←/→` frame steps) pressed while a text field had
-    /// the keys: send `message`, unless the field is the comment box, where the keys belong to
-    /// the text (the search fields hold nothing the keys would do, so there they still act). In
-    /// batch mode the comment box is not shown, and asking about its focus would get no answer
-    /// at all.
     /// A message to the video controls, as if its button had been pressed.
     fn video_controls_message(&self, message: video_controls::Message) -> Task<Message> {
         Task::done(Message::MediaViewer(media_viewer::Message::Video(
@@ -1533,21 +1538,19 @@ impl FolderWorkspace {
         )))
     }
 
+    /// A video key (`Ctrl+Alt+←/→` turns, `Alt+←/→` frame steps, `Home`) pressed while a text
+    /// field had the keys: send `message`, unless the field is one of [`WRITING_FIELDS`] or the
+    /// notes for the AI, where the keys belong to the text (the search fields hold nothing the
+    /// keys would do, so there they still act).
     fn unless_writing(&self, message: Message) -> Task<Message> {
-        // Batch mode hides the comment box; the box typed in there is the notes for the AI (#591),
-        // known from `notes_focused`, as Undo/Redo use it.
-        if self.batch.is_active() {
-            return if self.notes_focused {
-                Task::none()
-            } else {
-                Task::done(message)
-            };
+        // Batch mode's notes box is known from `notes_focused`, as Undo/Redo use it (#591).
+        if self.batch.is_active() && self.notes_focused {
+            return Task::none();
         }
-        iced::widget::operation::is_focused(iced::widget::Id::new(
-            crate::features::file_workspace::view::COMMENT_EDITOR_ID,
-        ))
-        .map(move |writing| {
-            if writing {
+        // The comment box, the time field and batch mode's one-line fields keep the keys they
+        // type with (#621). Unlike `is_focused`, this answers when none of them is on screen.
+        crate::widgets::focus_ring::focused_among(WRITING_FIELDS).map(move |field| {
+            if field.is_some() {
                 Message::Noop
             } else {
                 message.clone()
@@ -10964,6 +10967,43 @@ mod tests {
         // The field does not have the keys: the turn is undone as without it.
         let _ = workspace.update(Message::UndoUnlessTyping);
         assert_eq!(degrees(), 0);
+    }
+
+    /// #621: the time field and batch mode's one-line fields keep `Ctrl+Alt+←/→`, `Alt+←/→` and
+    /// `Home` as the comment box does: they are among the fields whose focus is asked.
+    #[test]
+    fn the_line_fields_keep_the_video_keys() {
+        for field in [
+            crate::features::file_workspace::view::COMMENT_EDITOR_ID,
+            crate::features::video_controls::view::TIME_EDIT_ID,
+            batch::describe_ai::ONE_OFF_NOTES_ID,
+            batch::pipeline::CAP_FIELD_ID,
+        ] {
+            assert!(WRITING_FIELDS.contains(&field), "{field} keeps the keys");
+        }
+        assert!(!WRITING_FIELDS.contains(&folder::FOLDER_RENAME_INPUT_ID));
+
+        // In batch mode the focus is asked too, not the key sent straight on: before #621 the
+        // one-off field and the cap field turned the clip.
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let file = test_dir.target_file();
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        for key in [
+            Message::RotateVideoWhileTyping(1),
+            Message::StepFrameWhileTyping(1),
+        ] {
+            assert_eq!(
+                workspace.update(key).units(),
+                1,
+                "the fields' focus is asked"
+            );
+        }
+        assert_eq!(
+            frename_core::FileTagger::video_rotation(&file).map(|r| r.degrees()),
+            Ok(0),
+            "nothing turned before the answer"
+        );
     }
 
     /// Issue #499: in batch mode, Ctrl+Z in a one-line field ("notes for this run", the clips
