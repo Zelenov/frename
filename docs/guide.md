@@ -127,8 +127,8 @@ saves first, how frename resumes where you stopped, and more ways to open a fold
 | `↑` `↓` `←` `→` | Move the selection in the tag grid (not in fullscreen) |
 | `Shift+Space` | Tag or untag the file with the selected tag (not in fullscreen) |
 | Any letter, `Backspace` | Type into the tag search (not in fullscreen) |
-| `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags (not in fullscreen) |
-| `Delete` | Delete the selected tag from the folder's tags (not in fullscreen) |
+| `Enter` | Add the typed tag, or the selected unsaved (○) tag, to the folder's tags (not in fullscreen, nor on a tag your tag search hides) |
+| `Delete` | Delete the selected tag from the folder's tags (not in fullscreen, nor a tag your tag search hides) |
 | `Escape` | Clear the tag and file searches, or leave a `Ctrl`/`Shift`+click selection first if one is running (see Files above) |
 | `Ctrl+C` | Copy the file's tags (and its new name to the clipboard) |
 | `Ctrl+V` | Replace the file's tags with the copied ones |
