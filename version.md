@@ -1,3 +1,7 @@
+# 0.291
+## Fixed
+- A change to the folder's tags that cannot be saved (adding, deleting, starring or reordering a tag on a write-protected card or a read-only share) now says so in a note. Before, it worked until the folder was opened again and was then gone, with nothing said.
+
 # 0.290
 ## Fixed
 - When another program holds one of a clip's files open (its subtitles, transcript, `.comment.txt` or a saved frame), tagging no longer renames the clip without it: the clip keeps its name with all its files, and frename says it was not saved, as when the video itself is held. Before, the clip was renamed, that file stayed behind under the old name with nothing said, and `Ctrl+Z` of the change was refused.

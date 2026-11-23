@@ -806,6 +806,7 @@ tag-grid-create = „{ $tag }“ erstellen
 tag-grid-dot-not-allowed = In einem Tag nicht erlaubt: „.“
 tag-grid-in-out-not-allowed = Als Tag nicht erlaubt: In/Out-Punkt
 tag-not-usable = Der Tag „{ $tag }“ kann nicht im Dateinamen stehen. Lösche ihn und lege einen mit anderem Namen an.
+tags-not-saved = Die Tags des Ordners wurden nicht gespeichert: Der Ordner ist schreibgeschützt oder seine Tag-Datei wird verwendet. Diese Änderung geht verloren, wenn der Ordner wieder geöffnet wird.
 tag-grid-no-file = Öffne einen Clip, um ihn zu taggen
 tag-grid-no-tags = Noch keine Tags
 tag-grid-no-tags-hint = Tippe einen Namen und drücke Enter, um den ersten zu erstellen.

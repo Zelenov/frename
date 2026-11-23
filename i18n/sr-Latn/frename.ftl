@@ -830,6 +830,7 @@ tag-grid-create = Napravi „{ $tag }“
 tag-grid-dot-not-allowed = Nije dozvoljeno u tegu: «.»
 tag-grid-in-out-not-allowed = Nije dozvoljen teg: ulaz/izlaz
 tag-not-usable = Teg «{ $tag }» ne može da bude u nazivu datoteke. Obrišite ga i napravite teg sa drugim nazivom.
+tags-not-saved = Tegovi fascikle nisu sačuvani: fascikla je samo za čitanje ili je njena datoteka tegova u upotrebi. Ova izmena se gubi kada se fascikla ponovo otvori.
 tag-grid-no-file = Otvorite klip da biste ga označili tegom
 tag-grid-no-tags = Još nema tegova
 tag-grid-no-tags-hint = Unesite naziv i pritisnite Enter da napravite prvi.

@@ -732,6 +732,7 @@ tag-grid-create = 建立「{ $tag }」
 tag-grid-dot-not-allowed = 標籤中不能使用：「.」
 tag-grid-in-out-not-allowed = 不能用作標籤：入點/出點
 tag-not-usable = 標籤「{ $tag }」不能用在檔名中。請刪除它，並用其他名稱新增一個標籤。
+tags-not-saved = 無法儲存資料夾的標籤：資料夾為唯讀，或其標籤檔案正在使用中。重新開啟資料夾後，此變更將會遺失。
 tag-grid-no-file = 開啟片段即可加標籤
 tag-grid-no-tags = 尚無標籤
 tag-grid-no-tags-hint = 輸入名稱並按 Enter 建立第一個標籤。

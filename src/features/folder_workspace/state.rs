@@ -3136,6 +3136,12 @@ impl FolderWorkspace {
 
     /// The note for a stored tag that could not be checked: its name cannot be in a file name
     /// (#421), from before such names were refused. It says what to do, so it stays long.
+    /// A change to the folder's tag list that its tag file did not take (a write-protected card,
+    /// a read-only share): it lasts only until the folder is opened again, so say so (#633).
+    fn tags_not_saved() -> Task<Message> {
+        Self::long_notice(fl!("tags-not-saved"))
+    }
+
     fn tag_not_usable(&self, id: frename_core::TagId) -> Task<Message> {
         let name = self
             .file_workspace
@@ -3258,7 +3264,10 @@ impl FolderWorkspace {
                             self.clamp_selection_to_filtered();
                             return Task::done(Message::ScrollTagListToSelection);
                         }
-                        Err(e) => log::error!("Failed to create tag: {}", e),
+                        Err(e) => {
+                            log::error!("Failed to create tag: {}", e);
+                            return Self::tags_not_saved();
+                        }
                     }
                 }
                 Task::none()
@@ -3334,6 +3343,7 @@ impl FolderWorkspace {
                 let delete_data = self.file_workspace.tag_list().capture_delete_data(id);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
+                    return Self::tags_not_saved();
                 } else if let Some((
                     name,
                     color,
@@ -3380,7 +3390,10 @@ impl FolderWorkspace {
             }
             tag_panel::Message::SaveTag(id) => {
                 match self.file_workspace.save_tag(id) {
-                    Err(e) => log::error!("Failed to save tag to store: {}", e),
+                    Err(e) => {
+                        log::error!("Failed to save tag to store: {}", e);
+                        return Self::tags_not_saved();
+                    }
                     // Already saved: nothing changed, so there is nothing to undo.
                     Ok(false) => {}
                     Ok(true) => {
@@ -3413,7 +3426,10 @@ impl FolderWorkspace {
                         tag_id: id,
                         was_starred,
                     })),
-                    Err(e) => log::error!("Failed to toggle star: {}", e),
+                    Err(e) => {
+                        log::error!("Failed to toggle star: {}", e);
+                        return Self::tags_not_saved();
+                    }
                 }
                 Task::none()
             }
@@ -3589,11 +3605,13 @@ impl FolderWorkspace {
         self.end_comment_session();
         let before = self.file_workspace.tag_list().order_state();
         let mut changed = true;
+        let mut notice = Task::none();
         match msg {
             sync_panel::Message::SyncUp => {
                 if let Err(e) = self.file_workspace.sync_selected_to_display() {
                     log::error!("SyncUp failed: {}", e);
                     changed = false;
+                    notice = Self::tags_not_saved();
                 } else {
                     self.file_workspace.tag_list_mut().set_sync_locked(true);
                 }
@@ -3612,7 +3630,7 @@ impl FolderWorkspace {
             self.history
                 .push(Box::new(SyncTagOrderCommand { before, after }));
         }
-        Task::none()
+        notice
     }
 
     fn perform_undo(&mut self) -> Task<Message> {
@@ -11972,6 +11990,33 @@ mod tests {
             !workspace.history.can_undo(),
             "no step from any of the keys"
         );
+    }
+
+    /// #633: a tag list change the folder's tag file does not take (a write-protected card) says
+    /// so instead of only logging it: here `.frename` is a folder, which no write can replace.
+    #[test]
+    fn a_tag_change_the_tag_file_does_not_take_says_so() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let pick = workspace
+            .file_workspace()
+            .tag_list()
+            .tag_id_by_name("pick")
+            .expect("pick is a built-in tag");
+        let folder = test_dir.target_file().parent().unwrap().to_path_buf();
+        let tag_file = folder.join(".frename");
+        let _ = std::fs::remove_file(&tag_file);
+        std::fs::create_dir(&tag_file).expect("a folder in the way");
+
+        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleStar(pick)));
+        assert_eq!(task.units(), 1, "a notice says the star was not saved");
+        assert!(!workspace.history.can_undo(), "no step for a change that did not happen");
+
+        // A tag file that takes the change: no notice.
+        std::fs::remove_dir(&tag_file).expect("out of the way");
+        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleStar(pick)));
+        assert_eq!(task.units(), 0);
+        assert!(workspace.history.can_undo());
     }
 
     /// #620: a tag search keeps the selection it hides; once the search lets go of the keys,

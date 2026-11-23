@@ -829,6 +829,7 @@ tag-grid-create = Creare «{ $tag }»
 tag-grid-dot-not-allowed = Non consentito in un tag: «.»
 tag-grid-in-out-not-allowed = Tag non consentito: attacco/stacco
 tag-not-usable = Il tag «{ $tag }» non può stare nel nome del file. Eliminarlo e crearne uno con un altro nome.
+tags-not-saved = I tag della cartella non sono stati salvati: la cartella è di sola lettura o il suo file dei tag è in uso. Questa modifica si perde quando la cartella viene riaperta.
 tag-grid-no-file = Aprire una clip per aggiungerle dei tag
 tag-grid-no-tags = Ancora nessun tag
 tag-grid-no-tags-hint = Digitare un nome e premere Invio per creare il primo.
