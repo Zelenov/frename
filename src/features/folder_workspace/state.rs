@@ -842,15 +842,23 @@ impl FolderWorkspace {
                 if typed && self.comment_session.is_none() {
                     self.comment_session = self.file_workspace.get_snapshot().map(|(_, s)| s);
                 }
-                self.file_workspace.apply_comment_action(action);
+                let saved = self.file_workspace.apply_comment_action(action);
+                let notice = if saved {
+                    Task::none()
+                } else {
+                    Self::tags_not_saved()
+                };
                 // The box grows with its text inside a scrollable: typing on the last line
                 // keeps that line in view.
                 if typed && self.file_workspace.comment_cursor_on_last_line() {
-                    iced::widget::operation::snap_to_end(iced::widget::Id::new(
-                        crate::features::file_workspace::view::COMMENT_SCROLLABLE_ID,
-                    ))
+                    Task::batch([
+                        iced::widget::operation::snap_to_end(iced::widget::Id::new(
+                            crate::features::file_workspace::view::COMMENT_SCROLLABLE_ID,
+                        )),
+                        notice,
+                    ])
                 } else {
-                    Task::none()
+                    notice
                 }
             }
             Message::CommentLayout(layout) => {
@@ -3134,14 +3142,14 @@ impl FolderWorkspace {
         ])
     }
 
-    /// The note for a stored tag that could not be checked: its name cannot be in a file name
-    /// (#421), from before such names were refused. It says what to do, so it stays long.
     /// A change to the folder's tag list that its tag file did not take (a write-protected card,
     /// a read-only share): it lasts only until the folder is opened again, so say so (#633).
     fn tags_not_saved() -> Task<Message> {
         Self::long_notice(fl!("tags-not-saved"))
     }
 
+    /// The note for a stored tag that could not be checked: its name cannot be in a file name
+    /// (#421), from before such names were refused. It says what to do, so it stays long.
     fn tag_not_usable(&self, id: frename_core::TagId) -> Task<Message> {
         let name = self
             .file_workspace
@@ -3266,7 +3274,13 @@ impl FolderWorkspace {
                         }
                         Err(e) => {
                             log::error!("Failed to create tag: {}", e);
-                            return Self::tags_not_saved();
+                            // A name that exists (a second click on Create) is not a refused save.
+                            let exists = e
+                                .downcast_ref::<std::io::Error>()
+                                .is_some_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists);
+                            if !exists {
+                                return Self::tags_not_saved();
+                            }
                         }
                     }
                 }
@@ -3344,7 +3358,8 @@ impl FolderWorkspace {
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
                     return Self::tags_not_saved();
-                } else if let Some((
+                }
+                if let Some((
                     name,
                     color,
                     was_stored,
@@ -3447,7 +3462,7 @@ impl FolderWorkspace {
                         .filter(|&&id| tag_list.get_tag(id).is_some_and(|t| t.is_checked()))
                         .count();
                     let from_index = self.file_workspace.tag_list().checked_index_of(did);
-                    self.file_workspace.reorder_tag_to_index(did, checked_idx);
+                    let saved = self.file_workspace.reorder_tag_to_index(did, checked_idx);
                     let to_index = self.file_workspace.tag_list().checked_index_of(did);
                     if let Some((fi, ti)) = from_index.zip(to_index).filter(|(f, t)| f != t) {
                         self.history.push(Box::new(ReorderTagCommand {
@@ -3455,6 +3470,9 @@ impl FolderWorkspace {
                             from_index: fi,
                             to_index: ti,
                         }));
+                    }
+                    if !saved {
+                        return Self::tags_not_saved();
                     }
                 }
                 Task::none()
@@ -3566,7 +3584,9 @@ impl FolderWorkspace {
             }
         } else if let (Some(did), Some(idx)) = (dragged_id, drop_index) {
             let from_index = self.file_workspace.tag_list().checked_index_of(did);
-            self.file_workspace.reorder_tag_to_index(did, idx);
+            if !self.file_workspace.reorder_tag_to_index(did, idx) {
+                notice = Self::tags_not_saved();
+            }
             // A click, or a drop past the end of the last chip, moves nothing: no undo step,
             // and Redo stays. The step records where the chip really ended up.
             let to_index = self.file_workspace.tag_list().checked_index_of(did);
@@ -11993,7 +12013,9 @@ mod tests {
     }
 
     /// #633: a tag list change the folder's tag file does not take (a write-protected card) says
-    /// so instead of only logging it: here `.frename` is a folder, which no write can replace.
+    /// so instead of only logging it: here `.frename` is a folder, which cannot be read or
+    /// replaced, so every save of the tag list fails.
+    /// Starring, saving a "+" tag, deleting and Sync Up each give the note and no undo step.
     #[test]
     fn a_tag_change_the_tag_file_does_not_take_says_so() {
         let test_dir = TestDirectory::new(1);
@@ -12003,19 +12025,28 @@ mod tests {
             .tag_list()
             .tag_id_by_name("pick")
             .expect("pick is a built-in tag");
+        let fresh = workspace
+            .file_workspace
+            .tag_list_mut()
+            .create_new_tag("fresh")
+            .expect("an unsaved tag");
         let folder = test_dir.target_file().parent().unwrap().to_path_buf();
         let tag_file = folder.join(".frename");
         let _ = std::fs::remove_file(&tag_file);
         std::fs::create_dir(&tag_file).expect("a folder in the way");
 
-        let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleStar(pick)));
-        assert_eq!(task.units(), 1, "a notice says the star was not saved");
-        assert!(
-            !workspace.history.can_undo(),
-            "no step for a change that did not happen"
-        );
+        for message in [
+            Message::TagPanel(tag_panel::Message::ToggleStar(pick)),
+            Message::TagPanel(tag_panel::Message::SaveTag(fresh)),
+            Message::TagPanel(tag_panel::Message::DeleteTag(pick)),
+            Message::SyncPanel(sync_panel::Message::SyncUp),
+        ] {
+            let what = format!("{message:?}");
+            assert_eq!(workspace.update(message).units(), 1, "a note for {what}");
+            assert!(!workspace.history.can_undo(), "no step for {what}");
+        }
 
-        // A tag file that takes the change: no notice.
+        // With a tag file that takes it, a star (here: taking back the one shown) gives no note.
         std::fs::remove_dir(&tag_file).expect("out of the way");
         let task = workspace.update(Message::TagPanel(tag_panel::Message::ToggleStar(pick)));
         assert_eq!(task.units(), 0);

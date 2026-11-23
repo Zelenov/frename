@@ -1,6 +1,6 @@
 # 0.291
 ## Fixed
-- A change to the folder's tags that cannot be saved (adding, deleting, starring or reordering a tag on a write-protected card or a read-only share) now says so in a note. Before, it worked until the folder was opened again and was then gone, with nothing said.
+- On a write-protected card or a read-only share, a change to the folder's tags that cannot be saved (adding, deleting, starring or reordering one) now says so in a note, instead of being lost without a word.
 
 # 0.290
 ## Fixed

@@ -184,12 +184,13 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Apply a text_editor action to the comment content and sync the string to tag_list.
-    pub fn apply_comment_action(&mut self, action: text_editor::Action) {
+    /// `false` when a commented tag it added could not be saved to the folder's tag file (#633).
+    pub fn apply_comment_action(&mut self, action: text_editor::Action) -> bool {
         self.comment_content.perform(action);
         let text = self.comment_content.text();
         // text() appends a trailing newline; strip it for storage.
         let trimmed = text.trim_end_matches('\n').to_string();
-        self.store_comment(trimmed);
+        self.store_comment(trimmed)
     }
 
     /// Show the tag list's comment in the comment box again, after an undo or redo changed it.
@@ -204,15 +205,17 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     /// description) goes from empty to non-empty the commented tag is checked, and when it is
     /// cleared the tag is unchecked; any other edit leaves the tag to the user. An AI
     /// description alone never counts. See [`frename_core::active_commented_tag`].
-    fn store_comment(&mut self, comment: String) {
+    /// `false` when the commented tag it added could not be saved (#633).
+    fn store_comment(&mut self, comment: String) -> bool {
         let was_empty = !block::has_editor_comment(self.tag_list.comment());
         let is_empty = !block::has_editor_comment(&comment);
         self.tag_list.set_comment(comment);
         if was_empty == is_empty {
-            return;
+            return true;
         }
-        if let Some(tag) = frename_core::active_commented_tag() {
-            self.tag_list.set_checked_by_name(&tag, !is_empty);
+        match frename_core::active_commented_tag() {
+            Some(tag) => self.tag_list.set_checked_by_name(&tag, !is_empty),
+            None => true,
         }
     }
 
@@ -261,6 +264,7 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
         &mut self,
         name: String,
     ) -> Result<TagId, Box<dyn std::error::Error + Send + Sync>> {
+        // An existing name is `AlreadyExists`; a tag file that refuses the save is another error.
         let id = self.tag_list.create_new_tag(name).ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
@@ -273,8 +277,8 @@ impl<S: StoredTagStore + Clone> FileWorkspace<S> {
     }
 
     /// Reorders tags: place `dragged_id` at `drop_index` (file name panel drag). Only reorder entry point.
-    pub fn reorder_tag_to_index(&mut self, dragged_id: TagId, drop_index: usize) {
-        self.tag_list.reorder_tag_to_index(dragged_id, drop_index);
+    pub fn reorder_tag_to_index(&mut self, dragged_id: TagId, drop_index: usize) -> bool {
+        self.tag_list.reorder_tag_to_index(dragged_id, drop_index)
     }
 
     /// Star a stored tag (pin to section 2). Delegates to TagList.
