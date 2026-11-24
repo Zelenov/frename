@@ -1,3 +1,7 @@
+# 0.298
+## Fixed
+- A clip that keeps its own spelling (`Food. Goat. clip.mp4`) shows and copies that name: `Ctrl+C` and the full name over its row in the list. The name box accepts a typed name that is free on disk though another clip spells the same name another way, and a typed name that only changes the spacing and could not be applied (Premiere holds the file) says it was not saved.
+
 # 0.295
 ## Fixed
 - A marker named with ` -- ` or ` — ` in it (`Take 3 -- nice light`) keeps its whole name when markers are kept in the comment, and through "Markers → comment" and "Comment → markers". Before, it came back as `Take 3`, and the rest went into its comment, which frename does not show. Such a name is now written in quotes in the comment and in copied or exported markers.

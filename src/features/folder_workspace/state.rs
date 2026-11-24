@@ -1086,7 +1086,9 @@ impl FolderWorkspace {
             return Task::none();
         };
         self.copied_tags = Some(snapshot.tags().to_vec());
-        if let Err(e) = self.set_clipboard_text(snapshot.file_name()) {
+        // The name the clip has, or gets when it is saved: its own spelling while it says the
+        // same (#647).
+        if let Err(e) = self.set_clipboard_text(snapshot.file_name_to_save()) {
             log::warn!("could not copy the file name to the clipboard: {e}");
         }
         Task::none()
@@ -2898,8 +2900,10 @@ impl FolderWorkspace {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_default();
-        let checked = check_new_file_name(&folder, current_name, typed)
-            .and_then(|()| check_new_file_name(&folder, current_name, &snapshot.file_name()));
+        let checked = check_new_file_name(&folder, current_name, typed).and_then(|()| {
+            // The name the save writes: the typed one while it says the same (#647).
+            check_new_file_name(&folder, current_name, &snapshot.file_name_to_save())
+        });
         if let Err(reason) = checked {
             if let Some(rename) = self.inline_rename.as_mut() {
                 rename.error = Some(reason);
@@ -7090,6 +7094,24 @@ mod tests {
         assert_eq!(
             rename(&mut workspace, "Food.  Goat..file_0.mp4"),
             "Food.  Goat..file_0.mp4"
+        );
+    }
+
+    /// #647: the name box checks the name the save writes, the typed one: `Food. Goat. b.mp4`
+    /// is free although another clip is `Food.Goat.b.mp4`, which only spells the same.
+    #[test]
+    fn a_typed_name_is_checked_as_typed_not_as_rebuilt() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        std::fs::write(test_dir.file_path("Food.Goat.b.mp4"), b"another clip").expect("write");
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "Food. Goat. b.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        assert!(
+            workspace.inline_rename.is_none(),
+            "accepted, not refused as taken"
         );
     }
 
