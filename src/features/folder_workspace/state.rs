@@ -9415,8 +9415,8 @@ mod tests {
         a_typed_marker_line_is_not_a_failed_write(frename_core::CommentStorage::InVideo);
     }
 
-    /// A name the marker line cannot hold as it is (` -- ` starts the marker's comment when read
-    /// back) is still a successful write: the file is not marked.
+    /// A name with a separator in it (` -- ` would start the marker's comment) is written in
+    /// quotes and kept whole (#643): a successful write, the file is not marked.
     #[test]
     fn a_marker_name_with_a_comment_separator_is_not_a_failed_write() {
         use crate::features::markers::Message as M;
@@ -9430,7 +9430,7 @@ mod tests {
         send_marker(&mut workspace, type_name("intro -- take 2"), 65_000);
         send_marker(&mut workspace, M::Close, 65_000);
         save_open_clip(&mut workspace);
-        assert!(comment_on_disk(&test_dir.target_file()).contains("intro"));
+        assert!(comment_on_disk(&test_dir.target_file()).contains("\"intro -- take 2\""));
         assert!(!workspace.unsaved_markers().contains_key(&id), "not marked");
     }
 
