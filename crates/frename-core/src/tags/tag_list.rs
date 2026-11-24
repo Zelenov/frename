@@ -830,6 +830,65 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         true
     }
 
+    /// Move `id` in the file name order to just after the tag named `after` (first when `None`
+    /// or when there is no such tag), and in the grid too when `also_grid` (a tag only in the
+    /// clip's name sits there after the same neighbour, as when the list is built). For an undone
+    /// delete whose recorded order keys a rebuilt list does not share (#636).
+    pub fn place_after_in_name(&mut self, id: TagId, after: Option<&str>, also_grid: bool) {
+        if !self.tags_by_id.contains_key(&id) {
+            return;
+        }
+        let anchor = after
+            .and_then(|after| self.tag_id_named_exactly(after))
+            .filter(|anchor| *anchor != id);
+        self.selected_tag_ids.insert_after(id, (), anchor.as_ref());
+        if also_grid {
+            self.display_tags_rebalanced |=
+                self.display_tag_ids.insert_after(id, (), anchor.as_ref());
+            let order = self.display_tag_ids.get_order(&id).unwrap_or(0);
+            if let Some(t) = self.tags_by_id.get_mut(&id) {
+                t.set_order(order);
+            }
+            self.rebuild_filtered_display_tag_ids();
+        }
+        self.update_is_selected_match_display_order();
+    }
+
+    /// Put every checked tag that is only in the clip's name back in the grid after its nearest
+    /// neighbour before it in the name that the grid holds (first when none), as building the
+    /// list does (step 5). After an undone delete of a folder tag in a rebuilt list, whose
+    /// "+" tags got keys of their own, this brings the name's and the grid's order together
+    /// again (#636).
+    pub fn place_name_only_tags_in_grid(&mut self) {
+        let name_order = self.checked_ids_in_selected_order();
+        let name_only: Vec<TagId> = name_order
+            .iter()
+            .copied()
+            .filter(|id| self.tags_by_id.get(id).is_some_and(|t| !t.is_stored()))
+            .collect();
+        for id in &name_only {
+            self.display_tag_ids.remove(id);
+        }
+        for (idx, id) in name_order.iter().enumerate() {
+            if !name_only.contains(id) {
+                continue;
+            }
+            let after = name_order[..idx]
+                .iter()
+                .rev()
+                .find(|pred| self.display_tag_ids.get(pred).is_some())
+                .copied();
+            self.display_tags_rebalanced |=
+                self.display_tag_ids.insert_after(*id, (), after.as_ref());
+            let order = self.display_tag_ids.get_order(id).unwrap_or(0);
+            if let Some(t) = self.tags_by_id.get_mut(id) {
+                t.set_order(order);
+            }
+        }
+        self.rebuild_filtered_display_tag_ids();
+        self.update_is_selected_match_display_order();
+    }
+
     /// Create a new unsaved tag with a specific id (for redo of CreateTagCommand so the UUID
     /// is stable across redo). Returns false if a tag with that name already exists.
     pub fn create_tag_with_id(&mut self, id: TagId, name: impl Into<String>) -> bool {
