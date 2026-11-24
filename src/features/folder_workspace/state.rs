@@ -7062,7 +7062,7 @@ mod tests {
     fn a_typed_name_is_written_as_typed_even_when_only_its_spacing_changes() {
         let test_dir = TestDirectory::new(1);
         let mut workspace = marker_workspace(&test_dir, 1);
-        let mut rename = |workspace: &mut FolderWorkspace, typed: &str| {
+        let rename = |workspace: &mut FolderWorkspace, typed: &str| {
             let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
             let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
                 typed.to_string(),
