@@ -1,6 +1,10 @@
-# 0.294
+# 0.295
 ## Fixed
 - A marker named with ` -- ` or ` — ` in it (`Take 3 -- nice light`) keeps its whole name when markers are kept in the comment, and through "Markers → comment" and "Comment → markers". Before, it came back as `Take 3`, and the rest went into its comment, which frename does not show. Such a name is now written in quotes in the comment and in copied or exported markers.
+
+# 0.294
+## Fixed
+- A clip you only looked at keeps its name on disk. Before, leaving it changed the spacing after its tags (`Food. Goat. clip.mp4` became `Food.Goat.clip.mp4`) or removed a doubled dot or extra spaces, although you changed nothing, so Premiere could lose the clip. A name you type is kept as typed. To change the spacing of existing names, run Apply tag spacing.
 
 # 0.293
 ## Fixed

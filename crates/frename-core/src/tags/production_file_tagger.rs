@@ -201,7 +201,7 @@ impl ProductionFileTagger {
                 ..not_saved()
             };
         }
-        let new_file_name = snapshot.file_name();
+        let new_file_name = snapshot.file_name_to_save();
         let new_path = path
             .parent()
             .map(|p| p.join(&new_file_name))
@@ -410,6 +410,37 @@ mod tests {
 
     fn points(snapshot: &FileSnapshot) -> (Option<f32>, Option<f32>) {
         (snapshot.segment_start(), snapshot.segment_end())
+    }
+
+    /// #642: saving a clip nobody changed keeps its name on disk, whatever spacing or stray
+    /// dots it has; a real change renames it to the name built now; a typed name that only
+    /// respells it is written as typed.
+    #[test]
+    fn a_clip_nobody_changed_keeps_its_name() {
+        let tagger = ProductionFileTagger;
+        for (test, name) in [
+            ("unchanged-spaced", "Food. Goat. clip.mov"),
+            ("unchanged-dots", "Foo.  Bar..bbb.mov"),
+        ] {
+            let path = clip_named(test, name);
+            let snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+            let saved = tagger.save_with(&snapshot, &path, TEXT);
+            assert_eq!(saved, path, "{name} keeps its name");
+            assert!(path.exists(), "{name} is still there");
+        }
+        let path = clip_named("changed-spaced", "Food. Goat. clip.mov");
+        let mut snapshot = tagger.parse_with(&path, &FolderInfo::default(), TEXT);
+        snapshot.set_tags(["Food"]);
+        let saved = tagger.save_with(&snapshot, &path, TEXT);
+        assert_eq!(file_name(&saved), snapshot.file_name(), "a change renames");
+        assert!(saved.exists());
+
+        // A name typed in the name box that only changes the spacing is written as typed.
+        let path = clip_named("typed-spacing", "Food. Goat. clip.mov");
+        let typed = FileSnapshot::parse("Food.Goat.clip.mov");
+        let saved = tagger.save_with(&typed, &path, TEXT);
+        assert_eq!(file_name(&saved), "Food.Goat.clip.mov", "as typed");
+        assert!(saved.exists());
     }
 
     #[test]
