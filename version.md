@@ -1,6 +1,6 @@
 # 0.300
 ## Fixed
-- Dragging the open clip into Premiere right after a typed name that only changes the spacing could not be applied (Premiere held the file) now saves it first. Before, the drag went ahead under the old name, and the clip was renamed later under Premiere.
+- When a name you typed that only changes the spacing was not saved because Premiere held the file, dragging the clip now saves it first; if the file is still held, the drag does not start. Before, Premiere got the clip under its old spelling, and its name changed later.
 
 # 0.298
 ## Fixed
