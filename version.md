@@ -1,6 +1,6 @@
 # 0.294
 ## Fixed
-- A marker named with ` -- ` or ` — ` in it (`Take 3 -- nice light`) keeps its whole name when markers are kept in the comment, and through "Markers → comment" and "Comment → markers". Before, it came back as `Take 3`, and the rest went into its comment, which frename does not show. Such a name is now written in quotes in the comment.
+- A marker named with ` -- ` or ` — ` in it (`Take 3 -- nice light`) keeps its whole name when markers are kept in the comment, and through "Markers → comment" and "Comment → markers". Before, it came back as `Take 3`, and the rest went into its comment, which frename does not show. Such a name is now written in quotes in the comment and in copied or exported markers.
 
 # 0.293
 ## Fixed

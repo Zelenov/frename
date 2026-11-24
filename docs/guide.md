@@ -414,7 +414,8 @@ Actions:
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show; a name in double quotes is read whole. A marker's color is a word in brackets after the time
+  shows and frename keeps but does not show. A name with ` — ` or ` -- ` in it is written in
+  double quotes and read back whole. A marker's color is a word in brackets after the time
   (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
   markers too (with their length) and stay in the description. One marker per moment: a comment
   line for a moment that already has a marker renames it. Running either of these actions on a
