@@ -197,10 +197,6 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         let stored_tags = store.get_stored_tags().unwrap_or_default();
         let color_mapping = store.get_tag_color_mapping().unwrap_or_default();
         let snapshot_tags = file_snapshot.tags();
-        let stored_values: HashSet<String> = stored_tags
-            .iter()
-            .map(|st| st.value().to_string())
-            .collect();
 
         // 1. Stored [all] → hash (checked = exists in snapshot, order = from db, starred = from db)
         let mut tags_by_id = HashMap::new();
@@ -217,12 +213,9 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             value_to_id.insert(st.value().to_string(), id);
         }
 
-        // 2. Snapshot [where value not in stored] → hash (checked = true, order = 0). A name the
+        // 2. Snapshot [where value has no tag yet] → hash (checked = true, order = 0). A name the
         //    clip repeats (rough.rough.clip.mp4) gets one tag, not an orphan copy (#637).
-        for name in snapshot_tags
-            .iter()
-            .filter(|name| !stored_values.contains(name.as_str()))
-        {
+        for name in snapshot_tags.iter() {
             if value_to_id.contains_key(name.as_str()) {
                 continue;
             }
@@ -806,8 +799,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// The id of the tag named exactly `name` (capitals included), saved or not. Unlike
     /// [`Self::tag_id_by_name`], a tag that differs only in capitals is never taken: a folder can
     /// hold "Rough" beside a clip's own "rough", and an undo step must find its own (#619).
-    /// The tags on screen are looked at first, in panel order, so the pick never depends on
-    /// `tags_by_id`'s order (#637).
+    /// A tag on screen is picked before any other of that name (panel order); the rest are looked
+    /// through after (#637).
     pub fn tag_id_named_exactly(&self, name: &str) -> Option<TagId> {
         self.display_tag_ids
             .iter()
@@ -1857,6 +1850,20 @@ mod tests {
         let id = list.tag_id_named_exactly("rough").expect("found");
         assert!(list.display_tag_ids.get(&id).is_some(), "the tag on screen");
         assert_eq!(list.tags_by_id.len(), list.display_tag_ids.iter().count());
+    }
+
+    /// With other tags of the same name that are not on screen, the one on screen is found
+    /// (#637): the pick does not depend on `tags_by_id`'s order.
+    #[test]
+    fn the_tag_on_screen_is_the_one_named_exactly() {
+        let mut list = TagList::new(FakeAppStorage::new(), FileSnapshot::parse("rough.clip.mp4"));
+        let on_screen = list.tag_id_named_exactly("rough").expect("found");
+        for _ in 0..50 {
+            let id = TagId::new();
+            let orphan = Tag::with_id_order_checked(id, "rough", 0, false, 0, true);
+            list.tags_by_id.insert(id, orphan);
+        }
+        assert_eq!(list.tag_id_named_exactly("rough"), Some(on_screen));
     }
 
     /// Paste (new_unlocked) must produce selected order = snapshot order regardless of DB order.

@@ -1,6 +1,6 @@
 # 0.302
 ## Fixed
-- A clip whose name repeats a tag (rough.rough.clip.mp4) no longer gets a hidden second copy of that tag. Before, Ctrl+Z on a step with that tag could sometimes do nothing.
+- Undo now works every time on a clip whose name repeats a tag (rough.rough.clip.mp4). Before, Ctrl+Z after ticking or moving that tag could sometimes do nothing.
 
 # 0.301
 ## Fixed
