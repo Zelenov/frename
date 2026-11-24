@@ -1,3 +1,7 @@
+# 0.302
+## Fixed
+- A clip whose name repeats a tag (rough.rough.clip.mp4) no longer gets a hidden second copy of that tag. Before, Ctrl+Z on a step with that tag could sometimes do nothing.
+
 # 0.301
 ## Fixed
 - After a crash, a name you typed that only changes the spacing and was not saved yet (Premiere held the file) is restored as typed. Before, frename said it restored the clip but kept the old spelling.
