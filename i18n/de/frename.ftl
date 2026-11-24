@@ -922,5 +922,5 @@ batch-ai-notes-too-long-reason = Die Notizen für die KI sind zu lang
 batch-option-notes-once = Zusätzliche Zeile für diesen Lauf
 batch-ai-notes-once-placeholder = z. B. In diesem Clip: Die Frau in Rot ist Ana
 file-workspace-ai-notes-on = Notizen an
-file-workspace-ai-notes-tip = Die Notizen für die KI gehen mit jeder KI-Anfrage in diesem Ordner mit. Bearbeiten unter „Mit KI beschreiben“ (Stapelaktionen): { $notes }
+file-workspace-ai-notes-tip = Die Notizen für die KI gehen mit jeder KI-Anfrage in diesem Ordner mit. Bearbeiten unter „{ batch-action-describe-ai }“ (Stapelaktionen): { $notes }
 batch-ai-notes-no-subtitles = Ihre Notizen scheinen sich auf Gesprochenes zu beziehen, und { $videos } haben keine Untertitel: Erzeugen Sie sie zuerst (Untertitel erzeugen), damit die KI die Worte lesen kann.

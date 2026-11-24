@@ -948,5 +948,5 @@ batch-ai-notes-too-long-reason = Beleške za veštačku inteligenciju su preduga
 batch-option-notes-once = Dodatni red za ovo pokretanje
 batch-ai-notes-once-placeholder = npr. U ovom klipu: žena u crvenom je Ana
 file-workspace-ai-notes-on = Beleške su uključene
-file-workspace-ai-notes-tip = Beleške za veštačku inteligenciju idu uz svaki zahtev u ovoj fascikli. Menjaju se u Opiši pomoću veštačke inteligencije (grupne radnje): { $notes }
+file-workspace-ai-notes-tip = Beleške za veštačku inteligenciju idu uz svaki zahtev u ovoj fascikli. Menjaju se u „{ batch-action-describe-ai }“ (grupne radnje): { $notes }
 batch-ai-notes-no-subtitles = Izgleda da se beleške odnose na ono što se govori, a { $videos } nemaju titlove: prvo ih napravite (Pravljenje titlova) da bi veštačka inteligencija mogla da čita reči.

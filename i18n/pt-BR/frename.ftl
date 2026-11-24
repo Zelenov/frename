@@ -940,5 +940,5 @@ batch-ai-notes-too-long-reason = As notas para a IA são longas demais
 batch-option-notes-once = Linha extra para esta execução
 batch-ai-notes-once-placeholder = p. ex. Neste clipe: a mulher de vermelho é a Ana
 file-workspace-ai-notes-on = Notas ativas
-file-workspace-ai-notes-tip = As notas para a IA acompanham cada solicitação à IA nesta pasta. Edite-as em Descrever com IA (ações em lote): { $notes }
+file-workspace-ai-notes-tip = As notas para a IA acompanham cada solicitação à IA nesta pasta. Edite-as em “{ batch-action-describe-ai }” (ações em lote): { $notes }
 batch-ai-notes-no-subtitles = Suas notas parecem tratar do que é dito, e { $videos } não têm legendas: gere-as primeiro (Gerar legendas) para que a IA possa ler as palavras.

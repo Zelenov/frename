@@ -884,5 +884,5 @@ batch-ai-notes-too-long-reason = The notes for the AI are too long
 batch-option-notes-once = Extra line for this run
 batch-ai-notes-once-placeholder = e.g. This clip: the woman in red is Ana
 file-workspace-ai-notes-on = Notes on
-file-workspace-ai-notes-tip = Notes for the AI go with every AI request in this folder. Edit them in Describe with AI (batch actions): { $notes }
+file-workspace-ai-notes-tip = Notes for the AI go with every AI request in this folder. Edit them in { batch-action-describe-ai } (batch actions): { $notes }
 batch-ai-notes-no-subtitles = Your notes seem to be about what is said, and { $videos } have no subtitles: generate them first (Generate subtitles), so the AI can read the words.
