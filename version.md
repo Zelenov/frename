@@ -1,3 +1,7 @@
+# 0.301
+## Fixed
+- After a crash, a name you typed that only changes the spacing and was not saved yet (Premiere held the file) is restored as typed. Before, frename said it restored the clip but kept the old spelling.
+
 # 0.300
 ## Fixed
 - When a name you typed that only changes the spacing was not saved because Premiere held the file, dragging the clip now saves it first; if the file is still held, the drag does not start. Before, Premiere got the clip under its old spelling, and its name changed later.
