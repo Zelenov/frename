@@ -284,7 +284,8 @@ The progress bar shows what you have noted about a clip:
   and frename tries again at your next change). With comments inside the video, they are written
   when you leave the clip (the recovery file holds them until then); a clip that cannot be written
   gets the red ✕ and writes its markers at the next save. Markers a comment line cannot hold as they
-  are (two at the same moment, a name with ` -- ` in it) stay in the video. A clip whose markers are
+  are (two at the same moment) stay in the video; a name with ` — ` or ` -- ` in it is written in
+  quotes (`0:05 — "Take 3 -- nice light"`) and comes back whole. A clip whose markers are
   still inside the video shows them; changing one moves them all into the comment.
 - **Ranges:** hold `F2` (or the pin button) while the clip plays to mark a stretch (`0:41–0:47 — Lion`); a
   band just above the bar shows it, and overlapping bands stack. Drag the handles at the ends of the current
@@ -413,7 +414,7 @@ Actions:
 - turn comment lines that start with a time (`03:24 — Take 3 — nice light`, `0:41-0:47 — Lion`)
   into markers, or copy the markers into the comment as such lines. What follows the name after
   a second ` — ` or ` -- ` (not a plain ` - `) goes into the marker's comment, which Premiere
-  shows and frename keeps but does not show. A marker's color is a word in brackets after the time
+  shows and frename keeps but does not show; a name in double quotes is read whole. A marker's color is a word in brackets after the time
   (`0:41 [red] — Lion`; green, the default, has none). The moments of an AI description become white
   markers too (with their length) and stay in the description. One marker per moment: a comment
   line for a moment that already has a marker renames it. Running either of these actions on a

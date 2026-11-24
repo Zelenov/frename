@@ -215,6 +215,8 @@ pub fn format_marker_time(ms: u64) -> String {
 /// The marker as one comment line: `<time>[–<time>][ [color]] — <name>[ — <comment>]`. The
 /// color is written only when it is not the default green and is one the picker offers (a
 /// color frename does not know has no name). Line breaks of the marker's comment become spaces.
+/// A name that would not read back as itself (it holds a ` — ` or ` -- `, or starts with one or
+/// with a quote) is written in double quotes, a quote in it doubled (#643).
 pub fn format_marker_line(marker: &Marker) -> String {
     let mut line = format_marker_time(marker.start_ms);
     if marker.duration_ms > 0 {
@@ -225,7 +227,7 @@ pub fn format_marker_line(marker: &Marker) -> String {
         line.push_str(&format!(" [{}]", marker.color.name().to_lowercase()));
     }
     line.push_str(" — ");
-    line.push_str(marker.name.trim());
+    line.push_str(&name_in_line(marker.name.trim()));
     let comment = marker
         .comment
         .split_whitespace()
@@ -351,11 +353,58 @@ pub(crate) fn parse_time(text: &str) -> Option<u64> {
     (s < 60).then_some(((h * 60 + m) * 60 + s) * 1000 + millis)
 }
 
+/// The separators between a marker line's name and its comment.
+const NAME_SEPARATORS: [&str; 2] = [" — ", " -- "];
+
+/// `name` as [`format_marker_line`] writes it: as it is, or in double quotes when it would not
+/// read back as itself.
+fn name_in_line(name: &str) -> String {
+    let splits = NAME_SEPARATORS.iter().any(|sep| name.contains(sep))
+        || name.starts_with("— ")
+        || name.starts_with("-- ")
+        || name.starts_with('"');
+    if splits {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    } else {
+        name.to_string()
+    }
+}
+
+/// A name in double quotes at the start of `rest` (a quote in it doubled), as
+/// [`name_in_line`] writes it, and what follows it: only when the closing quote ends the line
+/// or comes right before a separator, so a hand-written `"Quote" said` stays the name it was.
+fn quoted_name(rest: &str) -> Option<(String, &str)> {
+    let body = rest.strip_prefix('"')?;
+    let mut name = String::new();
+    let mut chars = body.char_indices().peekable();
+    while let Some((at, c)) = chars.next() {
+        if c != '"' {
+            name.push(c);
+            continue;
+        }
+        if chars.peek().is_some_and(|(_, next)| *next == '"') {
+            chars.next();
+            name.push('"');
+            continue;
+        }
+        let after = &body[at + 1..];
+        if after.trim().is_empty() {
+            return Some((name, ""));
+        }
+        return NAME_SEPARATORS
+            .iter()
+            .find_map(|sep| after.strip_prefix(sep))
+            .map(|comment| (name, comment));
+    }
+    None
+}
+
 /// Read a comment line written by [`format_marker_line`] or by hand (`03:24 — shaky`).
 /// `None` for a line that does not start with a time and a separator.
 ///
 /// The rest of the line is split on the first ` — ` or ` -- `: the name before it, the comment
-/// after it. A plain ` - ` does not split, since names often contain one.
+/// after it. A plain ` - ` does not split, since names often contain one. A name in double
+/// quotes (as [`format_marker_line`] writes one that holds a separator) is read whole.
 pub fn parse_marker_line(line: &str) -> Option<MarkerLine> {
     let caps = line_re().captures(line)?;
     let (start_ms, duration_ms) = captured_span(&caps)?;
@@ -365,11 +414,20 @@ pub fn parse_marker_line(line: &str) -> Option<MarkerLine> {
         None => MarkerColor::Green,
     };
     let rest = caps["rest"].trim();
+    if let Some((name, comment)) = quoted_name(rest) {
+        return Some(MarkerLine {
+            start_ms,
+            duration_ms,
+            name: name.trim().to_string(),
+            comment: comment.trim().to_string(),
+            color,
+        });
+    }
     let (name, comment) =
         if let Some(comment) = rest.strip_prefix("— ").or_else(|| rest.strip_prefix("-- ")) {
             ("", comment)
         } else {
-            [" — ", " -- "]
+            NAME_SEPARATORS
                 .iter()
                 .filter_map(|sep| rest.find(sep).map(|at| (at, sep.len())))
                 .min()
@@ -836,6 +894,52 @@ mod tests {
         marker
     }
 
+    /// #643: a name that holds a separator, starts with one or with a quote comes back as it
+    /// was typed, comment and all, through the comment and back.
+    #[test]
+    fn a_name_with_a_separator_or_quotes_comes_back_whole() {
+        for name in [
+            "Take 3 -- nice light",
+            "Take 3 — nice light",
+            "— opening",
+            "-- opening",
+            "\"Quote\" said",
+            "\"Quoted\"",
+            "a\" — b",
+            "plain",
+        ] {
+            for comment in ["", "the comment — with -- separators"] {
+                let mut marker = Marker::new(5_000);
+                marker.name = name.into();
+                marker.comment = comment.into();
+                let text = markers_into_comment("My note", std::slice::from_ref(&marker));
+                let (rest, back) = markers_from_comment(&text);
+                assert_eq!(rest, "My note", "{text}");
+                assert_eq!(back.len(), 1, "{text}");
+                assert_eq!(back[0].name, name, "{text}");
+                assert_eq!(back[0].comment, comment, "{text}");
+            }
+        }
+    }
+
+    /// #643: lines typed by hand read as before: a quote that is not a whole quoted name stays
+    /// part of the name, and the first separator still splits.
+    #[test]
+    fn hand_written_lines_with_quotes_read_as_before() {
+        let line = parse_marker_line("0:05 — \"Quote\" said — later").expect("a marker line");
+        assert_eq!(
+            (line.name.as_str(), line.comment.as_str()),
+            ("\"Quote\" said", "later")
+        );
+        let line = parse_marker_line("0:05 — Take 3 -- nice light").expect("a marker line");
+        assert_eq!(
+            (line.name.as_str(), line.comment.as_str()),
+            ("Take 3", "nice light")
+        );
+        let line = parse_marker_line("0:05 — \"Unclosed").expect("a marker line");
+        assert_eq!(line.name, "\"Unclosed");
+    }
+
     #[test]
     fn no_markers_make_no_text() {
         assert_eq!(markers_text(&[]), "");
@@ -1058,10 +1162,10 @@ mod tests {
         assert!(comment_kept_markers(&none, &none));
     }
 
-    /// What the line format cannot hold as it is: kept (the write took), not held exactly (the
-    /// markers must stay in the video).
+    /// A name with a separator in it, or one first, which the line format split before (#643):
+    /// written in quotes, it is kept and held exactly, so the markers need not stay in the video.
     #[test]
-    fn markers_the_line_format_changes_are_kept_but_not_held_exactly() {
+    fn markers_with_a_separator_in_their_name_are_held_exactly() {
         let cases = [
             vec![marker(65_000, 0, "intro -- take 2", "")],
             vec![marker(65_000, 0, "— dash first", "")],
@@ -1069,7 +1173,7 @@ mod tests {
         for markers in cases {
             let comment = markers_into_comment("", &markers);
             assert!(comment_kept_markers(&comment, &comment), "{markers:?}");
-            assert!(!comment_holds_markers(&comment, &markers), "{markers:?}");
+            assert!(comment_holds_markers(&comment, &markers), "{markers:?}");
         }
     }
 
@@ -1654,8 +1758,8 @@ mod tests {
         assert_eq!((changed, stable), (0, lines));
     }
 
-    /// A merged name holds ` — `, which also separates a line's name from its comment: its text
-    /// is kept through the round trip (as name and comment), and then stays as it is.
+    /// A merged name holds ` — `, which also separates a line's name from its comment: it is
+    /// written in quotes, comes back as the same name (#643), and then stays as it is.
     #[test]
     fn a_merged_names_text_survives_the_round_trip_and_then_stays_put() {
         let (merged, _) =
@@ -1665,7 +1769,7 @@ mod tests {
         assert_eq!(back.added.len(), 1);
         assert_eq!(
             (back.added[0].name.as_str(), back.added[0].comment.as_str()),
-            ("Lion", "Zebra")
+            ("Lion — Zebra", "")
         );
         let (again, _) = markers_to_comment("", &back.added);
         assert_eq!(again, line, "the same line again");
