@@ -3332,7 +3332,7 @@ impl FolderWorkspace {
                 let deleted_pos = filtered_before.iter().position(|&fid| fid == id);
 
                 let delete_data = self.file_workspace.tag_list().capture_delete_data(id);
-                let name_after = self.file_workspace.tag_list().checked_name_before(id);
+                let after = self.file_workspace.tag_list().checked_name_before(id);
                 if let Err(e) = self.file_workspace.remove_stored_tag_by_id(id) {
                     log::error!("Failed to delete tag: {}", e);
                 } else if let Some((
@@ -3354,7 +3354,7 @@ impl FolderWorkspace {
                         was_checked,
                         sort_order,
                         selected_order,
-                        name_after,
+                        after,
                     }));
                 }
 

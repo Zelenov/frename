@@ -837,7 +837,7 @@ mod tests {
         // Capture before deleting
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
-        let name_after = tag_list.checked_name_before(id);
+        let after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
         assert!(tag_list.get_tag(id).is_none());
 
@@ -851,7 +851,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after,
+            after,
         }));
 
         {
@@ -877,7 +877,7 @@ mod tests {
         let id = tag_list.checked_tag_id_at(1).unwrap();
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
-        let name_after = tag_list.checked_name_before(id);
+        let after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
         assert_eq!(names(&tag_list), ["A"]);
 
@@ -891,7 +891,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after,
+            after,
         }));
         let mut ctx = UndoContext {
             directory: &mut dir,
@@ -911,7 +911,7 @@ mod tests {
         let id = tag_list.checked_tag_id_at(0).unwrap();
         let (name, color_index, was_stored, was_starred, was_checked, sort_order, selected_order) =
             tag_list.capture_delete_data(id).unwrap();
-        let name_after = tag_list.checked_name_before(id);
+        let after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).unwrap();
 
         let mut history = History::new(50);
@@ -924,7 +924,7 @@ mod tests {
             was_checked,
             sort_order,
             selected_order,
-            name_after,
+            after,
         }));
 
         {
@@ -1750,7 +1750,7 @@ mod tests {
         let grid_before = tag_list.filtered_display_tag_ids().to_vec();
         let (name, color, stored, starred, checked, sort, selected) =
             tag_list.capture_delete_data(id).expect("data");
-        let name_after = tag_list.checked_name_before(id);
+        let after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).expect("deleted");
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
@@ -1762,7 +1762,7 @@ mod tests {
             was_checked: checked,
             sort_order: sort,
             selected_order: selected,
-            name_after,
+            after,
         }));
         let mut ctx = UndoContext {
             directory: &mut dir,
@@ -1787,7 +1787,7 @@ mod tests {
         let id = tag_list.tag_id_by_name("rough").expect("the name's tag");
         let (name, color, stored, starred, checked, sort, selected) =
             tag_list.capture_delete_data(id).expect("data");
-        let name_after = tag_list.checked_name_before(id);
+        let after = tag_list.checked_name_before(id);
         tag_list.remove_stored_tag_by_id(id).expect("deleted");
         let mut history = History::new(50);
         history.push(Box::new(DeleteTagCommand {
@@ -1799,7 +1799,7 @@ mod tests {
             was_checked: checked,
             sort_order: sort,
             selected_order: selected,
-            name_after,
+            after,
         }));
         let before = tag_list.file_snapshot();
         tag_list.set_comment("a note".to_string());
@@ -1812,10 +1812,20 @@ mod tests {
             directory: &mut dir,
             tag_list: &mut tag_list,
         };
+        assert!(ctx.tag_list.sync_locked(), "the order starts locked");
         history.undo(&mut ctx).expect("the comment");
         history.undo(&mut ctx).expect("the delete");
-        // Back in its place in the name, though the list was built again in between (#636).
+        // Back in its place in the name, though the list was built again in between (#636),
+        // in the grid too, and the lock stays on.
         assert_eq!(ctx.tag_list.file_snapshot().tags(), before_delete.tags());
+        let grid: Vec<String> = ctx
+            .tag_list
+            .filtered_display_tag_ids()
+            .iter()
+            .filter_map(|id| ctx.tag_list.get_tag(*id).map(|t| t.tag().to_string()))
+            .collect();
+        assert_eq!(grid, ["rough", "last"]);
+        assert!(ctx.tag_list.sync_locked(), "the lock stays on");
         // Built again from the name, which holds the tag again: a new id.
         let snapshot = ctx.tag_list.file_snapshot();
         ctx.tag_list.reinitialize_from_snapshot(snapshot);

@@ -21,7 +21,7 @@ pub struct DeleteTagCommand {
     /// it was first). A list built again in between (an undone comment, the clip opened again)
     /// has other order keys; when they do not put the tag back after this one, the undo does
     /// (#636).
-    pub name_after: Option<String>,
+    pub after: Option<String>,
 }
 
 impl<SD, ST> Undoable<SD, ST> for DeleteTagCommand
@@ -30,9 +30,6 @@ where
     ST: StoredTagStore + Clone,
 {
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        // Stale keys may briefly make the name's order differ from the grid's, which drops the
-        // lock; it comes back once the tag is in its place (#636).
-        let was_locked = ctx.tag_list.sync_locked();
         ctx.tag_list
             .restore_deleted_tag(
                 self.tag_id,
@@ -46,15 +43,9 @@ where
             )
             .map_err(|_| UndoError::TagNotFound(self.tag_id))?;
         // The keys are exact when the list was not built again: only a wrong place is moved.
-        if self.was_checked && ctx.tag_list.checked_name_before(self.tag_id) != self.name_after {
-            ctx.tag_list.place_after_in_name(
-                self.tag_id,
-                self.name_after.as_deref(),
-                !self.was_stored,
-            );
-            if was_locked {
-                ctx.tag_list.set_sync_locked(true);
-            }
+        if self.was_checked && ctx.tag_list.checked_name_before(self.tag_id) != self.after {
+            ctx.tag_list
+                .place_after_in_name(self.tag_id, self.after.as_deref(), !self.was_stored);
         }
         Ok(())
     }
