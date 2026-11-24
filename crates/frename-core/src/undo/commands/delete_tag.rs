@@ -30,7 +30,7 @@ where
     ST: StoredTagStore + Clone,
 {
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        let was_locked = ctx.tag_list.sync_locked();
+        let locked_now = ctx.tag_list.sync_locked();
         ctx.tag_list
             .restore_deleted_tag(
                 self.tag_id,
@@ -48,10 +48,13 @@ where
             ctx.tag_list
                 .place_after_in_name(self.tag_id, self.after.as_deref(), !self.was_stored);
             // A folder tag keeps its grid place, but the "+" tags of a rebuilt list have keys of
-            // their own: while the order was locked, the grid follows the name again, as before
-            // the delete, and the lock stays on.
-            if self.was_stored && was_locked && !ctx.tag_list.is_selected_match_display_order() {
+            // their own: while the list is locked, the grid follows the name again.
+            if self.was_stored && locked_now && !ctx.tag_list.is_selected_match_display_order() {
                 ctx.tag_list.place_name_only_tags_in_grid();
+            }
+            // Stale keys may have dropped the lock on the way; it stays on once the orders
+            // match again (`set_sync_locked` does nothing while they differ).
+            if locked_now {
                 ctx.tag_list.set_sync_locked(true);
             }
         }
