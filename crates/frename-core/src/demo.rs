@@ -157,6 +157,10 @@ pub struct DemoScenario {
     /// staged as a folder of that name.
     #[serde(default)]
     pub tag_file_blocked: bool,
+    /// Comments are stored in the video (XMP) instead of `.comment.txt`, so the first words of a
+    /// comment check the commented tag (#633).
+    #[serde(default)]
+    pub comments_in_video: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -396,7 +400,8 @@ fn recent_root(staged: &Path) -> PathBuf {
 }
 
 /// Store the app state the scenario shows: window at the top left with its size and panel
-/// widths, videos paused when opened, comments in `.comment.txt` (a staged comment is one), and
+/// widths, videos paused when opened, comments in `.comment.txt` (a staged comment is one; in
+/// the video with `comments_in_video`), and
 /// `file` in `folder` as the last session, so the app opens it on start. `monochrome_tags` turns
 /// on that setting; `ui_language` is the UI language setting (empty: the OS language).
 pub fn seed(
@@ -422,7 +427,11 @@ pub fn seed(
     store.set_app_settings(AppSettings {
         autoplay_video: false,
         monochrome_tags,
-        comment_storage: CommentStorage::TextFile,
+        comment_storage: if scenario.comments_in_video {
+            CommentStorage::InVideo
+        } else {
+            CommentStorage::TextFile
+        },
         ui_language: ui_language.to_string(),
         ..AppSettings::default()
     });
@@ -582,6 +591,8 @@ name = "pick.a.mp4"
         let scenario = DemoScenario::parse(&text).unwrap();
         assert!(scenario.tag_file_blocked);
         assert!(!DemoScenario::parse(MINIMAL).unwrap().tag_file_blocked);
+        let text = MINIMAL.replace("[[files]]", "comments_in_video = true\n[[files]]");
+        assert!(DemoScenario::parse(&text).unwrap().comments_in_video);
 
         let root =
             std::env::temp_dir().join(format!("frename-demo-blocked-{}", std::process::id()));
