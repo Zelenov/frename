@@ -927,7 +927,12 @@ mod tests {
             "—",
             "plain",
         ] {
-            for comment in ["", "the comment — with -- separators"] {
+            for comment in [
+                "",
+                "the comment — with -- separators",
+                "use this one\"",
+                "tight\" — check focus",
+            ] {
                 let mut marker = Marker::new(5_000);
                 marker.name = name.into();
                 marker.comment = comment.into();
@@ -937,6 +942,42 @@ mod tests {
                 assert_eq!(back.len(), 1, "{text}");
                 assert_eq!(back[0].name, name, "{text}");
                 assert_eq!(back[0].comment, comment, "{text}");
+            }
+        }
+    }
+
+    /// #643: every name and comment made of words, spaces, dashes and quotes (up to three
+    /// pieces each) comes back exactly as written.
+    #[test]
+    fn every_short_name_and_comment_comes_back_as_written() {
+        let pieces = ["a", " ", "—", "-", "\"", "--"];
+        let mut texts = vec![String::new()];
+        for _ in 0..3 {
+            let longer: Vec<String> = texts
+                .iter()
+                .flat_map(|t| pieces.iter().map(move |p| format!("{t}{p}")))
+                .collect();
+            texts.extend(longer);
+        }
+        texts.sort();
+        texts.dedup();
+        // What the line keeps: names trimmed, comments with single spaces.
+        let kept: Vec<String> = texts
+            .iter()
+            .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect();
+        for name in &kept {
+            for comment in &kept {
+                let mut marker = Marker::new(5_000);
+                marker.name = name.clone();
+                marker.comment = comment.clone();
+                let line = format_marker_line(&marker);
+                let read = parse_marker_line(&line).expect("a marker line");
+                assert_eq!(
+                    (read.name.as_str(), read.comment.as_str()),
+                    (name.as_str(), comment.as_str()),
+                    "{line}"
+                );
             }
         }
     }
