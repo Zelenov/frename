@@ -143,10 +143,11 @@ pub fn view<'a>(
     let item = container(item)
         .width(Length::Fill)
         .height(FOLDER_ROW_HEIGHT);
-    // The full name, since a long one is cut: beside the list on the right, not over the next row
-    // on the way to it (§8.13). The tooltips of the marks inside the row open on the left, so they
-    // never cover this one, which shows at the same time, however narrow the list.
-    tooltip::tip_text(item, snapshot.file_name(), Position::Right)
+    // The full name as on disk (#647), since a long one is cut: beside the list on the right, not
+    // over the next row on the way to it (§8.13). The tooltips of the marks inside the row open on
+    // the left, so they never cover this one, which shows at the same time, however narrow the
+    // list.
+    tooltip::tip_text(item, snapshot.file_name_to_save(), Position::Right)
 }
 
 /// The status column: `captions` when a subtitle file is next to the video; the lock when the job

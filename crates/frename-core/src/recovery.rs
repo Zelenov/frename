@@ -573,12 +573,21 @@ fn tidy_comment(comment: &str) -> String {
     lines.join("\n").trim().to_string()
 }
 
-/// Whether a save did what the snapshot `wanted` asked: the tags and name, the comment, and the
-/// in/out points read back from the file. A save that failed silently (a read-only clip, a name
-/// taken) differs in at least one of them. A snapshot whose comment was not read stays out. The
-/// points are compared only when `points_in_comment` (see [`crate::Saved::points_in_comment`]):
-/// points kept in
-/// the video read back other than set even when saved.
+/// Whether `saved` was read back under the name a save of `wanted` writes
+/// ([`FileSnapshot::file_name_to_save`]): a rename that only changes the spelling (the spacing
+/// after the tags, a stray dot) and did not happen shows only here (#647). ASCII case aside, as
+/// the extension is compared elsewhere; a snapshot read without a name counts as saved.
+pub fn saved_under_wanted_name(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
+    let read = saved.initial_file_name();
+    read.is_empty() || read.eq_ignore_ascii_case(&wanted.file_name_to_save())
+}
+
+/// Whether a save did what the snapshot `wanted` asked: the tags and name, under the name the
+/// save writes ([`saved_under_wanted_name`]), the comment, and the in/out points read back from
+/// the file. A save that failed silently (a read-only clip, a name taken) differs in at least one
+/// of them. A snapshot whose comment was not read stays out. The points are compared only when
+/// `points_in_comment` (see [`crate::Saved::points_in_comment`]): points kept in the video read
+/// back other than set even when saved.
 pub fn saved_what_was_wanted(
     wanted: &FileSnapshot,
     saved: &FileSnapshot,
@@ -589,6 +598,7 @@ pub fn saved_what_was_wanted(
     wanted.tags() == saved.tags()
         && wanted.name_without_extension() == saved.name_without_extension()
         && wanted.extension().eq_ignore_ascii_case(saved.extension())
+        && saved_under_wanted_name(wanted, saved)
         && (wanted.comment_loading()
             || saved.comment_loading()
             || tidy_comment(wanted.comment()) == tidy_comment(saved.comment()))
@@ -1513,6 +1523,24 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    /// #647: a save of a typed name that only changes the spacing after the tags is saved only
+    /// when the clip reads back under that name; the old spelling keeps the journal's entry.
+    #[test]
+    fn a_spacing_only_rename_is_saved_only_under_the_new_spelling() {
+        let wanted = FileSnapshot::parse("Food.Goat.clip.mp4");
+        let old_name = FileSnapshot::parse("Food. Goat. clip.mp4");
+        assert!(!saved_what_was_wanted(&wanted, &old_name, false));
+        let renamed = FileSnapshot::parse("Food.Goat.clip.mp4");
+        assert!(saved_what_was_wanted(&wanted, &renamed, false));
+        // A clip nobody changed is saved under its own spelling.
+        let kept = FileSnapshot::parse("Food. Goat. clip.mp4");
+        assert!(saved_what_was_wanted(&kept, &old_name, false));
+        // A snapshot read without a name is taken as saved under it.
+        let mut nameless = FileSnapshot::parse("Food. Goat. clip.mp4");
+        nameless.set_initial_file_name("");
+        assert!(saved_under_wanted_name(&wanted, &nameless));
     }
 
     /// #440: the journal and the #425 note agree on what was saved: tidied spacing and control

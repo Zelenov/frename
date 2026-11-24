@@ -2,6 +2,12 @@
 ## Fixed
 - French: « and » now stay with the quoted words when a line wraps, in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
 
+# 0.298
+## Fixed
+- `Ctrl+C` and the full name over a row give the clip's name as it is on disk (`Food. Goat. clip.mp4`), not `Food.Goat.clip.mp4`.
+- The name box accepts a name that is free on disk, even when another clip spells the same name another way.
+- A typed name that only changes the spacing and cannot be applied (Premiere holds the file) now says it was not saved.
+
 # 0.297
 ## Fixed
 - Settings → Saving: after you change "Space after each tag", the note says that file names change only when their tags do (the button below it changes the names you already have). Before, it said they change when saved, which no longer happens to a clip you only opened.
