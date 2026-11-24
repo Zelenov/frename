@@ -846,5 +846,5 @@ batch-ai-notes-too-long-reason = AI へのメモが長すぎます
 batch-option-notes-once = 今回のみの追記
 batch-ai-notes-once-placeholder = 例: このクリップ: 赤い服の女性はアナです
 file-workspace-ai-notes-on = メモあり
-file-workspace-ai-notes-tip = AI へのメモは、このフォルダーのすべての AI リクエストに添えられます。「AI で説明」（一括処理）で編集できます: { $notes }
+file-workspace-ai-notes-tip = AI へのメモは、このフォルダーのすべての AI リクエストに添えられます。「{ batch-action-describe-ai }」（一括処理）で編集できます: { $notes }
 batch-ai-notes-no-subtitles = メモは話されている内容についてのようですが、{ $videos }に字幕がありません。AI が言葉を読み取れるよう、先に字幕を生成してください（字幕を生成）。

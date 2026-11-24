@@ -1,3 +1,7 @@
+# 0.294
+## Fixed
+- In Russian, French, Italian and Serbian, the tip on "Notes on" in the comment box names the batch action as the action list does ("Describe with AI"), so you can find where to edit the notes. Russian says "AI" throughout, as in the rest of its text.
+
 # 0.293
 ## Fixed
 - On a write-protected card or a read-only share, a change to the folder's tags that cannot be saved (adding, deleting, starring or reordering one) now says so in a note, instead of being lost without a word.
