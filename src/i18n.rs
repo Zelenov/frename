@@ -629,7 +629,8 @@ mod tests {
     }
 
     /// #644: in every language the "Notes on" tip names the batch action as the action list
-    /// does, so the editor can find it.
+    /// does, so the editor can find it. The tips quote it by reference; this keeps a copy of
+    /// the name typed in by hand from drifting again.
     #[test]
     fn the_ai_notes_tip_names_the_describe_action_as_it_is_called() {
         let languages = Languages::new();
