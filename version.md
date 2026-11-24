@@ -1,6 +1,10 @@
-# 0.294
+# 0.296
 ## Fixed
 - In Russian, French, Italian and Serbian, the tip on "Notes on" in the comment box names the batch action as the action list does ("Describe with AI"), so you can find where to edit the notes. Russian says "AI" throughout, as in the rest of its text.
+
+# 0.294
+## Fixed
+- A clip you only looked at keeps its name on disk. Before, leaving it changed the spacing after its tags (`Food. Goat. clip.mp4` became `Food.Goat.clip.mp4`) or removed a doubled dot or extra spaces, although you changed nothing, so Premiere could lose the clip. A name you type is kept as typed. To change the spacing of existing names, run Apply tag spacing.
 
 # 0.293
 ## Fixed
