@@ -1,3 +1,7 @@
+# 0.294
+## Fixed
+- A clip you only looked at keeps its name on disk. Before, leaving it changed the spacing after its tags (`Food. Goat. clip.mp4` became `Food.Goat.clip.mp4`) or removed a doubled dot or extra spaces, although you changed nothing, so Premiere could lose the clip. A name you type is kept as typed. To change the spacing of existing names, run Apply tag spacing.
+
 # 0.293
 ## Fixed
 - On a write-protected card or a read-only share, a change to the folder's tags that cannot be saved (adding, deleting, starring or reordering one) now says so in a note, instead of being lost without a word.

@@ -432,7 +432,7 @@ fn restore_all_in(dir: &Path) -> Vec<Restored> {
         // wants another name than the save gave: the save held newer edits than the entry.
         if let Some(rename) = renamed.iter().find(|r| r.from == entry.path) {
             entry.path = rename.to.clone();
-            let wanted = entry.snapshot().file_name();
+            let wanted = entry.snapshot().file_name_to_save();
             if rename.to.file_name() != Some(std::ffi::OsStr::new(&wanted)) {
                 reports.push(Restored::Kept {
                     clip: entry.path.clone(),
@@ -1140,6 +1140,24 @@ mod tests {
 
         match restore_all_in(&journal).as_slice() {
             // Before #377 it was kept aside as `ClipGone`.
+            [Restored::Applied { path, .. }] => assert_eq!(path, &to),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// #642: the cut save gave the clip a name spelled another way than it builds now (a typed
+    /// `pick. wide. clip.mp4`, saved as typed): it is the name the entry wants, so it applies.
+    #[test]
+    fn an_entry_made_before_a_cut_rename_to_a_kept_spelling_finds_its_clip() {
+        let dir = temp_dir("rename-cut-entry-spelled");
+        let from = clip(&dir);
+        let to = dir.join("pick. wide. clip.mp4");
+        let journal = dir.join("recovery");
+        write_in(&journal, &entry_for(&from)).expect("write");
+        assert!(write_intent(&journal, &from, &to, false).is_some());
+        std::fs::rename(&from, &to).expect("rename");
+
+        match restore_all_in(&journal).as_slice() {
             [Restored::Applied { path, .. }] => assert_eq!(path, &to),
             other => panic!("{other:?}"),
         }
