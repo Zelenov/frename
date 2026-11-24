@@ -1,3 +1,7 @@
+# 0.300
+## Fixed
+- When a name you typed that only changes the spacing was not saved because Premiere held the file, dragging the clip now saves it first; if the file is still held, the drag does not start. Before, Premiere got the clip under its old spelling, and its name changed later.
+
 # 0.299
 ## Fixed
 - French: « and » now stay with the quoted words when a line wraps, in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
