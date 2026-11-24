@@ -201,11 +201,7 @@ impl ProductionFileTagger {
                 ..not_saved()
             };
         }
-        let current = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        let new_file_name = snapshot.file_name_for(current);
+        let new_file_name = snapshot.file_name_to_save();
         let new_path = path
             .parent()
             .map(|p| p.join(&new_file_name))
@@ -417,7 +413,8 @@ mod tests {
     }
 
     /// #642: saving a clip nobody changed keeps its name on disk, whatever spacing or stray
-    /// dots it has; a real change renames it to the name built now.
+    /// dots it has; a real change renames it to the name built now; a typed name that only
+    /// respells it is written as typed.
     #[test]
     fn a_clip_nobody_changed_keeps_its_name() {
         let tagger = ProductionFileTagger;
@@ -436,6 +433,13 @@ mod tests {
         snapshot.set_tags(["Food"]);
         let saved = tagger.save_with(&snapshot, &path, TEXT);
         assert_eq!(file_name(&saved), snapshot.file_name(), "a change renames");
+        assert!(saved.exists());
+
+        // A name typed in the name box that only changes the spacing is written as typed.
+        let path = clip_named("typed-spacing", "Food. Goat. clip.mov");
+        let typed = FileSnapshot::parse("Food.Goat.clip.mov");
+        let saved = tagger.save_with(&typed, &path, TEXT);
+        assert_eq!(file_name(&saved), "Food.Goat.clip.mov", "as typed");
         assert!(saved.exists());
     }
 

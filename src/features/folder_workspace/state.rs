@@ -7056,6 +7056,43 @@ mod tests {
         );
     }
 
+    /// #642: a name typed in the name box is written as typed, also when it only changes the
+    /// spacing after the tags or stray dots of the name the clip has.
+    #[test]
+    fn a_typed_name_is_written_as_typed_even_when_only_its_spacing_changes() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let mut rename = |workspace: &mut FolderWorkspace, typed: &str| {
+            let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+            let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+                typed.to_string(),
+            )));
+            let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+            flush_file_opened(workspace);
+            let _ = workspace.update(Message::MediaViewer(
+                crate::features::media_viewer::Message::Unloaded,
+            ));
+            let (id, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+            let _ = workspace.update(Message::FileUpdated { id, snapshot });
+            workspace
+                .open_clip_path()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            rename(&mut workspace, "Food. Goat. file_0.mp4"),
+            "Food. Goat. file_0.mp4"
+        );
+        assert_eq!(
+            rename(&mut workspace, "Food.Goat.file_0.mp4"),
+            "Food.Goat.file_0.mp4"
+        );
+        assert_eq!(
+            rename(&mut workspace, "Food.  Goat..file_0.mp4"),
+            "Food.  Goat..file_0.mp4"
+        );
+    }
+
     /// Ctrl+Alt+→ / ← turn the open video, each press one undo step; a file that has no
     /// rotation flag is left alone and nothing goes into the history.
     #[test]

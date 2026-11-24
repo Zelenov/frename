@@ -1278,6 +1278,23 @@ mod tests {
 
     /// #494: a tag name in other capitals is the same tag in any alphabet, not only A–Z: "лес"
     /// finds "Лес", is not created next to it, and checks it.
+    /// #642: the snapshot the open clip is saved from keeps the spelling it was opened under,
+    /// so leaving it unchanged keeps its name; a tag change builds the name anew.
+    #[test]
+    fn the_open_clip_is_saved_under_its_own_spelling_until_changed() {
+        let mut list = TagList::new(
+            FakeAppStorage::new(),
+            FileSnapshot::parse("Food. Goat. clip.mp4"),
+        );
+        assert_eq!(
+            list.file_snapshot().file_name_to_save(),
+            "Food. Goat. clip.mp4"
+        );
+        let goat = list.tag_id_by_name("Goat").expect("the name's tag");
+        list.toggle_by_id(goat);
+        assert_eq!(list.file_snapshot().file_name_to_save(), "Food.clip.mp4");
+    }
+
     #[test]
     fn a_tag_name_in_other_capitals_is_the_same_tag_in_any_alphabet() {
         let store = FakeAppStorage::new()

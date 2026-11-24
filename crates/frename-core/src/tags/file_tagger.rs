@@ -93,7 +93,9 @@ impl FileTagger {
     /// Rename the file at `path` to the tag spacing chosen now (see
     /// [`crate::set_space_after_tags`]). Returns the outcome like a move.
     pub fn respace_tags(path: &Path) -> MoveOutcome {
-        let snapshot = Self::parse(path, &FolderInfo::default()).respaced();
+        let mut snapshot = Self::parse(path, &FolderInfo::default());
+        // Built in the spacing chosen now, not kept as the file spells it.
+        snapshot.set_initial_file_name("");
         let current = path
             .file_name()
             .and_then(|n| n.to_str())

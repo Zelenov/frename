@@ -1,6 +1,6 @@
 # 0.294
 ## Fixed
-- A clip you only looked at keeps its name on disk. Before, leaving a clip named like `Food. Goat. clip.mp4` (or with a doubled dot or extra spaces) renamed it to `Food.Goat.clip.mp4` although nothing was changed, so Premiere could lose it. "Apply tag spacing" still renames on purpose.
+- A clip you only looked at keeps its name on disk. Before, leaving it changed the spacing after its tags (`Food. Goat. clip.mp4` became `Food.Goat.clip.mp4`) or removed a doubled dot or extra spaces, although you changed nothing, so Premiere could lose the clip. A name you type is kept as typed. To change the spacing of existing names, run Apply tag spacing.
 
 # 0.293
 ## Fixed
