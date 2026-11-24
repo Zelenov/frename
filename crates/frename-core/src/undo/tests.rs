@@ -1773,6 +1773,66 @@ mod tests {
         assert_eq!(ctx.tag_list.filtered_display_tag_ids(), grid_before);
     }
 
+    /// #636: a folder tag first in the name, then a "+" tag, with the order locked. Deleting the
+    /// folder tag, a comment, and Ctrl+Z twice (the second builds the list again, giving the
+    /// "+" tag a key of its own) gives back the name, the grid order and the lock.
+    #[test]
+    fn an_undone_delete_of_a_folder_tag_after_a_rebuild_keeps_the_lock() {
+        let mut tag_list =
+            TagList::new(FakeAppStorage::new(), snapshot_with_tags(&["S", "u", "T"]));
+        let mut dir = empty_directory();
+        for name in ["S", "T"] {
+            let id = tag_list.tag_id_by_name(name).expect("the name's tag");
+            tag_list.save_tag(id).expect("saved");
+        }
+        // As the folder is opened next time: S and T stored, u only in the name.
+        let snapshot = tag_list.file_snapshot();
+        tag_list.reinitialize_from_snapshot(snapshot);
+        let grid = |list: &TagList<FakeAppStorage>| -> Vec<String> {
+            list.filtered_display_tag_ids()
+                .iter()
+                .filter_map(|id| list.get_tag(*id).map(|t| t.tag().to_string()))
+                .collect()
+        };
+        assert!(tag_list.sync_locked(), "the order starts locked");
+        let grid_before = grid(&tag_list);
+        let id = tag_list.tag_id_by_name("S").expect("the folder tag");
+        let (name, color, stored, starred, checked, sort, selected) =
+            tag_list.capture_delete_data(id).expect("data");
+        assert!(stored);
+        let after = tag_list.checked_name_before(id);
+        tag_list.remove_stored_tag_by_id(id).expect("deleted");
+        let mut history = History::new(50);
+        history.push(Box::new(DeleteTagCommand {
+            tag_id: id,
+            tag_name: name,
+            color_index: color,
+            was_stored: stored,
+            was_starred: starred,
+            was_checked: checked,
+            sort_order: sort,
+            selected_order: selected,
+            after,
+        }));
+        let before = tag_list.file_snapshot();
+        tag_list.set_comment("a note".to_string());
+        let after = tag_list.file_snapshot();
+        history.push(Box::new(SetCommentCommand {
+            snapshot_before: before,
+            snapshot_after: after,
+        }));
+        let mut ctx = UndoContext {
+            directory: &mut dir,
+            tag_list: &mut tag_list,
+        };
+        history.undo(&mut ctx).expect("the comment");
+        history.undo(&mut ctx).expect("the delete");
+        assert_eq!(ctx.tag_list.file_snapshot().tags(), ["S", "u", "T"]);
+        assert_eq!(grid(ctx.tag_list), grid_before);
+        assert!(ctx.tag_list.is_selected_match_display_order());
+        assert!(ctx.tag_list.sync_locked(), "the lock stays on");
+    }
+
     /// #627, #636: deleting a "+" tag, then a comment; Ctrl+Z twice (the second builds the list
     /// again, giving the tag a new id) puts it back in its place, and Ctrl+Y twice: the redo of
     /// the delete finds the tag by name.
