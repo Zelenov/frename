@@ -1,3 +1,7 @@
+# 0.299
+## Fixed
+- French: « and » no longer end up alone at the end of a line in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
+
 # 0.297
 ## Fixed
 - Settings → Saving: after you change "Space after each tag", the note says that file names change only when their tags do (the button below it changes the names you already have). Before, it said they change when saved, which no longer happens to a clip you only opened.

@@ -485,6 +485,8 @@ mod tests {
                         .iter()
                         .flat_map(|mark| [format!(" {mark}"), format!("\u{a0}{mark}")]),
                 )
+                // A no-break space inside guillemets, never a plain one (#650).
+                .chain(["« ".to_string(), " »".to_string()])
                 .any(|bad| value.contains(&bad));
             if bad {
                 wrong.push(id.clone());
@@ -492,7 +494,7 @@ mod tests {
         }
         assert!(
             wrong.is_empty(),
-            "French spacing before : ; ! ? or % in {wrong:?}"
+            "French spacing before : ; ! ? or % or inside « » in {wrong:?}"
         );
     }
 
