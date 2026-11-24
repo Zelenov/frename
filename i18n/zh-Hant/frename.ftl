@@ -846,5 +846,5 @@ batch-ai-notes-too-long-reason = 給 AI 的備註太長
 batch-option-notes-once = 這次執行的額外一行
 batch-ai-notes-once-placeholder = 例如：這個片段：穿紅衣的女士是 Ana
 file-workspace-ai-notes-on = 備註已開啟
-file-workspace-ai-notes-tip = 給 AI 的備註會附在此資料夾的每個 AI 請求中。請在「用 AI 描述」（批次動作）中編輯：{ $notes }
+file-workspace-ai-notes-tip = 給 AI 的備註會附在此資料夾的每個 AI 請求中。請在「{ batch-action-describe-ai }」（批次動作）中編輯：{ $notes }
 batch-ai-notes-no-subtitles = 你的備註似乎與說話內容有關，但有 { $videos } 沒有字幕：請先產生字幕（產生字幕），AI 才能讀到說話內容。

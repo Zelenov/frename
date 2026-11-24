@@ -628,6 +628,28 @@ mod tests {
             .starts_with("Rename"));
     }
 
+    /// #644: in every language the "Notes on" tip names the batch action as the action list
+    /// does, so the editor can find it. The tips quote it by reference; this keeps a copy of
+    /// the name typed in by hand from drifting again.
+    #[test]
+    fn the_ai_notes_tip_names_the_describe_action_as_it_is_called() {
+        let languages = Languages::new();
+        for language in LANGUAGES {
+            languages.show(language);
+            let loader = languages.shown();
+            let action = loader.get("batch-action-describe-ai");
+            let tip = loader.get_args(
+                "file-workspace-ai-notes-tip",
+                std::collections::HashMap::from([("notes", "x")]),
+            );
+            assert!(
+                tip.contains(&action),
+                "{language}: {tip:?} lacks {action:?}"
+            );
+        }
+        languages.show("en");
+    }
+
     /// Both Serbian codes load their own file, even though they share a language subtag.
     #[test]
     fn the_two_serbian_scripts_read_their_own_text() {

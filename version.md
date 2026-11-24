@@ -1,3 +1,7 @@
+# 0.296
+## Fixed
+- In Russian, French, Italian and Serbian, the tip on "Notes on" in the comment box names the batch action as the action list does ("Describe with AI"), so you can find where to edit the notes. Russian says "AI" throughout, as in the rest of its text.
+
 # 0.295
 ## Fixed
 - A marker named with ` -- ` or ` — ` in it (`Take 3 -- nice light`) keeps its whole name when markers are kept in the comment, and through "Markers → comment" and "Comment → markers". Before, it came back as `Take 3`, and the rest went into its comment, which frename does not show. Such a name is now written in quotes in the comment and in copied or exported markers.
