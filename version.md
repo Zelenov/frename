@@ -1,3 +1,7 @@
+# 0.297
+## Fixed
+- Settings → Saving: after you change "Space after each tag", the note says that file names change only when their tags do (the button below it changes the names you already have). Before, it said they change when saved, which no longer happens to a clip you only opened.
+
 # 0.296
 ## Fixed
 - In Russian, French, Italian and Serbian, the tip on "Notes on" in the comment box names the batch action as the action list does ("Describe with AI"), so you can find where to edit the notes. Russian says "AI" throughout, as in the rest of its text.
