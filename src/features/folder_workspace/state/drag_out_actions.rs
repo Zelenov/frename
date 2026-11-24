@@ -153,7 +153,8 @@ impl FolderWorkspace {
     }
 
     /// Whether the open file `id` may have edits that are not on disk: its name on disk is not
-    /// the one its edits make, or its markers could not be written. Only decides whether to
+    /// the name a save of its edits writes (spelling included, #655), or its markers could not
+    /// be written. Only decides whether to
     /// save before the drag; whether that save worked is the save's own outcome.
     pub(super) fn open_file_unsaved(&self, id: FileId) -> bool {
         // An undone move brought it back with edits its file does not have (#611).
@@ -166,6 +167,10 @@ impl FolderWorkspace {
         let Some(on_disk) = self.directory.as_ref().and_then(|dir| dir.file_by_id(id)) else {
             return false;
         };
-        wanted.file_name() != on_disk.snapshot().file_name()
+        // The name the save writes, spelling included: a typed name that only changes the spacing
+        // and did not take is not on disk either (#655). The rebuilt names still catch what that
+        // check ignores: a change of case only, a snapshot read without a name.
+        !frename_core::recovery::saved_under_wanted_name(&wanted, on_disk.snapshot())
+            || wanted.file_name() != on_disk.snapshot().file_name()
     }
 }
