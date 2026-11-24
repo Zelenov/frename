@@ -153,6 +153,10 @@ pub struct DemoScenario {
     /// The folder's notes for the AI (#310), written to its `.frename` when staged.
     #[serde(default)]
     pub ai_notes: Option<String>,
+    /// The folder's `.frename` cannot be read or written, as on a write-protected card (#633):
+    /// staged as a folder of that name.
+    #[serde(default)]
+    pub tag_file_blocked: bool,
     /// The staged files, oldest first: the file list shows them in this order.
     pub files: Vec<DemoFile>,
 }
@@ -372,6 +376,13 @@ pub fn stage(
     if let Some(notes) = &scenario.ai_notes {
         crate::FolderTagStore::set_ai_notes(into, notes);
     }
+    if scenario.tag_file_blocked {
+        let tag_file = into.join(".frename");
+        if tag_file.is_file() {
+            std::fs::remove_file(&tag_file)?;
+        }
+        std::fs::create_dir_all(&tag_file)?;
+    }
     // The folders opened before: empty ones, except those that are meant to be gone.
     for recent in scenario.recent.iter().filter(|r| !r.missing) {
         std::fs::create_dir_all(recent_root(into).join(&recent.folder))?;
@@ -563,6 +574,27 @@ name = "pick.a.mp4"
         let text = MINIMAL.replace("[[files]]", "describing_unnamed = true\n[[files]]");
         assert!(DemoScenario::parse(&text).unwrap().describing_unnamed);
         assert!(!DemoScenario::parse(MINIMAL).unwrap().describing_unnamed);
+    }
+
+    #[test]
+    fn a_scenario_can_block_the_tag_file() {
+        let text = MINIMAL.replace("[[files]]", "tag_file_blocked = true\n[[files]]");
+        let scenario = DemoScenario::parse(&text).unwrap();
+        assert!(scenario.tag_file_blocked);
+        assert!(!DemoScenario::parse(MINIMAL).unwrap().tag_file_blocked);
+
+        let root =
+            std::env::temp_dir().join(format!("frename-demo-blocked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let clips = root.join("clips");
+        std::fs::create_dir_all(&clips).unwrap();
+        for file in &scenario.files {
+            std::fs::write(clips.join(&file.from), b"video").unwrap();
+        }
+        let staged = root.join("staged");
+        stage(&scenario, &root, &staged).unwrap();
+        assert!(staged.join(".frename").is_dir());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

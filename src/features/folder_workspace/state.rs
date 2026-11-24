@@ -12055,6 +12055,84 @@ mod tests {
         assert!(workspace.history.can_undo());
     }
 
+    /// #633: a drag in the file name panel while the order is locked saves the folder's order;
+    /// a tag file that does not take it says so.
+    #[test]
+    fn a_locked_reorder_the_tag_file_does_not_take_says_so() {
+        use crate::features::file_name_panel::Message as P;
+        let (test_dir, mut workspace) = open_folder(1);
+        let ids = workspace
+            .file_workspace()
+            .tag_list()
+            .filtered_display_tag_ids()
+            .to_vec();
+        for id in &ids[..2] {
+            let _ = workspace.update(Message::TagPanel(tag_panel::Message::ToggleTag(*id)));
+        }
+        workspace
+            .file_workspace
+            .tag_list_mut()
+            .set_sync_locked(true);
+        let tag_file = test_dir.target_file().parent().unwrap().join(".frename");
+        let _ = std::fs::remove_file(&tag_file);
+        std::fs::create_dir(&tag_file).expect("a folder in the way");
+
+        let second = ids[1];
+        assert_eq!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .checked_index_of(second),
+            Some(1)
+        );
+        let _ = workspace.update(Message::FileNamePanel(P::DragStarted {
+            tag_id: second,
+            initial_index: 0,
+        }));
+        let task = workspace.update(Message::FileNamePanel(P::DragEnded));
+        assert_eq!(
+            workspace
+                .file_workspace()
+                .tag_list()
+                .checked_index_of(second),
+            Some(0),
+            "the chip moved"
+        );
+        assert_eq!(task.units(), 1, "a note");
+    }
+
+    /// #633: the first words of a comment check the commented tag; when it is new and the tag
+    /// file does not take it, that says so.
+    #[test]
+    fn a_first_comment_whose_new_tag_is_not_saved_says_so() {
+        use iced::widget::text_editor::{Action, Edit};
+        let units_of_first_letter = |block: bool| {
+            let test_dir = TestDirectory::new(1);
+            let mut workspace = test_workspace();
+            let _ = workspace.update(Message::FolderLoaded {
+                directory: test_dir.directory(),
+                target_file: Some(test_dir.target_file()),
+            });
+            flush_file_opened(&mut workspace);
+            if block {
+                let tag_file = test_dir.target_file().parent().unwrap().join(".frename");
+                let _ = std::fs::remove_file(&tag_file);
+                std::fs::create_dir(&tag_file).expect("a folder in the way");
+            }
+            let task = workspace.update(Message::CommentAction(Action::Edit(Edit::Insert('g'))));
+            assert_eq!(
+                workspace.file_workspace().tag_list().file_snapshot().tags(),
+                ["Commented"],
+                "the commented tag is checked either way"
+            );
+            task.units()
+        };
+        assert_eq!(
+            units_of_first_letter(true),
+            units_of_first_letter(false) + 1
+        );
+    }
+
     /// #620: a tag search keeps the selection it hides; once the search lets go of the keys,
     /// Delete and Enter must not act on that tag out of sight.
     #[test]
