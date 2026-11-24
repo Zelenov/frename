@@ -166,6 +166,9 @@ impl FolderWorkspace {
         let Some(on_disk) = self.directory.as_ref().and_then(|dir| dir.file_by_id(id)) else {
             return false;
         };
-        wanted.file_name() != on_disk.snapshot().file_name()
+        // The name the save writes, spelling included: a typed name that only changes the spacing
+        // and did not take is not on disk either (#655).
+        !frename_core::recovery::saved_under_wanted_name(&wanted, on_disk.snapshot())
+            || wanted.file_name() != on_disk.snapshot().file_name()
     }
 }

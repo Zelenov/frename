@@ -10173,6 +10173,35 @@ mod tests {
         assert!(!workspace.open_file_unsaved(id), "saved");
     }
 
+    /// #655: a name that only changes the spacing after the tags and is not on disk yet (a typed
+    /// rename that did not take) makes the open file unsaved for a drag too.
+    #[test]
+    fn a_spelling_not_on_disk_makes_the_open_file_unsaved_for_a_drag() {
+        let test_dir = TestDirectory::new(1);
+        let mut workspace = marker_workspace(&test_dir, 1);
+        let id = file_id_at(&workspace, 0);
+        // On disk as `Food. Goat. file_0.mp4`.
+        let _ = workspace.update(Message::Folder(folder::Message::StartRename(0)));
+        let _ = workspace.update(Message::Folder(folder::Message::RenameInput(
+            "Food. Goat. file_0.mp4".to_string(),
+        )));
+        let _ = workspace.update(Message::Folder(folder::Message::SubmitRename));
+        flush_file_opened(&mut workspace);
+        let _ = workspace.update(Message::MediaViewer(
+            crate::features::media_viewer::Message::Unloaded,
+        ));
+        let (_, snapshot) = workspace.file_workspace().get_snapshot().expect("open");
+        let _ = workspace.update(Message::FileUpdated { id, snapshot });
+        assert!(!workspace.open_file_unsaved(id), "saved as typed");
+        // The editor wants `Food.Goat.file_0.mp4`, which the disk does not have yet.
+        let (_, mut wanted) = workspace.file_workspace().get_snapshot().expect("open");
+        wanted.set_initial_file_name("Food.Goat.file_0.mp4");
+        workspace
+            .file_workspace
+            .reinitialize_tags_from_snapshot(wanted);
+        assert!(workspace.open_file_unsaved(id), "a spelling not on disk");
+    }
+
     /// A folder with the open file's tags changed (not saved yet), for the drag-out tests.
     fn workspace_with_unsaved_tag(test_dir: &TestDirectory) -> FolderWorkspace {
         let mut workspace = test_workspace();
