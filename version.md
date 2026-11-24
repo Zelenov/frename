@@ -1,6 +1,6 @@
 # 0.299
 ## Fixed
-- French: « and » no longer end up alone at the end of a line in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
+- French: « and » now stay with the quoted words when a line wraps, in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
 
 # 0.297
 ## Fixed
