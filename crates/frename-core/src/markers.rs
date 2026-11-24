@@ -233,7 +233,7 @@ pub fn format_marker_line(marker: &Marker) -> String {
         .join(" ");
     let name = marker.name.trim();
     line.push_str(" — ");
-    if reads_plain(name, &comment) {
+    if read_rest(&plain_rest(name, &comment)) == (name.to_string(), comment.clone()) {
         line.push_str(name);
     } else {
         line.push_str(&format!("\"{}\"", name.replace('"', "\"\"")));
@@ -374,17 +374,31 @@ fn split_plain(rest: &str) -> (&str, &str) {
         .map_or((rest, ""), |(at, len)| (&rest[..at], &rest[at + len..]))
 }
 
-/// Whether `name` and `comment` written plainly (`name — comment`) read back as themselves.
-/// [`format_marker_line`] quotes a name only when they do not, and [`parse_marker_line`] takes
-/// a quoted name only then, so every line without such a name reads as it always did (#643).
-fn reads_plain(name: &str, comment: &str) -> bool {
-    let rest = if comment.is_empty() {
+/// The rest of a marker line with `name` and `comment` written plainly: `name — comment`.
+fn plain_rest(name: &str, comment: &str) -> String {
+    if comment.is_empty() {
         name.to_string()
     } else {
         format!("{name} — {comment}")
-    };
-    let (read_name, read_comment) = split_plain(rest.trim());
-    read_name.trim() == name && read_comment.trim() == comment
+    }
+}
+
+/// The name and comment in the rest of a marker line (after the time and color). A name in
+/// double quotes is read whole, without them, only when written plainly it would not read
+/// back as itself (it holds a separator, or starts or ends with one); any other line splits at
+/// its first separator, as it always did. [`format_marker_line`] quotes a name exactly when
+/// this would not give it back plainly, so every line it writes reads back as written (#643).
+fn read_rest(rest: &str) -> (String, String) {
+    let rest = rest.trim();
+    if let Some((name, comment)) = quoted_name(rest) {
+        let read = (name.trim().to_string(), comment.trim().to_string());
+        // Shorter than `rest`: the quotes are gone, so this ends.
+        if read_rest(&plain_rest(&read.0, &read.1)) != read {
+            return read;
+        }
+    }
+    let (name, comment) = split_plain(rest);
+    (name.trim().to_string(), comment.trim().to_string())
 }
 
 /// A name in double quotes at the start of `rest` (a quote in it doubled), as
@@ -430,18 +444,7 @@ pub fn parse_marker_line(line: &str) -> Option<MarkerLine> {
         Some(word) => MarkerColor::from_name(word.as_str())?,
         None => MarkerColor::Green,
     };
-    let rest = caps["rest"].trim();
-    // A quoted name is one only when written plainly it would not read back as itself.
-    let quoted = quoted_name(rest)
-        .map(|(name, comment)| (name.trim().to_string(), comment.trim()))
-        .filter(|(name, comment)| !reads_plain(name, comment));
-    let (name, comment) = match quoted {
-        Some((name, comment)) => (name, comment.to_string()),
-        None => {
-            let (name, comment) = split_plain(rest);
-            (name.trim().to_string(), comment.trim().to_string())
-        }
-    };
+    let (name, comment) = read_rest(&caps["rest"]);
     Some(MarkerLine {
         start_ms,
         duration_ms,
@@ -915,6 +918,9 @@ mod tests {
             "\"Quote\" said",
             "\"Quoted\"",
             "\"a -- b\"",
+            "\"— x\"",
+            "\"-- x\"",
+            "\"x —\"",
             "a\" — b",
             "x —",
             "x --",
@@ -935,8 +941,24 @@ mod tests {
         }
     }
 
-    /// #643: lines typed by hand read as before: quotes stay part of the name unless they hold
-    /// a name that needs them, and the first separator still splits.
+    /// #643: the line written for a name that needs quotes, a quote in it doubled.
+    #[test]
+    fn a_name_with_a_separator_is_written_in_quotes() {
+        let mut marker = Marker::new(5_000);
+        marker.name = "Take 3 -- nice light".into();
+        assert_eq!(
+            format_marker_line(&marker),
+            "0:05 — \"Take 3 -- nice light\""
+        );
+        marker.name = "a\" — b".into();
+        marker.comment = "c".into();
+        assert_eq!(format_marker_line(&marker), "0:05 — \"a\"\" — b\" — c");
+        marker.name = "plain".into();
+        assert_eq!(format_marker_line(&marker), "0:05 — plain — c");
+    }
+
+    /// #643: lines typed by hand whose name needs no quotes read as before (quotes stay part of
+    /// the name, the first separator splits); a quoted name holding a separator is read whole.
     #[test]
     fn hand_written_lines_with_quotes_read_as_before() {
         let line = parse_marker_line("0:05 — \"Quote\" said — later").expect("a marker line");
