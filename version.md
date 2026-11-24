@@ -1,3 +1,7 @@
+# 0.293
+## Fixed
+- On a write-protected card or a read-only share, a change to the folder's tags that cannot be saved (adding, deleting, starring or reordering one) now says so in a note, instead of being lost without a word.
+
 # 0.292
 ## Fixed
 - `Ctrl+Z` of moving a "+" tag (one only in the clip's file name) to another place in the name works after you left the clip or undid a later step, and so do `Ctrl+Y` of deleting one and `Ctrl+Z` of removing one that became a folder tag in between (as "commented" can when you write a comment). Before, nothing happened and no older step could be undone.

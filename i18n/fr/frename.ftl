@@ -824,6 +824,7 @@ tag-grid-create = Créer « { $tag } »
 tag-grid-dot-not-allowed = Interdit dans un tag : « . »
 tag-grid-in-out-not-allowed = Interdit comme tag : point d’entrée/sortie
 tag-not-usable = Le tag « { $tag } » ne peut pas figurer dans un nom de fichier. Le supprimer et en créer un sous un autre nom.
+tags-not-saved = Tags non enregistrés : le dossier est en lecture seule ou son fichier .frename est utilisé. Ce changement n’est pas conservé.
 tag-grid-no-file = Ouvrir un clip pour le tagger
 tag-grid-no-tags = Aucun tag pour l’instant
 tag-grid-no-tags-hint = Taper un nom et appuyer sur Entrée pour créer le premier.

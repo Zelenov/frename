@@ -396,7 +396,8 @@ impl<S: StoredTagStore + Clone> TagList<S> {
     /// Check or uncheck the tag named `name` (case-insensitive), as a click in the tag panel
     /// would. Checking a name the list does not have yet adds it as a new, checked, saved tag
     /// with the lowest priority: last in the tag panel and last among the file name's tags.
-    pub fn set_checked_by_name(&mut self, name: &str, checked: bool) {
+    /// `false` when that new tag could not be saved to the folder's tag file (#633).
+    pub fn set_checked_by_name(&mut self, name: &str, checked: bool) -> bool {
         let existing = self.tag_named(name).map(|t| (t.id(), t.is_checked()));
         match existing {
             Some((id, is_checked)) if is_checked != checked => {
@@ -407,16 +408,22 @@ impl<S: StoredTagStore + Clone> TagList<S> {
             // first, and this one belongs last.
             None if checked => {
                 let Some(id) = self.insert_new_tag(name, Position::Last) else {
-                    return;
+                    return true;
                 };
-                if let Err(e) = self.save_tag(id) {
-                    log::error!("TagList: could not save the new tag {name:?}: {e}");
-                }
+                let saved = match self.save_tag(id) {
+                    Ok(()) => true,
+                    Err(e) => {
+                        log::error!("TagList: could not save the new tag {name:?}: {e}");
+                        false
+                    }
+                };
                 // Now stored, it leaves the unsaved section at the top of the panel.
                 self.rebuild_filtered_display_tag_ids();
+                return saved;
             }
             None => {}
         }
+        true
     }
 
     /// Starred stored tags that match the search filter, sorted by name.
@@ -510,14 +517,16 @@ impl<S: StoredTagStore + Clone> TagList<S> {
 
     /// Reorders tags (file name panel): place `moved_id` at `index` in the checked (selected) list. Index is in the checked-only view; order is changed only in [selected_tag_ids].
     /// When `sync_locked` is true, the new order is immediately persisted to display/DB as well.
-    pub fn reorder_tag_to_index(&mut self, moved_id: TagId, index: usize) {
+    /// `false` when that persisting failed (a read-only tag file, #633); the new order stands in
+    /// the list.
+    pub fn reorder_tag_to_index(&mut self, moved_id: TagId, index: usize) -> bool {
         let was_locked = self.sync_locked;
         let checked = self.checked_ids_in_selected_order();
         if !checked.contains(&moved_id) {
-            return;
+            return true;
         }
         if checked.iter().position(|&id| id == moved_id) == Some(index) {
-            return;
+            return true;
         }
         self.selected_tag_ids.remove(&moved_id);
         let checked_after: Vec<TagId> = checked.into_iter().filter(|id| *id != moved_id).collect();
@@ -533,12 +542,15 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         } else {
             self.selected_tag_ids.insert_before(moved_id, (), None);
         }
+        let mut saved = true;
         if was_locked {
             if let Err(e) = self.sync_selected_to_display() {
                 log::error!("reorder locked: failed to persist display order: {}", e);
+                saved = false;
             }
         }
         self.update_is_selected_match_display_order();
+        saved
     }
 
     /// Build a FileSnapshot from checked (selected) tags in [selected_tag_ids] order (file name panel order).

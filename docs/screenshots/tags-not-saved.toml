@@ -1,0 +1,14 @@
+# #633: on a write-protected card, the first words of a comment check the "Commented" tag, which
+# the folder's tag file cannot keep: a note says so.
+source = "../../tests/folder"
+open = "skip.handheld.MVI_0402.mov"
+seek = 2.0
+window = [1440, 720]
+panels = [800, 340]
+comments_in_video = true
+type_in_comment = "Water in shot"
+tag_file_blocked = true
+
+[[files]]
+from = "file_example_MOV_480_700kB.mov"
+name = "skip.handheld.MVI_0402.mov"
