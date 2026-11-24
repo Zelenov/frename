@@ -958,5 +958,5 @@ batch-ai-notes-too-long-reason = Нотатки для ШІ задовгі
 batch-option-notes-once = Додатковий рядок для цього запуску
 batch-ai-notes-once-placeholder = наприклад: У цьому кліпі жінка в червоному — Ана
 file-workspace-ai-notes-on = Нотатки ввімкнено
-file-workspace-ai-notes-tip = Нотатки для ШІ йдуть з кожним запитом до ШІ в цій теці. Змінюються в «Описати за допомогою ШІ» (пакетні дії): { $notes }
+file-workspace-ai-notes-tip = Нотатки для ШІ йдуть з кожним запитом до ШІ в цій теці. Змінюються в «{ batch-action-describe-ai }» (пакетні дії): { $notes }
 batch-ai-notes-no-subtitles = Схоже, нотатки про те, що кажуть, а у { $videos } немає субтитрів: спершу створіть їх (Створити субтитри), щоб ШІ бачив слова.
