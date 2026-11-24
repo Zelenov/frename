@@ -43,8 +43,9 @@ static SPACE_AFTER_TAGS: AtomicBool = AtomicBool::new(false);
 
 /// Choose whether file names put a space after each tag: `Food. Goat. clip.mp4` instead of
 /// `Food.Goat.clip.mp4`. Names are read the same way either way; a file takes the new form
-/// when its tags, name or extension change, or through the batch action that respaces names:
-/// a clip nobody changed keeps its spelling (#642, [`FileSnapshot::file_name_to_save`]).
+/// when its tags change (a name typed in the name box is kept as typed), or through the batch
+/// action that respaces names: a clip nobody changed keeps its spelling (#642,
+/// [`FileSnapshot::file_name_to_save`]).
 pub fn set_space_after_tags(space: bool) {
     SPACE_AFTER_TAGS.store(space, Ordering::Relaxed);
 }
@@ -219,8 +220,8 @@ impl FileSnapshot {
         }
     }
 
-    /// Forget the spelling this snapshot was read from, so it is saved as [`Self::file_name`]
-    /// builds it: for "Apply tag spacing", and for a name the save just wrote.
+    /// Set the spelling this snapshot was read from (see [`Self::file_name_to_save`]); empty
+    /// means none, so it is saved as [`Self::file_name`] builds it ("Apply tag spacing").
     pub fn set_initial_file_name(&mut self, name: impl Into<String>) {
         self.initial_file_name = name.into();
     }
@@ -253,7 +254,7 @@ impl FileSnapshot {
     /// the name (`clip.in_00_00_07.out_00_00_12.mp4`) stay part of the name, so they are
     /// neither tags nor in/out points and the name round-trips unchanged. Such a part placed
     /// among the tags by hand is not a tag either: it joins the name, right after it, so that
-    /// file is renamed the next time it is saved.
+    /// file gets the built name when its tags change (see [`Self::file_name_to_save`]).
     pub fn parse(raw_name: &str) -> Self {
         let parts: Vec<&str> = raw_name
             .split('.')
