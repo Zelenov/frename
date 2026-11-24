@@ -192,14 +192,16 @@ pub fn files_to_drag(
 /// settings, and reading them back normalises them (an in point at 0 s reads as none).
 /// The save worked when `saved` is `wanted` as held (the in-memory backend of debug builds
 /// returns what it stored) or `wanted` as its name reads back (a tag with a dot, `v1.2`, reads
-/// back as two tags, `v1` and `2`, from a real file).
+/// back as two tags, `v1` and `2`, from a real file), under the name the save writes: a typed
+/// name that only changes the spacing and was not taken failed too (#647).
 pub fn save_failed(wanted: &FileSnapshot, saved: &FileSnapshot) -> bool {
     let same_name = |a: &FileSnapshot| {
         a.tags() == saved.tags()
             && a.name_without_extension() == saved.name_without_extension()
             && a.extension().eq_ignore_ascii_case(saved.extension())
     };
-    !same_name(wanted) && !same_name(&FileSnapshot::parse(&wanted.file_name()))
+    (!same_name(wanted) && !same_name(&FileSnapshot::parse(&wanted.file_name())))
+        || !frename_core::recovery::saved_under_wanted_name(wanted, saved)
 }
 
 /// `path` made absolute against the current directory (without touching the disk), as the
@@ -363,6 +365,17 @@ mod tests {
         assert!(!save_failed(&wanted, &read_back), "the rename happened");
         let old_name = FileSnapshot::parse("clip.mp4");
         assert!(save_failed(&wanted, &old_name), "the rename did not happen");
+    }
+
+    /// #647: a typed name that only changes the spacing after the tags failed when the file
+    /// reads back under its old spelling, and worked when it reads back as typed.
+    #[test]
+    fn a_spacing_only_rename_that_did_not_happen_is_a_failure() {
+        let wanted = FileSnapshot::parse("Food.Goat.clip.mp4");
+        let old_name = FileSnapshot::parse("Food. Goat. clip.mp4");
+        assert!(save_failed(&wanted, &old_name), "the rename did not happen");
+        let renamed = FileSnapshot::parse("Food.Goat.clip.mp4");
+        assert!(!save_failed(&wanted, &renamed), "the rename happened");
     }
 
     #[test]
