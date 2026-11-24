@@ -42,8 +42,9 @@ pub(crate) fn is_name_in_out_part(part: &str) -> bool {
 static SPACE_AFTER_TAGS: AtomicBool = AtomicBool::new(false);
 
 /// Choose whether file names put a space after each tag: `Food. Goat. clip.mp4` instead of
-/// `Food.Goat.clip.mp4`. Names are read the same way either way; files take the new form
-/// when they are next saved.
+/// `Food.Goat.clip.mp4`. Names are read the same way either way; a file takes the new form
+/// when a save changes its name, or through the batch action that respaces names: a clip
+/// nobody changed keeps its name (#642).
 pub fn set_space_after_tags(space: bool) {
     SPACE_AFTER_TAGS.store(space, Ordering::Relaxed);
 }
@@ -76,6 +77,9 @@ pub struct FileSnapshot {
     /// still loading: a folder scan defers that. Until it is loaded the snapshot does not know
     /// them, so saving it leaves them as they are in the file.
     comment_loading: bool,
+    /// Set by [`Self::respaced`]: the save writes the name in the tag spacing chosen now, even
+    /// when the file's name says the same in another spelling (see [`Self::file_name_for`]).
+    respace: bool,
 }
 
 impl FileSnapshot {
@@ -96,6 +100,7 @@ impl FileSnapshot {
             markers: None,
             marker_count: 0,
             comment_loading: false,
+            respace: false,
         }
     }
 
@@ -202,6 +207,27 @@ impl FileSnapshot {
         self.file_name_with(space_after_tags())
     }
 
+    /// The name to save this snapshot under when the file is called `current` now: `current`
+    /// itself when it already says the same (the same tags, name and extension; only the
+    /// spacing after a tag's dot, a stray dot or extra spaces differ), so a clip nobody changed
+    /// keeps its name on disk (#642); [`Self::file_name`] otherwise, and always for a
+    /// [respaced](Self::respaced) snapshot.
+    pub fn file_name_for(&self, current: &str) -> String {
+        let wanted = self.file_name();
+        if !self.respace && Self::parse(current).file_name() == wanted {
+            current.to_string()
+        } else {
+            wanted
+        }
+    }
+
+    /// This snapshot, saved in the tag spacing chosen now whatever the file's name spells: for
+    /// the batch action that adds or removes the space after each tag.
+    pub fn respaced(mut self) -> Self {
+        self.respace = true;
+        self
+    }
+
     /// [`Self::file_name`] with the tag spacing given explicitly.
     pub fn file_name_with(&self, space_after_tags: bool) -> String {
         let tag_separator = if space_after_tags { ". " } else { "." };
@@ -273,6 +299,34 @@ impl FileSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #642: a name that says the same in another spelling is kept; a changed one, or a
+    /// respaced snapshot, gets the name built now.
+    #[test]
+    fn a_name_that_says_the_same_is_kept_unless_respaced() {
+        for current in [
+            "Food. Goat. clip.mp4",
+            "Food.  Goat..clip.mp4",
+            "Food.Goat.clip.mp4",
+        ] {
+            let snapshot = FileSnapshot::parse(current);
+            assert_eq!(snapshot.file_name_for(current), current, "{current}");
+            assert_eq!(
+                snapshot.clone().respaced().file_name_for(current),
+                snapshot.file_name(),
+                "{current}"
+            );
+        }
+        let mut changed = FileSnapshot::parse("Food. Goat. clip.mp4");
+        changed.set_tags(["Food"]);
+        assert_eq!(
+            changed.file_name_for("Food. Goat. clip.mp4"),
+            changed.file_name()
+        );
+        // Another case is another name.
+        let upper = FileSnapshot::parse("FOOD.Goat.clip.mp4");
+        assert_eq!(upper.file_name_for("Food.Goat.clip.mp4"), upper.file_name());
+    }
 
     #[test]
     fn a_space_after_each_tag_is_written_on_request_and_read_either_way() {

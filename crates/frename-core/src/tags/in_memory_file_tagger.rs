@@ -34,7 +34,11 @@ impl FileTaggerBackend for InMemoryFileTagger {
     }
 
     fn save(&self, snapshot: &FileSnapshot, path: &Path) -> PathBuf {
-        let new_file_name = snapshot.file_name();
+        let current = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let new_file_name = snapshot.file_name_for(current);
         let new_path = path
             .parent()
             .map(|p| p.join(&new_file_name))
@@ -64,7 +68,11 @@ impl FileTaggerBackend for InMemoryFileTagger {
     /// [`Self::save`], and whether a sidecar's name was too long for the new name (#526), as
     /// production reports it.
     fn save_reporting(&self, snapshot: &FileSnapshot, path: &Path) -> super::Saved {
-        let wanted = path.with_file_name(snapshot.file_name());
+        let current = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let wanted = path.with_file_name(snapshot.file_name_for(current));
         let name_too_long = super::file_tagger::sidecar_name_too_long(path, &wanted).is_some();
         super::Saved {
             path: self.save(snapshot, path),

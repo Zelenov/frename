@@ -93,7 +93,7 @@ impl FileTagger {
     /// Rename the file at `path` to the tag spacing chosen now (see
     /// [`crate::set_space_after_tags`]). Returns the outcome like a move.
     pub fn respace_tags(path: &Path) -> MoveOutcome {
-        let snapshot = Self::parse(path, &FolderInfo::default());
+        let snapshot = Self::parse(path, &FolderInfo::default()).respaced();
         let current = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -633,6 +633,24 @@ mod tests {
             MoveOutcome::NothingToMove
         );
         let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// #642: a save of a clip nobody changed keeps its spelling; the batch action that
+    /// respaces names still renames it. (The space setting is off in tests.)
+    #[test]
+    fn only_respacing_renames_a_name_that_says_the_same() {
+        let path = Path::new("/frename-respace-test/Food. Goat. clip.mp4");
+        let kept = FileTagger::save(&FileSnapshot::parse("Food. Goat. clip.mp4"), path);
+        assert_eq!(kept, path);
+
+        let MoveOutcome::Moved(respaced) = FileTagger::respace_tags(path) else {
+            panic!("the batch action renames it");
+        };
+        assert!(respaced.ends_with("Food.Goat.clip.mp4"), "{respaced:?}");
+        assert!(matches!(
+            FileTagger::respace_tags(&respaced),
+            MoveOutcome::NothingToMove
+        ));
     }
 
     /// Core tests run with the default in-memory backend, so paths need not exist.
