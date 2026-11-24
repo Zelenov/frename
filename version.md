@@ -1,3 +1,7 @@
+# 0.299
+## Fixed
+- French: « and » now stay with the quoted words when a line wraps, in three messages (the Gemini hint in Settings, an unreadable time, a search with no result).
+
 # 0.298
 ## Fixed
 - `Ctrl+C` and the full name over a row give the clip's name as it is on disk (`Food. Goat. clip.mp4`), not `Food.Goat.clip.mp4`.

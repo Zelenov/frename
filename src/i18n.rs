@@ -454,10 +454,11 @@ mod tests {
 
     /// #452, #454: French puts a no-break space (U+00A0) before ":" and a narrow one (U+202F)
     /// before ";", "!", "?" and "%", as the file's header says, so the mark never wraps to a line
-    /// on its own. In the list of forbidden characters, only the label before the list is checked:
-    /// the list holds ":" and "?" themselves.
+    /// on its own; #650: and a no-break space, never a plain one, inside «guillemets». In the
+    /// list of forbidden characters, only the label before the list is checked: the list holds
+    /// ":" and "?" themselves.
     #[test]
-    fn french_has_the_right_space_before_its_punctuation() {
+    fn french_has_the_right_spaces_around_its_punctuation() {
         let path = i18n_dir().join("fr/frename.ftl");
         let text = std::fs::read_to_string(&path).unwrap();
         let mut id = String::new();
@@ -485,6 +486,8 @@ mod tests {
                         .iter()
                         .flat_map(|mark| [format!(" {mark}"), format!("\u{a0}{mark}")]),
                 )
+                // A no-break space inside guillemets, never a plain one (#650).
+                .chain(["« ", " »"].map(String::from))
                 .any(|bad| value.contains(&bad));
             if bad {
                 wrong.push(id.clone());
@@ -492,7 +495,7 @@ mod tests {
         }
         assert!(
             wrong.is_empty(),
-            "French spacing before : ; ! ? or % in {wrong:?}"
+            "French spacing before : ; ! ? or % or inside « » in {wrong:?}"
         );
     }
 
