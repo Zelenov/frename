@@ -2900,10 +2900,9 @@ impl FolderWorkspace {
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_default();
-        let checked = check_new_file_name(&folder, current_name, typed).and_then(|()| {
-            // The name the save writes: the typed one while it says the same (#647).
-            check_new_file_name(&folder, current_name, &snapshot.file_name_to_save())
-        });
+        // The save writes the typed name as typed (`file_name_to_save`, #642), so that is the
+        // name to check, not the one built from its parts (#647).
+        let checked = check_new_file_name(&folder, current_name, typed);
         if let Err(reason) = checked {
             if let Some(rename) = self.inline_rename.as_mut() {
                 rename.error = Some(reason);

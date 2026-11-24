@@ -1,6 +1,8 @@
 # 0.298
 ## Fixed
-- A clip that keeps its own spelling (`Food. Goat. clip.mp4`) shows and copies that name: `Ctrl+C` and the full name over its row in the list. The name box accepts a typed name that is free on disk though another clip spells the same name another way, and a typed name that only changes the spacing and could not be applied (Premiere holds the file) says it was not saved.
+- `Ctrl+C` and the full name over a row give the clip's name as it is on disk (`Food. Goat. clip.mp4`), not `Food.Goat.clip.mp4`.
+- The name box accepts a name that is free on disk, even when another clip spells the same name another way.
+- A typed name that only changes the spacing and cannot be applied (Premiere holds the file) now says it was not saved.
 
 # 0.295
 ## Fixed
