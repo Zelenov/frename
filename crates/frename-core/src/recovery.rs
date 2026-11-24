@@ -88,6 +88,23 @@ pub struct Entry {
     segment_start: Option<f32>,
     segment_end: Option<f32>,
     markers: Option<Vec<StoredMarker>>,
+    /// The name the edits spell when it is not the clip's name on disk: a typed name that only
+    /// changes the spacing after the tags and has not taken yet (#656). Empty otherwise, and in
+    /// entries written before it existed.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    spelling: String,
+}
+
+/// The name `snapshot` spells when it is not the name of `path` on disk, else empty: what an
+/// [`Entry`] keeps as its `spelling`.
+fn spelling_of(path: &Path, snapshot: &FileSnapshot) -> String {
+    let on_disk = path.file_name().map(|n| n.to_string_lossy());
+    let spelled = snapshot.initial_file_name();
+    if spelled.is_empty() || on_disk.as_deref() == Some(spelled) {
+        String::new()
+    } else {
+        spelled.to_string()
+    }
 }
 
 impl Entry {
@@ -113,6 +130,7 @@ impl Entry {
             markers: snapshot
                 .markers()
                 .map(|markers| markers.iter().map(StoredMarker::new).collect()),
+            spelling: spelling_of(path, snapshot),
         }
     }
 
@@ -135,15 +153,20 @@ impl Entry {
                 }
                 _ => false,
             }
+            && self.spelling == spelling_of(&self.path, snapshot)
     }
 
-    /// The state the entry holds, as a snapshot of the clip it was made on.
+    /// The state the entry holds, as a snapshot of the clip it was made on, spelled as the
+    /// edits spell it (#656).
     fn snapshot(&self) -> FileSnapshot {
-        let initial = self
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let initial = if self.spelling.is_empty() {
+            self.path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        } else {
+            self.spelling.clone()
+        };
         let mut snapshot = FileSnapshot::new(
             self.tags.clone(),
             self.name.clone(),
@@ -170,6 +193,7 @@ impl Entry {
             && self.segment_start == other.segment_start
             && self.segment_end == other.segment_end
             && self.markers == other.markers
+            && self.spelling == other.spelling
     }
 
     /// Whether the clip is still the one the entry was made on: same size and modification
@@ -936,6 +960,37 @@ mod tests {
         marker.color = MarkerColor::Red;
         snapshot.set_markers(Some(vec![marker]));
         Entry::new(path, &snapshot).expect("entry")
+    }
+
+    /// #656: an entry keeps a typed spelling that has not taken (only the spacing differs from
+    /// the name on disk), and a restore applies it; an entry without one reads as before.
+    #[test]
+    fn an_entry_keeps_and_restores_a_typed_spelling() {
+        let dir = temp_dir("typed-spelling");
+        let path = dir.join("Food. Goat. clip.mp4");
+        std::fs::write(&path, b"video").expect("clip");
+        let typed = FileSnapshot::parse("Food.Goat.clip.mp4");
+        let entry = Entry::new(&path, &typed).expect("entry");
+        assert!(entry.same_state_as(&typed));
+        assert!(
+            !entry.same_state_as(&FileSnapshot::parse("Food. Goat. clip.mp4")),
+            "the spelling on disk is another state"
+        );
+        // Written before the field existed: no spelling, the name on disk.
+        let mut json: serde_json::Value = serde_json::to_value(&entry).expect("json");
+        assert_eq!(json["spelling"], "Food.Goat.clip.mp4");
+        json.as_object_mut().expect("object").remove("spelling");
+        let old: Entry = serde_json::from_value(json).expect("an old entry reads");
+        assert_eq!(old.snapshot().file_name_to_save(), "Food. Goat. clip.mp4");
+
+        let journal = dir.join("recovery");
+        write_in(&journal, &entry).expect("write");
+        match restore_all_in(&journal).as_slice() {
+            [Restored::Applied { path, .. }] => {
+                assert!(path.ends_with("Food.Goat.clip.mp4"), "{path:?}")
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

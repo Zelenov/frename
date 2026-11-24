@@ -1,3 +1,7 @@
+# 0.301
+## Fixed
+- After a crash, a name you typed that only changes the spacing and was not saved yet (Premiere held the file) is restored as typed. Before, frename said it restored the clip but kept the old spelling.
+
 # 0.298
 ## Fixed
 - `Ctrl+C` and the full name over a row give the clip's name as it is on disk (`Food. Goat. clip.mp4`), not `Food.Goat.clip.mp4`.
