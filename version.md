@@ -1,3 +1,7 @@
+# 0.297
+## Fixed
+- Settings → Saving: after you change "Space after each tag", the note says that file names change only when their tags do (the button below it changes the names you already have). Before, it said they change when saved, which no longer happens to a clip you only opened.
+
 # 0.294
 ## Fixed
 - A clip you only looked at keeps its name on disk. Before, leaving it changed the spacing after its tags (`Food. Goat. clip.mp4` became `Food.Goat.clip.mp4`) or removed a doubled dot or extra spaces, although you changed nothing, so Premiere could lose the clip. A name you type is kept as typed. To change the spacing of existing names, run Apply tag spacing.
