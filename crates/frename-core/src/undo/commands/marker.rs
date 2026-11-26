@@ -98,8 +98,7 @@ where
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
         let new = self.new;
-        ctx.tag_list
-            .update_marker(&self.guid, |m| (m.color, m.ai) = (new, false));
+        ctx.tag_list.edit_marker(&self.guid, |m| m.color = new);
         Ok(())
     }
 }
@@ -131,7 +130,10 @@ where
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        set_span(ctx, &self.guid, self.new, false);
+        let (start, duration) = self.new;
+        ctx.tag_list.edit_marker(&self.guid, |m| {
+            (m.start_ms, m.duration_ms) = (start, duration)
+        });
         Ok(())
     }
 }

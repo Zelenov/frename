@@ -114,6 +114,11 @@ pub struct DemoScenario {
     /// less).
     #[serde(default)]
     pub batch_run: bool,
+    /// With `batch_action` "Describe with AI": the job on the checked files ends at once with
+    /// each clip done but its description file kept as it was, so the report shows its table
+    /// (#388); nothing is sent.
+    #[serde(default)]
+    pub describe_files_kept: bool,
     /// Files to Ctrl+click in order, by name, after the seek: builds a multi-selection the way
     /// a click does (issue #60), turning batch mode on. Independent of `--batch`.
     #[serde(default)]

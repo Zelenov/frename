@@ -327,9 +327,7 @@ impl FolderWorkspace {
         // Described at the editor's asking: the marker is theirs now (`by: user`).
         self.file_workspace
             .tag_list_mut()
-            .update_marker(&guid, |m| {
-                ((m.name, m.comment), m.ai) = (new.clone(), false)
-            });
+            .edit_marker(&guid, |m| (m.name, m.comment) = new.clone());
         self.history.push(Box::new(SetMarkerTextCommand {
             guid,
             old,

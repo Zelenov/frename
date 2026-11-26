@@ -104,10 +104,12 @@ pub trait FileTaggerBackend: Send + Sync {
         path.to_path_buf()
     }
 
-    /// The clip markers in the file's XMP; `None` when it cannot hold them. Reading never
-    /// changes a file, so every backend reads them from where the file is on disk.
+    /// The clip markers in the file's XMP; `None` when it cannot hold them. Every backend reads
+    /// them from where the file is on disk. This reading never changes the file: a backend that
+    /// writes files also stores the ids given to markers that had none (see
+    /// [`crate::metadata::read_markers`]).
     fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
-        crate::metadata::load_markers(&self.disk_path(path))
+        crate::metadata::read_markers(&self.disk_path(path))
     }
 
     /// Write the clip markers into the file's XMP (see [`crate::FileTagger::save_markers`]).

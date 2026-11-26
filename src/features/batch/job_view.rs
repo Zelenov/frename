@@ -564,16 +564,24 @@ fn files_written<'a>(
     action: Action,
     directory: Option<&'a Directory>,
 ) -> Option<Element<'a, Message>> {
-    let (title, caption) = match action {
-        Action::GenerateSubtitles => (fl!("batch-written-subtitles"), fl!("batch-table-written")),
-        Action::MarkersComment => (fl!("batch-merged-markers"), fl!("batch-table-merged")),
-        Action::DescribeAi => (
+    let (title, caption, written) = match action {
+        Action::GenerateSubtitles => (
+            fl!("batch-written-subtitles"),
+            fl!("batch-table-written"),
+            state.done_with_reason(),
+        ),
+        Action::MarkersComment => (
+            fl!("batch-merged-markers"),
+            fl!("batch-table-merged"),
+            state.done_with_reason(),
+        ),
+        Action::DescribeAi | Action::PrepareClips => (
             fl!("batch-describe-files-not-written"),
             fl!("batch-table-why"),
+            state.done_with_note(),
         ),
         _ => return None,
     };
-    let written = state.done_with_reason();
     if written.is_empty() {
         return None;
     }

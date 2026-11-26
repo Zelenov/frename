@@ -1,0 +1,17 @@
+# PR screenshot for #388: a Describe with AI run (`--batch`) where two clips kept a description
+# file this version cannot read. The report lists them in its own table, with why. Nothing is sent.
+# Not a README image.
+source = "../../tests/folder"
+open = "pick.wide.night.city.MVI_0410.mp4"
+window = [1440, 720]
+panels = [640, 360]
+batch_action = "Describe with AI"
+describe_files_kept = true
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.drone.landscape.MVI_0404.mp4"
+
+[[files]]
+from = "file_example_MP4_480_1_5MG.mp4"
+name = "pick.wide.night.city.MVI_0410.mp4"

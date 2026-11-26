@@ -204,7 +204,7 @@ impl FolderWorkspace {
                     // The editor's name now: the marker is theirs.
                     self.file_workspace
                         .tag_list_mut()
-                        .update_marker(&guid, |m| (m.name, m.ai) = (name, false));
+                        .edit_marker(&guid, |m| m.name = name);
                 }
                 Task::none()
             }
@@ -225,7 +225,7 @@ impl FolderWorkspace {
                 if old != color {
                     self.file_workspace
                         .tag_list_mut()
-                        .update_marker(&guid, |m| (m.color, m.ai) = (color, false));
+                        .edit_marker(&guid, |m| m.color = color);
                     self.history.push(Box::new(SetMarkerColorCommand {
                         guid,
                         old,
@@ -392,7 +392,7 @@ impl FolderWorkspace {
         }
         self.file_workspace
             .tag_list_mut()
-            .update_marker(guid, |m| ((m.start_ms, m.duration_ms), m.ai) = (new, false));
+            .edit_marker(guid, |m| (m.start_ms, m.duration_ms) = new);
         self.history.push(Box::new(SetMarkerSpanCommand {
             guid: guid.to_string(),
             old,

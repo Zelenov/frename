@@ -1040,7 +1040,7 @@ pub fn run_clip(
     // description file that was not written is said in the report.
     ItemResult {
         usage,
-        reason: written.err().flatten(),
+        note: written.err().flatten(),
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
     }
 }

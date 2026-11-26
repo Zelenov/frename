@@ -10,6 +10,9 @@
 //! - `summary` and `usable` are the `AI:` and `Suggested In/Out:` lines of the comment, which
 //!   the AI run writes there as before.
 //!
+//! Until clipscribe has an API for an editor's edits (#666), the few format rules an edit needs
+//! (sorting, parts covering the clip) are kept here.
+//!
 //! An AI run writes the file (the app does, through `clipscribe::describe_file::save_run`) and
 //! then its markers from the file's AI items ([`ai_markers`]). Every later write of the clip's
 //! markers or In/Out brings an existing file in line ([`markers_saved`], [`in_out_saved`]): an
@@ -134,11 +137,14 @@ fn shown(text: Option<&str>, people: &[Person], names: &HashMap<String, String>)
 }
 
 /// Bring the parts and moments of `file` in line with the clip's markers `markers`:
-/// - an item whose marker differs from it (time, name, comment, colour) takes the marker's;
-///   it is `by: ai` while the marker is the AI's ([`Marker::ai`]), else `by: user`;
-/// - a part that became a point is a moment;
+/// - an item whose marker differs from it (name, comment, colour, and for a moment its time)
+///   takes the marker's; it is `by: ai` while the marker is the AI's ([`Marker::ai`]), else
+///   `by: user`;
+/// - a part the editor moved, resized or made a point of leaves the parts and is a moment of
+///   theirs, and a part they deleted goes; either way its stretch goes to the AI part next to
+///   it, so the parts still cover the clip (the format's rule);
 /// - a marker the file has no item for is added as a moment;
-/// - an item whose id is in `before` but has no marker now goes.
+/// - a moment whose id is in `before` but has no marker now goes.
 ///
 /// Only markers frename can write (with a GUID and an id) count. Returns whether `file` changed.
 fn apply_markers(
@@ -155,45 +161,107 @@ fn apply_markers(
         .collect();
     let people = people(file).to_vec();
     let duration_s = file.duration_s;
+    let deleted = |id: &str| !by_id.contains_key(id) && before.contains(id);
     let mut in_file: HashSet<String> = HashSet::new();
-    for list in [&mut file.parts, &mut file.moments].into_iter().flatten() {
-        list.retain(|item| by_id.contains_key(item.id.as_str()) || !before.contains(&item.id));
-        for item in list.iter_mut() {
+    let mut left_parts: Vec<Item> = Vec::new();
+    if let Some(parts) = file.parts.take() {
+        let mut kept = Vec::new();
+        for mut part in parts {
+            if deleted(&part.id) {
+                continue;
+            }
+            in_file.insert(part.id.clone());
+            let Some(marker) = by_id.get(part.id.as_str()) else {
+                kept.push(part);
+                continue;
+            };
+            if !marker.ai && moved(&part, marker, duration_s) {
+                follow(&mut part, marker, &people, names, duration_s);
+                left_parts.push(part);
+            } else {
+                // The AI's part keeps the time the file gives it: it may have taken over the
+                // stretch of a part the editor moved, which its marker does not show.
+                let (start_s, end_s) = (part.start_s, part.end_s);
+                follow(&mut part, marker, &people, names, duration_s);
+                (part.start_s, part.end_s) = (start_s, end_s);
+                kept.push(part);
+            }
+        }
+        sort_items(&mut kept);
+        cover(&mut kept, duration_s);
+        file.parts = Some(kept);
+    }
+    if let Some(moments) = &mut file.moments {
+        moments.retain(|item| !deleted(&item.id));
+        for item in moments.iter_mut() {
             in_file.insert(item.id.clone());
             if let Some(marker) = by_id.get(item.id.as_str()) {
                 follow(item, marker, &people, names, duration_s);
             }
         }
     }
-    // A part is a stretch: one the editor made a point of is a moment now.
-    if let Some(parts) = &mut file.parts {
-        let (points, stretches): (Vec<Item>, Vec<Item>) =
-            parts.drain(..).partition(|p| p.end_s.is_none());
-        *parts = stretches;
-        if !points.is_empty() {
-            file.moments.get_or_insert_with(Vec::new).extend(points);
-        }
-    }
-    let mut added: Vec<Item> = markers
+    let added: Vec<Item> = markers
         .iter()
         .filter(|m| m.is_editable())
         .filter(|m| m.id.as_deref().is_some_and(|id| !in_file.contains(id)))
         .filter_map(|m| new_item(m, duration_s))
         .collect();
-    if !added.is_empty() {
-        file.moments.get_or_insert_with(Vec::new).append(&mut added);
-    }
-    for list in [&mut file.parts, &mut file.moments].into_iter().flatten() {
-        sort_items(list);
+    if !added.is_empty() || !left_parts.is_empty() {
+        let moments = file.moments.get_or_insert_with(Vec::new);
+        moments.extend(left_parts);
+        moments.extend(added);
+        sort_items(moments);
     }
     *file != original
+}
+
+/// Give every stretch of 0..`duration_s` that `parts` (sorted) leave uncovered to the AI part
+/// that ends where it starts, else to the AI part that starts where it ends. A part of the
+/// editor's is never moved: a gap between two of theirs stays (and is logged).
+fn cover(parts: &mut [Item], duration_s: f64) {
+    if parts.is_empty() {
+        return;
+    }
+    let mut gaps = Vec::new();
+    let mut at = 0.0;
+    for (n, part) in parts.iter().enumerate() {
+        if ms(part.start_s) > ms(at) {
+            gaps.push((at, part.start_s, n.checked_sub(1), Some(n)));
+        }
+        at = f64::max(at, part.end_or_start());
+    }
+    if ms(at) < ms(duration_s) {
+        gaps.push((at, duration_s, Some(parts.len() - 1), None));
+    }
+    for (start, end, before, after) in gaps {
+        let ai = |n: &Option<usize>| n.filter(|n| parts[*n].by == By::Ai);
+        if let Some(n) = ai(&before) {
+            parts[n].end_s = Some(end);
+        } else if let Some(n) = ai(&after) {
+            parts[n].start_s = start;
+        } else {
+            log::warn!("description: no AI part to cover {start}–{end} s");
+        }
+    }
+}
+
+/// Whether `marker` puts `item` somewhere else: a start or an end more than a millisecond off
+/// (times pass through the video's own frame rate, which may round them by one).
+fn moved(item: &Item, marker: &Marker, duration_s: f64) -> bool {
+    let (_, end_s) = times(marker, duration_s);
+    ms(item.start_s).abs_diff(marker.start_ms) > 1
+        || match (item.end_s, end_s) {
+            (Some(a), Some(b)) => ms(a).abs_diff(ms(b)) > 1,
+            (None, None) => false,
+            _ => true,
+        }
 }
 
 /// Set the In and Out of `file` to `segment` (none when neither is set). Returns whether it
 /// changed.
 fn apply_in_out(file: &mut DescribeFile, segment: Segment) -> bool {
     let d = file.duration_s;
-    let at = |t: Option<f32>| t.map(|t| round_ms(f64::from(t)).clamp(0.0, d));
+    let at = |t: Option<f32>| t.map(|t| seconds(ms(f64::from(t))).clamp(0.0, d));
     let (start_s, end_s) = (at(segment.start), at(segment.end));
     let unchanged = match &file.in_out {
         Some(io) => same_time(io.start_s, start_s) && same_time(io.end_s, end_s),
@@ -228,17 +296,8 @@ fn follow(
     names: &HashMap<String, String>,
     duration_s: f64,
 ) {
-    let (start_s, end_s) = times(marker, duration_s);
-    // Times pass through the video's own frame rate, which may round them by a millisecond.
-    let moved = ms(item.start_s).abs_diff(marker.start_ms) > 1
-        || match (item.end_s, end_s) {
-            (Some(a), Some(b)) => ms(a).abs_diff(ms(b)) > 1,
-            (None, None) => false,
-            _ => true,
-        };
-    if moved {
-        item.start_s = start_s;
-        item.end_s = end_s;
+    if moved(item, marker, duration_s) {
+        (item.start_s, item.end_s) = times(marker, duration_s);
     }
     if shown(item.title.as_deref(), people, names) != marker.name {
         item.title = text(&marker.name);
@@ -310,7 +369,8 @@ fn color_name(color: MarkerColor) -> String {
     }
 }
 
-/// Sorted by start, then end, as the format keeps them.
+/// Sorted by start, then end, as the format keeps them. (clipscribe's own sorting is not public
+/// yet: #666.)
 fn sort_items(items: &mut [Item]) {
     items.sort_by(|a, b| {
         a.start_s
@@ -325,10 +385,6 @@ fn seconds(ms: u64) -> f64 {
 
 fn ms(seconds: f64) -> u64 {
     (seconds.max(0.0) * 1000.0).round() as u64
-}
-
-fn round_ms(seconds: f64) -> f64 {
-    (seconds * 1000.0).round() / 1000.0
 }
 
 #[cfg(test)]

@@ -338,6 +338,12 @@ impl FileTaggerBackend for ProductionFileTagger {
         metadata::cache::reload_line(path)
     }
 
+    /// The markers as they read, with the ids given to markers that had none written into the
+    /// file (#388).
+    fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
+        metadata::load_markers(path)
+    }
+
     fn save_markers(
         &self,
         path: &Path,

@@ -25,7 +25,7 @@ const MARKER_GUID_NAMESPACE: uuid::Uuid =
     uuid::Uuid::from_u128(0x5c2f_8a61_3d4e_4b0f_9a7c_1e2d_6b8f_0a93);
 
 /// The `xmpDM:guid` of a marker frename makes with the short id `id` (#388).
-pub fn guid_for_id(id: &str) -> String {
+pub(crate) fn guid_for_id(id: &str) -> String {
     uuid::Uuid::new_v5(&MARKER_GUID_NAMESPACE, id.as_bytes()).to_string()
 }
 
@@ -137,7 +137,7 @@ pub fn sort_markers(markers: &mut [Marker]) {
 /// Give every editable marker without a short id (made in Premiere, or by frename before ids)
 /// a new one, and a marker whose id another marker already has (a copy) a new one too. Returns
 /// whether any marker got one: the caller writes them into the file so they stay.
-pub fn give_ids(markers: &mut [Marker]) -> bool {
+pub(crate) fn give_ids(markers: &mut [Marker]) -> bool {
     use clipscribe::describe_file::{is_short_id, new_id};
     // Every id in the list, so a new one repeats none of them.
     let mut taken: HashSet<String> = markers.iter().filter_map(|m| m.id.clone()).collect();

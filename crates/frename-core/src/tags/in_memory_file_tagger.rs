@@ -77,10 +77,17 @@ impl FileTaggerBackend for InMemoryFileTagger {
         }
     }
 
+    /// Read once and kept, so the ids given to markers that had none stay the same while the
+    /// file itself is never written.
     fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
         let on_disk = self.disk_path(path);
-        let saved = self.markers.lock().expect("lock").get(&on_disk).cloned();
-        saved.or_else(|| crate::metadata::load_markers(&on_disk))
+        let mut kept = self.markers.lock().expect("lock");
+        if let Some(saved) = kept.get(&on_disk) {
+            return Some(saved.clone());
+        }
+        let read = crate::metadata::read_markers(&on_disk)?;
+        kept.insert(on_disk, read.clone());
+        Some(read)
     }
 
     /// Merges like the file does (`markers_xmp::apply_markers`): a marker of `markers` replaces

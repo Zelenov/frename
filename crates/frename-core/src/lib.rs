@@ -43,11 +43,11 @@ pub use file_kind::FileKind;
 pub use folder_file::{choose_dropped_path, FolderAndFile};
 pub use markers::{
     ai_marker, comment_holds_markers, comment_kept_markers, comment_to_markers, format_marker_line,
-    format_marker_time, give_ids, guid_for_id, marker_text_with_moment, markers_from_comment,
-    markers_into_comment, markers_text, markers_text_path, markers_to_comment,
-    merge_duplicate_markers, native_line_breaks, parse_ai_line, parse_marker_line,
-    replace_ai_markers, sort_markers, write_markers_text, CommentToMarkers, Marker, MarkerColor,
-    MarkerLine, AI_MARKER_COLOR, MARKER_SNAP_MS,
+    format_marker_time, marker_text_with_moment, markers_from_comment, markers_into_comment,
+    markers_text, markers_text_path, markers_to_comment, merge_duplicate_markers,
+    native_line_breaks, parse_ai_line, parse_marker_line, replace_ai_markers, sort_markers,
+    write_markers_text, CommentToMarkers, Marker, MarkerColor, MarkerLine, AI_MARKER_COLOR,
+    MARKER_SNAP_MS,
 };
 pub use metadata::{
     active_commented_tag, cache::modified_ms, clean_commented_tag, commented_tag,

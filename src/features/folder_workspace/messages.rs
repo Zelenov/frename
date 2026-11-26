@@ -92,6 +92,9 @@ pub enum Message {
     /// Demo (a scenario's `subtitles_stage`): the batch job on the checked files, its first file
     /// in this stage of "Generate subtitles"; nothing is sent.
     ShowSubtitleStage(String),
+    /// Demo (a scenario's `describe_files_kept`): the batch job on the checked files ends with
+    /// each clip done but its description file kept as it was; nothing is sent.
+    ShowDescribeFilesKept,
     /// Demo (a scenario's `press_held`): press Open folder once the job runs, so the note that
     /// says why it is held shows.
     ShowHeldPress,

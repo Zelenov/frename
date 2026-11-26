@@ -530,6 +530,7 @@ fn merge(total: &mut ItemResult, step: ItemResult) {
     total.stop_if_repeated = total.stop_if_repeated.take().or(step.stop_if_repeated);
     total.out_of_credit |= step.out_of_credit;
     total.key_rejected |= step.key_rejected;
+    total.note = total.note.take().or(step.note);
 }
 
 impl PipelineJob {
@@ -744,6 +745,26 @@ mod tests {
     use super::*;
     use clipscribe::AiUsage;
     use std::sync::atomic::AtomicBool;
+
+    /// #388: a clip whose subtitles were written and whose description file was kept as it was
+    /// keeps both: the note is not lost behind the subtitle step's reason.
+    #[test]
+    fn the_description_files_note_survives_the_subtitles_steps_reason() {
+        let mut total = ItemResult {
+            reason: Some("clip.srt".to_string()),
+            ..ItemResult::new(ItemStatus::Done, None)
+        };
+        merge(
+            &mut total,
+            ItemResult {
+                note: Some("kept".to_string()),
+                ..ItemResult::new(ItemStatus::Done, None)
+            },
+        );
+        assert_eq!(total.reason.as_deref(), Some("clip.srt"));
+        assert_eq!(total.note.as_deref(), Some("kept"));
+        assert_eq!(total.status, ItemStatus::Done);
+    }
 
     #[test]
     fn the_cap_is_a_positive_number_or_nothing() {

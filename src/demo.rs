@@ -330,6 +330,9 @@ fn steps(scenario: &DemoScenario, batch: bool, ai: bool) -> Vec<folder_workspace
             }
         }
     }
+    if scenario.describe_files_kept && batch {
+        steps.push(folder_workspace::Message::ShowDescribeFilesKept);
+    }
     if let Some(stage) = scenario.subtitles_stage.clone().filter(|_| batch) {
         steps.push(folder_workspace::Message::ShowSubtitleStage(stage));
     }

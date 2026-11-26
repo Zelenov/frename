@@ -143,6 +143,9 @@ pub struct ItemResult {
     pub out_of_credit: bool,
     /// The service rejected the API key: the report offers the page where a key is made.
     pub key_rejected: bool,
+    /// What the report says about a file that was done all the same: its description file
+    /// (`clip.describe.json`) was not written, and why (#388).
+    pub note: Option<String>,
 }
 
 /// How many files in a row may fail the same way before the job stops.
@@ -160,6 +163,7 @@ impl ItemResult {
             stop_if_repeated: None,
             out_of_credit: false,
             key_rejected: false,
+            note: None,
         }
     }
 
@@ -188,6 +192,8 @@ struct Job {
     item: Arc<ItemProgress>,
     /// Why failed files failed, when their action said.
     reasons: HashMap<FileId, String>,
+    /// What the report says about files done all the same (see [`ItemResult::note`]).
+    notes: HashMap<FileId, String>,
     /// What the job's AI requests cost so far; `None` when it made none.
     usage: Option<AiUsage>,
     /// Some request may have been billed without reporting its cost.
@@ -437,6 +443,7 @@ impl BatchState {
             cancel: Arc::new(AtomicBool::new(false)),
             item: Arc::default(),
             reasons: HashMap::new(),
+            notes: HashMap::new(),
             usage: None,
             usage_unknown: false,
             stopped: None,
@@ -536,6 +543,9 @@ impl BatchState {
         job.statuses.insert(id, result.status);
         if let Some(reason) = result.reason.clone() {
             job.reasons.insert(id, reason);
+        }
+        if let Some(note) = result.note.clone() {
+            job.notes.insert(id, note);
         }
         if let Some(usage) = result.usage {
             *job.usage.get_or_insert_with(AiUsage::default) += usage;
@@ -785,6 +795,19 @@ impl BatchState {
                 .copied()
                 .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Skipped))
                 .filter_map(|id| job.reasons.get(&id).map(|r| (id, r.as_str())))
+                .collect()
+        })
+    }
+
+    /// Files of the current job that were done with a note (see [`ItemResult::note`]), in job
+    /// order.
+    pub fn done_with_note(&self) -> Vec<(FileId, &str)> {
+        self.job.as_ref().map_or_else(Vec::new, |job| {
+            job.order
+                .iter()
+                .copied()
+                .filter(|id| job.statuses.get(id) == Some(&ItemStatus::Done))
+                .filter_map(|id| job.notes.get(&id).map(|n| (id, n.as_str())))
                 .collect()
         })
     }

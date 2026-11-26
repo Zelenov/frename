@@ -495,6 +495,29 @@ impl FolderWorkspace {
                 }
                 Task::none()
             }
+            Message::ShowDescribeFilesKept => {
+                let files: Vec<FileId> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
+                    dir.all_files()
+                        .filter(|f| self.batch.is_checked(f.id()))
+                        .map(|f| f.id())
+                        .collect()
+                });
+                if !self.batch.start(files) {
+                    // The clip lengths are still being read: try again shortly.
+                    return Task::future(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        Message::ShowDescribeFilesKept
+                    });
+                }
+                let kept = batch::ItemResult {
+                    note: Some(fl!("batch-ai-describe-file-kept")),
+                    ..batch::ItemResult::new(batch::ItemStatus::Done, None)
+                };
+                while let Some((id, _, _)) = self.batch.begin_next() {
+                    self.batch.finish(id, &kept);
+                }
+                Task::none()
+            }
             Message::ShowSubtitleStage(stage) => {
                 let files: Vec<FileId> = self.directory.as_ref().map_or_else(Vec::new, |dir| {
                     dir.all_files()
@@ -2310,8 +2333,9 @@ impl FolderWorkspace {
     }
 
     /// A job that ended behind a closed panel must not end unseen: when something went wrong (a
-    /// file not done, a stop for a bad key or no credit, a cancel before the end) the panel comes
-    /// back with the result; otherwise a note says it finished.
+    /// file not done, a stop for a bad key or no credit, a cancel before the end, a clip whose
+    /// description file was not written) the panel comes back with the result; otherwise a note
+    /// says it finished.
     fn report_job_behind_closed_panel(&mut self) -> Task<Message> {
         if self.batch.is_active() {
             return Task::none();
@@ -2319,7 +2343,12 @@ impl FolderWorkspace {
         let Some(progress) = self.batch.progress() else {
             return Task::none();
         };
-        if progress.failed > 0 || self.batch.stopped().is_some() || progress.not_reached() > 0 {
+        // A clip done with a note (its description file kept as it was, #388) is said too.
+        if progress.failed > 0
+            || self.batch.stopped().is_some()
+            || progress.not_reached() > 0
+            || !self.batch.done_with_note().is_empty()
+        {
             return self.handle_batch(batch::Message::SetActive(true));
         }
         Self::notice(&fl!("batch-result-done", total = (progress.total as i64)))

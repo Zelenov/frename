@@ -408,19 +408,137 @@ fn a_premiere_marker_gets_a_short_id_once_and_keeps_its_guid() {
     let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
 }
 
-/// Described before ids: an AI run wrote white markers without parameters. They read as the
-/// AI's, and keep being the AI's once frename has given them an id.
+/// Described before ids: an AI run wrote white markers without parameters. On a described clip
+/// (its comment has an `AI:` block) they read as the AI's, and keep being the AI's once frename
+/// has given them an id; on a clip never described, a white marker is the editor's.
 #[test]
-fn a_white_marker_from_before_ids_is_the_ais() {
+fn a_white_marker_from_before_ids_is_the_ais_only_on_a_described_clip() {
     let clip = clip_with_file("legacy-ai");
-    let mut legacy = Marker::new(1_000);
-    legacy.guid = Some("c19c0922-775d-465c-917b-6a7c3a5c0902".to_string());
-    legacy.id = None;
-    legacy.color = AI_MARKER_COLOR;
-    crate::metadata::save_markers(&clip, &[legacy], &HashSet::new()).expect("saved");
+    let white = || {
+        let mut legacy = Marker::new(1_000);
+        legacy.guid = Some("c19c0922-775d-465c-917b-6a7c3a5c0902".to_string());
+        legacy.id = None;
+        legacy.color = AI_MARKER_COLOR;
+        legacy
+    };
+    crate::metadata::save_markers(&clip, &[white()], &HashSet::new()).expect("saved");
     for _ in 0..2 {
         let read = crate::metadata::load_markers(&clip).expect("markers");
-        assert!(read[0].ai && read[0].id.is_some(), "{read:?}");
+        assert!(
+            !read[0].ai && read[0].id.is_some(),
+            "the editor's: {read:?}"
+        );
+    }
+
+    let described = clip.with_file_name("described.mov");
+    std::fs::copy(&clip, &described).expect("copy");
+    crate::comment::save_comment(&described, "Mine\n\nAI: A lion walks past.");
+    let mut legacy = white();
+    legacy.guid = Some("0b8e7d1c-1f4a-4b5e-9c3d-2a6f8e9b7c10".to_string());
+    crate::metadata::save_markers(&described, &[legacy], &HashSet::new()).expect("saved");
+    for _ in 0..2 {
+        let read = crate::metadata::load_markers(&described).expect("markers");
+        let mine = read.iter().find(|m| {
+            m.start_ms == 1_000 && m.guid.as_deref() == Some("0b8e7d1c-1f4a-4b5e-9c3d-2a6f8e9b7c10")
+        });
+        assert!(
+            mine.is_some_and(|m| m.ai && m.id.is_some()),
+            "the AI's: {read:?}"
+        );
     }
     let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
+/// The debug backend (`--debug`) never writes a file: reading markers that have no id gives
+/// them one in memory only, the same on every read.
+#[test]
+fn the_in_memory_backend_gives_ids_without_writing_the_video() {
+    use crate::FileTaggerBackend;
+    let clip = clip_with_file("in-memory");
+    let mut premiere = Marker::new(10);
+    premiere.id = None;
+    crate::metadata::save_markers(&clip, &[premiere], &HashSet::new()).expect("saved");
+    let bytes = std::fs::read(&clip).expect("clip");
+    let backend = crate::InMemoryFileTagger::default();
+    let first = backend.load_markers(&clip).expect("markers");
+    let again = backend.load_markers(&clip).expect("markers");
+    assert!(first[0].id.is_some());
+    assert_eq!(first[0].id, again[0].id, "the same id");
+    assert_eq!(
+        std::fs::read(&clip).expect("clip"),
+        bytes,
+        "the video is untouched"
+    );
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
+/// Two AI parts covering the clip, as a run with Moments = Full writes them.
+fn two_parts() -> DescribeFile {
+    let mut file = file();
+    file.moments = None;
+    let parts = file.parts.as_mut().expect("parts");
+    parts[0].end_s = Some(30.0);
+    let mut second = parts[0].clone();
+    second.id = "b4n7qe".to_string();
+    second.start_s = 30.0;
+    second.end_s = Some(60.0);
+    second.title = Some("Gate".to_string());
+    parts.push(second);
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    file
+}
+
+#[test]
+fn a_part_the_editor_resizes_is_a_moment_and_the_parts_still_cover_the_clip() {
+    let mut file = two_parts();
+    let mut markers = ai_markers(&file, Path::new("clip.mov"));
+    let before = ids(&markers);
+    let ai = markers[0].clone();
+    // The first part's end dragged from 0:30 to 0:20.
+    markers[0].duration_ms = 20_000;
+    markers[0].ai = false;
+    assert!(apply_markers(&mut file, &markers, &before, &no_names()));
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    let resized = find(&file, "k3m9xa");
+    assert_eq!((resized.end_s, resized.by), (Some(20.0), By::User));
+    assert!(file.moments.iter().flatten().any(|m| m.id == "k3m9xa"));
+    assert_eq!(
+        find(&file, "b4n7qe").start_s,
+        0.0,
+        "the other part covers the clip"
+    );
+
+    // Undone: the marker is the AI's again, as it was; the file stays valid.
+    markers[0] = ai;
+    apply_markers(&mut file, &markers, &before, &no_names());
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    let back = find(&file, "k3m9xa");
+    assert_eq!(
+        (back.start_s, back.end_s, back.by),
+        (0.0, Some(30.0), By::Ai)
+    );
+    // A second save with nothing new changes nothing.
+    assert!(!apply_markers(&mut file, &markers, &before, &no_names()));
+}
+
+#[test]
+fn a_part_the_editor_deletes_goes_and_the_parts_still_cover_the_clip() {
+    let mut file = two_parts();
+    let markers = ai_markers(&file, Path::new("clip.mov"));
+    let before = ids(&markers);
+    assert!(apply_markers(
+        &mut file,
+        &markers[1..],
+        &before,
+        &no_names()
+    ));
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    assert!(items(&file).all(|item| item.id != "k3m9xa"));
+    let left = find(&file, "b4n7qe");
+    assert_eq!((left.start_s, left.end_s), (0.0, Some(60.0)));
+
+    // Undone: the marker comes back, as a moment; the file stays valid.
+    assert!(apply_markers(&mut file, &markers, &before, &no_names()));
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    assert!(items(&file).any(|item| item.id == "k3m9xa"));
 }

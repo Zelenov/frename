@@ -637,6 +637,19 @@ impl<S: StoredTagStore + Clone> TagList<S> {
         true
     }
 
+    /// Change the marker with this GUID as the editor does: it is theirs from then on, no
+    /// longer the AI's ([`Marker::ai`] goes, so a new AI run keeps it; #388). Returns whether
+    /// it was the AI's before, `None` when it was not found.
+    pub fn edit_marker(&mut self, guid: &str, change: impl FnOnce(&mut Marker)) -> Option<bool> {
+        let mut was_ai = None;
+        self.update_marker(guid, |m| {
+            was_ai = Some(m.ai);
+            change(m);
+            m.ai = false;
+        });
+        was_ai
+    }
+
     /// Segment start in seconds, if set.
     pub fn segment_start_secs(&self) -> Option<f32> {
         self.segment_start
