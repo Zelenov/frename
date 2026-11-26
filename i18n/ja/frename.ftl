@@ -333,6 +333,7 @@ batch-written-subtitles = 書き込んだファイル:
 batch-table-written = 書き込み
 batch-merged-markers = 統合した重複マーカー:
 batch-table-merged = 統合
+batch-describe-files-not-written = 書き込まなかった説明ファイル (clip.describe.json):
 batch-markers-merged = { $count ->
    *[other] { $count } 個の重複マーカーを統合しました
 }
@@ -422,6 +423,8 @@ batch-ai-fail-no-key = API キーがありません
 batch-ai-fail-unreadable = ビデオを読み取れませんでした
 batch-ai-fail-too-long = クリップが AI には長すぎます（30 分超）
 batch-ai-fail-not-saved = 説明を保存できませんでした
+batch-ai-describe-file-kept = そのまま残しました: このバージョンの frename では読めません
+batch-ai-describe-file-failed = 書き込めませんでした: { $reason }
 batch-ai-fail-key-rejected = { $provider } がキーを拒否しました
 batch-ai-fail-no-credit = { $provider } のアカウントのクレジットがありません
 batch-ai-fail-network = ネットワークエラー

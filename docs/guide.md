@@ -449,9 +449,18 @@ comment; a new run replaces only that part and never touches the text above it. 
 
 While markers are kept inside the video (Settings → Saving → Markers and ranges, the default), the
 segments become white "AI" markers Premiere Pro shows on the clip, and the comment keeps only the
-summary. A new run replaces the AI markers and leaves the others alone, so give one a color to
-keep it. With markers kept in the comment, or a format that cannot hold markers, the segments
-are lines of the description.
+summary. Each marker's name is a short title of a few words, and its comment says what happens.
+A new run replaces the AI markers you left as they were. A marker you renamed, moved, resized,
+recolored or described is yours from then on, and a new run keeps it. With markers kept in the
+comment, or a format that cannot hold markers, the segments are lines of the description.
+
+Every run also saves the description in a file next to the video, `clip.describe.json`, in the
+format clipscribe defines. It holds the summary, the suggested In and Out, the markers with their
+titles and descriptions, and the tags the AI found. A new run adds to the file and keeps what you
+made or changed. Your later changes to the markers and to the In and Out points go into the file
+too, and `Ctrl+Z` takes them back there as well. The file goes with the clip when frename renames
+or moves it, like the `.capt` file. If the file there was written by a newer version and frename
+cannot read it, frename leaves it as it is and the batch report says so.
 
 When a clip has a lead-in or lead-out around the part worth keeping, the description ends with
 the In and Out the AI suggests (`Suggested In/Out: 00:00:03.200 – 00:00:11.800`). With the clip
@@ -589,7 +598,8 @@ after the last option, and `Space` on a list goes forward and wraps; it does not
 
 - Tags live in the file names, and each folder's tag list lives in a `.frename` file inside that
   folder, so both travel with the footage.
-- Markers, in and out points and comments are saved inside mp4 and mov files. Settings can keep
+- Markers, in and out points and comments are saved inside mp4 and mov files. A described clip
+  also has its description in `clip.describe.json` next to it. Settings can keep
   comments in a `.comment.txt` file next to the video instead. Formats such as mkv cannot hold
   them, so for those frename keeps the comment and the in and out points in the text file, and
   markers are not available.

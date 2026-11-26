@@ -333,6 +333,7 @@ batch-written-subtitles = 已写入的文件：
 batch-table-written = 已写入
 batch-merged-markers = 已合并的重复标记：
 batch-table-merged = 已合并
+batch-describe-files-not-written = 未写入的描述文件 (clip.describe.json)：
 batch-markers-merged = { $count ->
    *[other] 已合并 { $count } 个重复标记
 }
@@ -422,6 +423,8 @@ batch-ai-fail-no-key = 没有 API 密钥
 batch-ai-fail-unreadable = 无法读取视频
 batch-ai-fail-too-long = 素材太长，AI 无法处理（超过 30 分钟）
 batch-ai-fail-not-saved = 无法保存描述
+batch-ai-describe-file-kept = 保持原样：此版本的 frename 无法读取它
+batch-ai-describe-file-failed = 未写入：{ $reason }
 batch-ai-fail-key-rejected = { $provider } 拒绝了密钥
 batch-ai-fail-no-credit = { $provider } 账户余额不足
 batch-ai-fail-network = 网络错误

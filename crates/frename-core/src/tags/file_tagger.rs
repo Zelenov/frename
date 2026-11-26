@@ -311,22 +311,18 @@ impl FileTagger {
         backend().save_markers(path, markers, known)
     }
 
-    /// Write the moments of an AI description into the file at `path` as markers in
-    /// [`crate::AI_MARKER_COLOR`], replacing the AI markers a previous run wrote (see
+    /// Write the moments of an AI description into the file at `path` as markers, replacing the
+    /// AI markers a previous run wrote that the editor left as they were (see
     /// [`crate::replace_ai_markers`]). Moments past the end of the clip are left out.
-    pub fn save_ai_markers(
-        path: &Path,
-        segments: &[crate::MarkerLine],
-    ) -> Result<(), MarkersError> {
+    pub fn save_ai_markers(path: &Path, new_ai: Vec<Marker>) -> Result<(), MarkersError> {
         let existing =
             Self::load_markers(path).ok_or_else(|| crate::metadata::cannot_hold_markers(path))?;
         let clip_length = crate::metadata::clip_length_ms(&Self::disk_path(path));
-        let in_clip: Vec<crate::MarkerLine> = segments
-            .iter()
-            .filter(|s| clip_length.is_none_or(|clip| s.start_ms <= clip))
-            .cloned()
+        let in_clip: Vec<Marker> = new_ai
+            .into_iter()
+            .filter(|m| clip_length.is_none_or(|clip| m.start_ms <= clip))
             .collect();
-        let (markers, dropped) = crate::markers::replace_ai_markers(&existing, &in_clip);
+        let (markers, dropped) = crate::markers::replace_ai_markers(&existing, in_clip);
         Self::save_markers(path, &markers, &dropped)
     }
 
@@ -367,7 +363,7 @@ impl FileTagger {
 }
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
-/// transcript, CAPT, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
+/// transcript, CAPT, description file, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
 /// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
@@ -386,6 +382,7 @@ pub(crate) fn target_name_taken(old_path: &Path, new_path: &Path) -> bool {
         crate::comment::comment_path(new_path),
         crate::subtitles::transcript_path(new_path),
         crate::subtitles::capt_path(new_path),
+        crate::description::path(new_path),
     ]
     .iter()
     .chain(crate::subtitles::subtitle_candidates(new_path).iter())
@@ -561,6 +558,17 @@ mod tests {
         let (old_path, new_path) = (dir.join("goat.mov"), dir.join("tag.goat.mov"));
         assert!(!target_name_taken(&old_path, &new_path));
         std::fs::write(crate::subtitles::capt_path(&new_path), "capt").expect("capt");
+        assert!(target_name_taken(&old_path, &new_path));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A description file already standing at the new name blocks the rename too (#388).
+    #[test]
+    fn an_existing_description_file_makes_the_new_name_taken() {
+        let dir = crate::test_support::fresh_dir("describe-taken");
+        let (old_path, new_path) = (dir.join("goat.mov"), dir.join("tag.goat.mov"));
+        assert!(!target_name_taken(&old_path, &new_path));
+        std::fs::write(crate::description::path(&new_path), "{}").expect("description file");
         assert!(target_name_taken(&old_path, &new_path));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -820,8 +828,9 @@ AI: A walk.
         let mut mine = Marker::new(100);
         mine.name = "Mine".to_string();
         FileTagger::save_markers(&file, &[mine], &HashSet::new()).expect("mine");
-        FileTagger::save_ai_markers(&file, &[segment("First run")]).expect("first");
-        FileTagger::save_ai_markers(&file, &[segment("Second run")]).expect("second");
+        let ai = |name: &str| vec![crate::markers::ai_marker(&segment(name))];
+        FileTagger::save_ai_markers(&file, ai("First run")).expect("first");
+        FileTagger::save_ai_markers(&file, ai("Second run")).expect("second");
         let names: Vec<_> = FileTagger::load_markers(&file)
             .expect("markers")
             .into_iter()

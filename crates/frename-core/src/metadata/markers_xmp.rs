@@ -20,6 +20,12 @@ const COMMENT_TRACK_TYPE: &str = "Comment";
 const NEW_TRACK_RATE: &str = "f1000";
 const MARKER_GUID_KEY: &str = "marker_guid";
 const COLOR_KEY_PREFIX: &str = "keywordExtDVAv1_";
+/// The cue point parameter of the marker's short id in the clip's description file (#388).
+const ID_KEY: &str = "frename_id";
+/// The cue point parameter that says an AI run made the marker: `ai`. Gone once the editor
+/// changes it.
+const BY_KEY: &str = "frename_by";
+const BY_AI: &str = "ai";
 
 /// A track's `frameRate`: `f<num>` or `f<num>s<den>` ticks per second.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +122,47 @@ fn cue_params(meta: &XmpMeta, marker: &str) -> Vec<(usize, String, String)> {
         .collect()
 }
 
+/// The value of the marker's cue point parameter `key`, if it has one.
+fn param(meta: &XmpMeta, marker: &str, key: &str) -> Option<String> {
+    cue_params(meta, marker)
+        .into_iter()
+        .find(|(_, k, _)| k == key)
+        .map(|(_, _, value)| value)
+}
+
+/// Set the marker's cue point parameter `key` to `value`, adding it when it has none; `None`
+/// removes it (and the parameter list, when that leaves it empty).
+fn set_param(
+    meta: &mut XmpMeta,
+    marker: &str,
+    key: &str,
+    value: Option<&str>,
+) -> Result<(), XmpError> {
+    let existing = cue_params(meta, marker)
+        .into_iter()
+        .find(|(_, k, _)| k == key)
+        .map(|(i, _, _)| i);
+    match (existing, value) {
+        (Some(index), Some(value)) => {
+            let item = format!("{}[{index}]", params_path(marker));
+            set_field(meta, &item, "value", value)
+        }
+        (None, Some(value)) => append_param(meta, marker, key, value),
+        (Some(index), None) => remove_param(meta, marker, index),
+        (None, None) => Ok(()),
+    }
+}
+
+/// Remove the marker's cue point parameter at `index`, and the list when it is left empty.
+fn remove_param(meta: &mut XmpMeta, marker: &str, index: usize) -> Result<(), XmpError> {
+    let params = params_path(marker);
+    meta.delete_array_item(XMP_DM, &params, index as i32)?;
+    if meta.array_len(XMP_DM, &params) == 0 {
+        meta.delete_struct_field(XMP_DM, marker, XMP_DM, "cuePointParams")?;
+    }
+    Ok(())
+}
+
 fn color_param(meta: &XmpMeta, marker: &str) -> Option<(usize, String)> {
     cue_params(meta, marker)
         .into_iter()
@@ -156,8 +203,17 @@ fn read_marker(meta: &XmpMeta, marker: &str, rate: Rate) -> Marker {
             .and_then(|v| v.trim().parse::<i64>().ok())
             .map_or(0, |v| u64::try_from(v).unwrap_or(0))
     };
+    let color = color_of(meta, marker);
+    let id = param(meta, marker, ID_KEY).map(|id| id.trim().to_ascii_lowercase());
+    // Described before ids were kept: an AI run wrote its markers white, with no parameter.
+    let ai = match &id {
+        Some(_) => param(meta, marker, BY_KEY).is_some_and(|by| by.trim() == BY_AI),
+        None => color == crate::markers::AI_MARKER_COLOR,
+    };
     Marker {
         guid: guid_of(meta, marker).map(|g| g.trim().to_string()),
+        id: id.filter(|id| clipscribe::describe_file::is_short_id(id)),
+        ai,
         start_ms: rate.to_ms(ticks("startTime")),
         duration_ms: rate.to_ms(ticks("duration")),
         name: field(meta, marker, "name").unwrap_or_default(),
@@ -165,7 +221,7 @@ fn read_marker(meta: &XmpMeta, marker: &str, rate: Rate) -> Marker {
             .unwrap_or_default()
             .replace("\r\n", "\n")
             .replace('\r', "\n"),
-        color: color_of(meta, marker),
+        color,
     }
 }
 
@@ -295,6 +351,17 @@ fn update_marker(
         set_color(meta, path, marker.color)?;
         changed = true;
     }
+    // The parameters as stored, not as read: a legacy AI marker reads as AI without them.
+    let stored_id = param(meta, path, ID_KEY);
+    if marker.id.is_some() && stored_id != marker.id {
+        set_param(meta, path, ID_KEY, marker.id.as_deref())?;
+        changed = true;
+    }
+    let stored_ai = param(meta, path, BY_KEY).is_some_and(|by| by.trim() == BY_AI);
+    if marker.id.is_some() && stored_ai != marker.ai {
+        set_param(meta, path, BY_KEY, marker.ai.then_some(BY_AI))?;
+        changed = true;
+    }
     Ok(changed)
 }
 
@@ -347,6 +414,12 @@ fn append_marker(
     let guid = marker.guid.clone().unwrap_or_default();
     set_field(meta, &path, "guid", &guid)?;
     append_param(meta, &path, MARKER_GUID_KEY, &guid)?;
+    if let Some(id) = &marker.id {
+        append_param(meta, &path, ID_KEY, id)?;
+        if marker.ai {
+            append_param(meta, &path, BY_KEY, BY_AI)?;
+        }
+    }
     set_color(meta, &path, marker.color)
 }
 
@@ -367,11 +440,7 @@ fn set_color(meta: &mut XmpMeta, marker: &str, color: MarkerColor) -> Result<(),
     let existing = color_param(meta, marker);
     let Some(value) = color.value() else {
         if let Some((index, _)) = existing {
-            let params = params_path(marker);
-            meta.delete_array_item(XMP_DM, &params, index as i32)?;
-            if meta.array_len(XMP_DM, &params) == 0 {
-                meta.delete_struct_field(XMP_DM, marker, XMP_DM, "cuePointParams")?;
-            }
+            remove_param(meta, marker, index)?;
         }
         return Ok(());
     };

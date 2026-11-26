@@ -389,6 +389,7 @@ batch-written-subtitles = Geschriebene Dateien:
 batch-table-written = Geschrieben
 batch-merged-markers = Doppelte Marker zusammengeführt:
 batch-table-merged = Zusammengeführt
+batch-describe-files-not-written = Nicht geschriebene Beschreibungsdateien (clip.describe.json):
 batch-markers-merged = { $count ->
     [one] { $count } doppelter Marker zusammengeführt
    *[other] { $count } doppelte Marker zusammengeführt
@@ -481,6 +482,8 @@ batch-ai-fail-no-key = Kein API-Schlüssel
 batch-ai-fail-unreadable = Das Video konnte nicht gelesen werden
 batch-ai-fail-too-long = Der Clip ist zu lang für die KI (über 30 Min.)
 batch-ai-fail-not-saved = Die Beschreibung konnte nicht gespeichert werden
+batch-ai-describe-file-kept = Unverändert gelassen: Diese Version von frename kann sie nicht lesen
+batch-ai-describe-file-failed = Nicht geschrieben: { $reason }
 batch-ai-fail-key-rejected = { $provider } hat den Schlüssel abgelehnt
 batch-ai-fail-no-credit = Das { $provider }-Konto hat kein Guthaben mehr
 batch-ai-fail-network = Netzwerkfehler

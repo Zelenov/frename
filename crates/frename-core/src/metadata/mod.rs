@@ -433,10 +433,18 @@ impl std::fmt::Display for MarkersError {
     }
 }
 
-/// The clip markers kept in the file's XMP. `None` when the file cannot hold them.
+/// The clip markers kept in the file's XMP. `None` when the file cannot hold them. A marker
+/// without a short id (made in Premiere) gets one here, and it is written into the file at
+/// once, so the marker keeps it on every later read (#388); a file that cannot be written
+/// keeps the id until the markers are next saved.
 pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
     let mut markers = xmp::read_markers(path)?;
     crate::markers::sort_markers(&mut markers);
+    if crate::markers::give_ids(&mut markers) {
+        if let Err(e) = save_markers(path, &markers, &HashSet::new()) {
+            log::warn!("metadata: the ids of the markers of {path:?} not written yet: {e}");
+        }
+    }
     Some(markers)
 }
 
@@ -464,6 +472,18 @@ pub(crate) fn save_markers(
     markers: &[Marker],
     known: &HashSet<String>,
 ) -> Result<(), MarkersError> {
+    // The ids the video's markers have before the write, for the description file: only read
+    // when the clip has one.
+    let description = crate::description::path(path).is_file();
+    let before: HashSet<String> = if description {
+        xmp::read_markers(path)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|m| m.id)
+            .collect()
+    } else {
+        HashSet::new()
+    };
     xmp::write_markers(path, markers, known).map_err(|e| match e {
         xmp::XmpWriteError::Unsupported => cannot_hold_markers(path),
         other => {
@@ -473,6 +493,11 @@ pub(crate) fn save_markers(
     })?;
     // The write keeps the file's time, so a same-size file would still match its old line.
     cache::reload_line(path);
+    if description {
+        // As the video holds them now: markers added elsewhere meanwhile are kept there.
+        let after = xmp::read_markers(path).unwrap_or_default();
+        crate::description::markers_saved(path, &before, &after);
+    }
     Ok(())
 }
 

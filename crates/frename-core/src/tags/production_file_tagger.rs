@@ -280,6 +280,10 @@ impl ProductionFileTagger {
         // The video may have taken new XMP and kept its size and time: its file list line must
         // follow, or the next scan shows the old comment and a save writes it back (#502).
         metadata::cache::refresh_after_save(path, &new_path);
+        // A pending snapshot does not know its points.
+        if !snapshot.comment_loading() {
+            crate::description::in_out_saved(&new_path, snapshot.segment());
+        }
         Saved {
             path: new_path,
             points_in_comment,
@@ -689,6 +693,7 @@ mod tests {
         let mut old_sidecars = crate::subtitles::subtitle_candidates(&path);
         old_sidecars.push(crate::subtitles::transcript_path(&path));
         old_sidecars.push(crate::subtitles::capt_path(&path));
+        old_sidecars.push(crate::description::path(&path));
         old_sidecars.push(crate::comment::comment_path(&path));
         old_sidecars.push(screenshot_path(&path, 10_936));
         old_sidecars.push(screenshot_path(&path, 0));
@@ -705,6 +710,7 @@ mod tests {
         let mut expected = crate::subtitles::subtitle_candidates(&new_path);
         expected.push(crate::subtitles::transcript_path(&new_path));
         expected.push(crate::subtitles::capt_path(&new_path));
+        expected.push(crate::description::path(&new_path));
         expected.push(crate::comment::comment_path(&new_path));
         expected.push(screenshot_path(&new_path, 10_936));
         expected.push(screenshot_path(&new_path, 0));

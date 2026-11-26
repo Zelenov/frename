@@ -16,7 +16,8 @@ Italian, Brazilian Portuguese, Ukrainian, Serbian, Japanese, Korean and Chinese.
 frename can write a short description of each clip and list what happens at which second, even
 in a clip with no speech. The description goes into the clip's comment, where you can search for
 it later. Premiere Pro shows it in the Description column. AI can also suggest tags, and in and
-out points for the part you want to keep.
+out points for the part you want to keep. frename also saves each description in a small file
+next to the clip. A new description keeps the markers you named or changed yourself.
 
 ![A clip of a small dragon next to the comment box, which holds the AI's summary of the clip and what happens in each part of it](docs/images/describe.jpg)
 

@@ -1,3 +1,12 @@
+# 0.303
+## Added
+- Every AI description is now also saved in a file next to the clip, `clip.describe.json`. It keeps the summary, the suggested in and out points, the markers and the tags the AI found. A new run adds to it and keeps what you made or changed, and the file moves with the clip when frename renames it.
+- Your changes to markers and to the in and out points now go into that file too, and `Ctrl+Z` takes them back there as well.
+
+## Changed
+- AI markers now have a short title as their name, and the description as their comment.
+- A new AI description now keeps every AI marker you renamed, moved, resized, recolored or described. Before, it kept only the ones you gave another color.
+
 # 0.302
 ## Fixed
 - Undo now works every time on a clip whose name repeats a tag (rough.rough.clip.mp4). Before, Ctrl+Z after ticking or moving that tag could sometimes do nothing.

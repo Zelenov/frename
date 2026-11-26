@@ -292,6 +292,23 @@ fn capt_speaker_names(doc: &sonisub::captions::capt::Doc) -> Vec<String> {
     doc.speaker_names()
 }
 
+/// The names the CAPT file next to `video` gives its speakers, by speaker id (`"1"` → `"Ann"`).
+/// Empty when there is no CAPT file, it does not parse, or it names no one.
+pub(crate) fn capt_speaker_names_by_id(video: &Path) -> std::collections::HashMap<String, String> {
+    let Ok(bytes) = std::fs::read(capt_path(video)) else {
+        return std::collections::HashMap::new();
+    };
+    let source = crate::text_encoding::decode(&bytes);
+    let Ok(doc) = sonisub::captions::capt::Doc::parse(&source) else {
+        return std::collections::HashMap::new();
+    };
+    doc.speakers
+        .into_iter()
+        .filter_map(|speaker| Some((speaker.id, speaker.name?)))
+        .filter(|(_, name)| !name.trim().is_empty())
+        .collect()
+}
+
 /// The cues of a CAPT file, laid out by `length` with its speakers' names, as plain text: the
 /// list shows no italics or places, so no `<i>` or `{\anN}` that an `.srt` made from the same
 /// file would carry.
@@ -469,8 +486,8 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
     })
 }
 
-/// Move the subtitle files (the CAPT file among them) and the saved transcript along when their
-/// video is renamed, so they keep matching. Does nothing for a file that is not there; never
+/// Move the subtitle files (the CAPT file among them), the saved transcript and the description
+/// file (`clip.describe.json`) along when their video is renamed, so they keep matching. Does nothing for a file that is not there; never
 /// overwrites an existing one.
 pub(crate) fn rename_subtitle_file(
     old_video_path: &Path,
@@ -482,7 +499,8 @@ pub(crate) fn rename_subtitle_file(
     }
 }
 
-/// The subtitle files (the CAPT file among them) and the saved transcript of `old_video_path`,
+/// The subtitle files (the CAPT file among them), the saved transcript and the description file
+/// of `old_video_path`,
 /// each with its name for `new_video_path`, whether or not they are there: the one list that
 /// [`rename_subtitle_file`] moves and a rename's name-length check looks at (#526).
 pub(crate) fn companion_paths(
@@ -492,10 +510,16 @@ pub(crate) fn companion_paths(
     subtitle_candidates(old_video_path)
         .into_iter()
         .zip(subtitle_candidates(new_video_path))
-        .chain([(
-            transcript_path(old_video_path),
-            transcript_path(new_video_path),
-        )])
+        .chain([
+            (
+                transcript_path(old_video_path),
+                transcript_path(new_video_path),
+            ),
+            (
+                crate::description::path(old_video_path),
+                crate::description::path(new_video_path),
+            ),
+        ])
 }
 
 fn rename_companion(old_path: &Path, new_path: &Path, moves: &mut crate::tags::SidecarMove) {

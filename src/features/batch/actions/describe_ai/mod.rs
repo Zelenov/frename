@@ -973,12 +973,21 @@ pub fn run_clip(
         }
     };
     progress.set(0.98, fl!("batch-ai-progress-saving"));
+    // The description file first, next to the clip before a save may rename it (it travels
+    // with the clip then); the markers are made from it.
+    let written = write_description_file(&on_disk, &described_clip, options, cancel);
     let mut new_block = match frename_core::marker_storage() {
         MarkerStorage::Comment => block::format_block(&description),
         MarkerStorage::InVideo => {
+            let new_ai = match &written {
+                Ok(file) => frename_core::description::ai_markers(file, &on_disk),
+                Err(_) => block::segment_lines(&description)
+                    .iter()
+                    .map(frename_core::ai_marker)
+                    .collect(),
+            };
             // Markers first, before the comment's save may rename the file.
-            let segments = block::segment_lines(&description);
-            match FileTagger::save_ai_markers(path, &segments) {
+            match FileTagger::save_ai_markers(path, new_ai) {
                 Ok(()) => block::format_summary_block(&description),
                 // A format without markers, or a file in use: the moments go into the
                 // comment instead, so the paid answer is not lost.
@@ -1027,10 +1036,55 @@ pub fn run_clip(
             ..ItemResult::failed(fl!("batch-ai-fail-not-saved"))
         };
     }
-    // A cancel that came while the answer was on its way still leaves this video done.
+    // A cancel that came while the answer was on its way still leaves this video done. A
+    // description file that was not written is said in the report.
     ItemResult {
         usage,
+        reason: written.err().flatten(),
         ..ItemResult::new(ItemStatus::Done, Some((new_path, saved)))
+    }
+}
+
+/// Write the description file of the clip at `on_disk` (`clip.describe.json`) from `clip`,
+/// merged with the file already there so what the editor made or changed stays, and read it
+/// back. `Err` when it was not written, with what the report says about it: a file there that
+/// this version cannot read is left as it is, and said; a cancel says nothing.
+fn write_description_file(
+    on_disk: &Path,
+    clip: &describe::DescribedClip,
+    options: &Run,
+    cancel: &AtomicBool,
+) -> Result<describe::describe_file::DescribeFile, Option<String>> {
+    use describe::describe_file::{save_run, SaveError};
+    // The language when the answer does not say: the one asked for, else English.
+    let fallback_lang = options
+        .language
+        .code()
+        .or(SummaryLanguage::English.code())
+        .unwrap_or_default();
+    match save_run(on_disk, clip, options.moments, fallback_lang, cancel) {
+        Ok(path) => frename_core::description::read(on_disk).ok_or_else(|| {
+            log::warn!("ai: {} written but not read back", path.display());
+            None
+        }),
+        Err(SaveError::Video(describe::Error::Cancelled)) => Err(None),
+        Err(SaveError::Existing(e)) => {
+            log::warn!(
+                "ai: the description file of {} is kept as it is: {e}",
+                on_disk.display()
+            );
+            Err(Some(fl!("batch-ai-describe-file-kept")))
+        }
+        Err(e) => {
+            log::warn!(
+                "ai: the description file of {} not written: {e}",
+                on_disk.display()
+            );
+            Err(Some(fl!(
+                "batch-ai-describe-file-failed",
+                reason = e.to_string()
+            )))
+        }
     }
 }
 
@@ -1375,6 +1429,112 @@ mod tests {
         assert_eq!(result.status, ItemStatus::Pending);
         assert!(result.stop_job.is_some());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A described clip of the tiny fixture: one moment, titled.
+    fn described(title: &str) -> describe::DescribedClip {
+        describe::DescribedClip {
+            description: describe::Description {
+                summary: "A lion walks past.".to_string(),
+                segments: vec![describe::Segment {
+                    start_s: 0.05,
+                    end_s: 0.15,
+                    title: title.to_string(),
+                    description: "A lion walks past the camera.".to_string(),
+                }],
+                main: None,
+                lang: Some("en".to_string()),
+            },
+            tags: None,
+            usage: clipscribe::AiUsage::default(),
+            duration_s: 0.2,
+            frames: Vec::new(),
+        }
+    }
+
+    fn describe_run() -> Run {
+        Run {
+            language: SummaryLanguage::English,
+            redo: true,
+            model: describe::MODELS[0].id,
+            moments: MomentsMode::Important,
+            tags: Vec::new(),
+            tags_requested: false,
+            instructions: None,
+        }
+    }
+
+    fn fixture_clip(test: &str) -> PathBuf {
+        let dir = frename_core::test_support::fresh_dir(test);
+        let video = dir.join("clip.mov");
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("crates/frename-core/tests/fixtures/tiny.mov");
+        std::fs::copy(source, &video).expect("clip");
+        video
+    }
+
+    /// #388: a run writes `clip.describe.json` next to the clip, valid by the format's rules,
+    /// and its markers are made from it; what the editor changed stays through a new run.
+    #[test]
+    fn describing_a_clip_writes_a_valid_description_file_and_keeps_the_editors_changes() {
+        let video = fixture_clip("describe-file");
+        let cancel = AtomicBool::new(false);
+        let file = write_description_file(&video, &described("Lion"), &describe_run(), &cancel)
+            .expect("written");
+        assert!(frename_core::description::path(&video).is_file());
+        assert!(file.problems().is_empty(), "{:?}", file.problems());
+        let markers = frename_core::description::ai_markers(&file, &video);
+        assert_eq!(markers.len(), 1);
+        assert_eq!(
+            (markers[0].name.as_str(), markers[0].comment.as_str()),
+            ("Lion", "A lion walks past the camera."),
+            "the name is the title"
+        );
+        assert!(markers[0].ai);
+
+        // The editor renames the marker: the item is theirs now.
+        let mut edited = file.clone();
+        let item = &mut edited.moments.as_mut().expect("moments")[0];
+        item.title = Some("Our lion".to_string());
+        item.by = describe::describe_file::By::User;
+        let id = item.id.clone();
+        edited
+            .write(&frename_core::description::path(&video))
+            .expect("edited");
+
+        let again = write_description_file(&video, &described("Cat"), &describe_run(), &cancel)
+            .expect("written again");
+        assert!(again.problems().is_empty(), "{:?}", again.problems());
+        let kept = again
+            .moments
+            .iter()
+            .flatten()
+            .find(|m| m.id == id)
+            .expect("the editor's moment stays");
+        assert_eq!(kept.title.as_deref(), Some("Our lion"));
+        let _ = std::fs::remove_dir_all(video.parent().expect("dir"));
+    }
+
+    /// #388: a description file this version cannot read is left as it is, and the run says so.
+    #[test]
+    fn a_description_file_that_cannot_be_read_is_not_overwritten() {
+        let video = fixture_clip("describe-file-unreadable");
+        let path = frename_core::description::path(&video);
+        let newer = r#"{"version": 2, "parts": "not like this"}"#;
+        std::fs::write(&path, newer).expect("newer");
+        let written = write_description_file(
+            &video,
+            &described("Lion"),
+            &describe_run(),
+            &AtomicBool::new(false),
+        );
+        assert_eq!(
+            written.err(),
+            Some(Some(fl!("batch-ai-describe-file-kept"))),
+            "said in the report"
+        );
+        assert_eq!(std::fs::read_to_string(&path).expect("kept"), newer);
+        let _ = std::fs::remove_dir_all(video.parent().expect("dir"));
     }
 
     fn file(name: &str, comment: &str) -> File {
