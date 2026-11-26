@@ -557,9 +557,9 @@ pub struct FrenameApp {
     /// While it is, size, position and maximized state are not the window's own, so they are
     /// neither tracked nor saved: leaving restores the previous mode, size and position.
     os_fullscreen: bool,
-    /// The left button is down on the title bar's empty part: the next move starts a window
-    /// move. Not on the press itself, or a double click never arrives.
-    title_bar_pressed: bool,
+    /// The title bar's press: the next move over it starts a window move. Not the press itself,
+    /// or a double click never arrives.
+    title_bar: title_bar::State,
     /// Last known monitor size (logical px); 0×0 if not yet fetched.
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
@@ -615,7 +615,7 @@ impl FrenameApp {
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
-            title_bar_pressed: false,
+            title_bar: title_bar::State::default(),
             demo: None,
             initial_path: None,
             pending_update: None,
@@ -1148,9 +1148,24 @@ impl FrenameApp {
             if let (Some(_), Some(folder)) = (&self.demo, parts.folder.as_mut()) {
                 folder.parent = crate::demo::SHOWN_PARENT.to_string();
             }
-            title_bar::view::view(parts, self.is_maximized, Message::TitleBar)
+            title_bar::view::view(
+                parts,
+                self.title_bar.pressed(),
+                self.is_maximized,
+                Message::TitleBar,
+            )
         };
-        iced::widget::column![bar, workspace].into()
+        let window = iced::widget::column![bar, workspace];
+        // Without the system's frame, the window's own edges resize it; a maximized or fullscreen
+        // window has none. An empty layer rather than none keeps the tree's shape.
+        let resizable =
+            !(self.is_maximized || self.os_fullscreen || self.folder_workspace.media_fullscreen());
+        let edges = if resizable {
+            title_bar::view::edges(Message::TitleBar)
+        } else {
+            iced::widget::Space::new().into()
+        };
+        iced::widget::stack![window, edges].into()
     }
 
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
@@ -1241,30 +1256,17 @@ impl FrenameApp {
         Task::batch([open.discard(), read_key, show])
     }
 
-    /// The title bar's buttons and moves, done to the main window.
+    /// The title bar's buttons, moves and the window's edges, done to the main window.
     fn handle_title_bar(&mut self, msg: title_bar::Message) -> Task<Message> {
         let id = self.main_window;
-        match msg {
-            title_bar::Message::Pressed => {
-                self.title_bar_pressed = true;
-                Task::none()
-            }
-            title_bar::Message::Moved if self.title_bar_pressed => {
-                self.title_bar_pressed = false;
-                window::drag(id)
-            }
-            title_bar::Message::Moved => Task::none(),
-            title_bar::Message::Released => {
-                self.title_bar_pressed = false;
-                Task::none()
-            }
-            title_bar::Message::DoubleClicked | title_bar::Message::ToggleMaximize => {
-                self.title_bar_pressed = false;
-                window::toggle_maximize(id)
-            }
-            title_bar::Message::SystemMenu => window::show_system_menu(id),
-            title_bar::Message::Minimize => window::minimize(id, true),
-            title_bar::Message::Close => Task::done(Message::CloseRequested(id)),
+        match self.title_bar.update(msg) {
+            None => Task::none(),
+            Some(title_bar::WindowOp::Drag) => window::drag(id),
+            Some(title_bar::WindowOp::Resize(edge)) => window::drag_resize(id, edge.direction()),
+            Some(title_bar::WindowOp::ToggleMaximize) => window::toggle_maximize(id),
+            Some(title_bar::WindowOp::SystemMenu) => window::show_system_menu(id),
+            Some(title_bar::WindowOp::Minimize) => window::minimize(id, true),
+            Some(title_bar::WindowOp::Close) => Task::done(Message::CloseRequested(id)),
         }
     }
 

@@ -1,6 +1,6 @@
 # 0.303
 ## Changed
-- The window has one bar at the top instead of two: frename draws its own title bar and puts the folder's name, the Single file / Batch switch and Settings in it, so the video, the list and the tags get more room. Drag the empty part of the bar to move the window, double-click it to maximize, right-click it for the window menu. The switch keeps its width when you change mode, so nothing next to it moves.
+- The window has one bar at the top instead of two: frename draws its own title bar and puts the folder's name, the Single file / Batch switch and Settings in it, so the video, the list and the tags get more room. Drag the empty part of the bar to move the window, double-click it to maximize, right-click it for the window menu. Settings is there before a folder is open too. On Windows 11, Win+Z opens the snap layouts (hovering over maximize does not show them yet). The switch keeps its width when you change mode, so nothing next to it moves.
 
 # 0.302
 ## Fixed

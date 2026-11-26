@@ -239,7 +239,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         maximized: start_maximized,
         icon: window_icon.clone(),
-        // The app draws its own title bar (eatures::title_bar); Windows keeps the shadow.
+        // The app draws its own title bar (features::title_bar); Windows keeps the shadow.
         decorations: false,
         #[cfg(target_os = "windows")]
         platform_specific: window::settings::PlatformSpecific {

@@ -1,6 +1,6 @@
-//! Widget that reports where the right mouse button was pressed, in the coordinates of the
-//! widget's own parent (the window, when it wraps the whole window content), before its
-//! content sees the press. A context menu opens there: the row that was right-clicked only
+//! Widget that reports where the right mouse button was pressed, relative to the widget's own
+//! top-left corner (the workspace's, when it wraps the whole workspace), before its content sees
+//! the press. A context menu opens there: the row that was right-clicked only
 //! says *which* file, since a widget inside a scrollable sees the cursor shifted by the
 //! scroll offset.
 

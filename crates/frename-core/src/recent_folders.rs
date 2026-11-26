@@ -25,24 +25,34 @@ pub struct RecentFolder {
 impl RecentFolder {
     /// The folder's own name (`2026-09 Lisbon`); the whole path for a drive root, which has none.
     pub fn name(&self) -> String {
-        self.folder.file_name().map_or_else(
-            || self.folder.to_string_lossy().into_owned(),
-            |name| name.to_string_lossy().into_owned(),
-        )
+        folder_name(&self.folder)
     }
 
     /// The path of the folder that holds this one (`D:\Shoots`); `None` for a drive root.
     pub fn parent(&self) -> Option<String> {
-        self.folder
-            .parent()
-            .map(|parent| parent.to_string_lossy().into_owned())
-            .filter(|parent| !parent.is_empty())
+        folder_parent(&self.folder)
     }
 
     /// What the folder and `last_file` open as: the folder with its last file selected.
     pub fn to_open(&self) -> FolderAndFile {
         FolderAndFile::new(self.folder.clone(), self.last_file.clone())
     }
+}
+
+/// A folder's own name (`2026-09 Lisbon`); the whole path for a drive root, which has none.
+pub fn folder_name(folder: &Path) -> String {
+    folder.file_name().map_or_else(
+        || folder.to_string_lossy().into_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+/// The path of the folder that holds `folder` (`D:\Shoots`); `None` for a drive root.
+pub fn folder_parent(folder: &Path) -> Option<String> {
+    folder
+        .parent()
+        .map(|parent| parent.to_string_lossy().into_owned())
+        .filter(|parent| !parent.is_empty())
 }
 
 /// The key two spellings of one folder share: on Windows, where paths ignore case and take either

@@ -1,10 +1,10 @@
 //! The title bar's view, one row of `TITLE_BAR_HEIGHT`: the folder and the drag space, the mode
 //! switch and Settings, and the window buttons.
 
-use iced::widget::{button, container, mouse_area, row, space, text::Wrapping};
-use iced::{alignment, Alignment, Element, Length};
+use iced::widget::{button, column, container, mouse_area, row, space, text::Wrapping};
+use iced::{alignment, mouse, Alignment, Element, Length};
 
-use super::Message;
+use super::{Edge, Message};
 use crate::ui::icons::{icon, Icon};
 use crate::ui::style::{self, ButtonKind};
 use crate::ui::text;
@@ -26,9 +26,11 @@ pub struct Parts<'a, M> {
     pub settings: Element<'a, M>,
 }
 
-/// The bar. `maximized` turns maximize into restore; `on` lifts the bar's own messages.
+/// The bar. `pressed` is [`super::State::pressed`]; `maximized` turns maximize into restore; `on`
+/// lifts the bar's own messages.
 pub fn view<'a, M: Clone + 'a>(
     parts: Parts<'a, M>,
+    pressed: bool,
     maximized: bool,
     on: fn(Message) -> M,
 ) -> Element<'a, M> {
@@ -52,12 +54,19 @@ pub fn view<'a, M: Clone + 'a>(
         .align_y(alignment::Vertical::Center)
         .clip(true);
     // Every pixel that is not a control moves the window: the buttons keep their own presses.
+    // Leaving the bar ends a press, wherever the button comes up; moves are listened for only
+    // after a press, so plain hovering sends nothing.
     let grip = mouse_area(caption)
         .on_press(on(Message::Pressed))
-        .on_move(move |_| on(Message::Moved))
         .on_release(on(Message::Released))
+        .on_exit(on(Message::Released))
         .on_double_click(on(Message::DoubleClicked))
         .on_right_press(on(Message::SystemMenu));
+    let grip = if pressed {
+        grip.on_move(move |_| on(Message::Moved))
+    } else {
+        grip
+    };
 
     let (size_icon, size_tip) = if maximized {
         (Icon::Copy, fl!("title-bar-restore"))
@@ -115,4 +124,51 @@ fn window_button<'a, M: Clone + 'a>(
         .style(style::button(ButtonKind::WindowButton(close)))
         .on_press(message);
     tooltip::tip(button, tip, Position::Bottom)
+}
+
+/// The window's edges and corners, a layer over the whole window: a press there resizes it, as
+/// the system's frame would. Left out while the window is maximized or fullscreen.
+pub fn edges<'a, M: Clone + 'a>(on: fn(Message) -> M) -> Element<'a, M> {
+    use mouse::Interaction::{
+        ResizingDiagonallyDown as Nwse, ResizingDiagonallyUp as Nesw, ResizingHorizontally as Ew,
+        ResizingVertically as Ns,
+    };
+    let edge = move |side: Edge,
+                     interaction: mouse::Interaction,
+                     width: Length,
+                     height: Length|
+          -> Element<'a, M> {
+        mouse_area(space().width(width).height(height))
+            .on_press(on(Message::Resize(side)))
+            .interaction(interaction)
+            .into()
+    };
+    let thin = Length::Fixed(RESIZE_EDGE);
+    let corner = Length::Fixed(RESIZE_CORNER);
+    let line = |left: Element<'a, M>, middle: Element<'a, M>, right: Element<'a, M>| {
+        row![left, middle, right]
+    };
+    column![
+        line(
+            edge(Edge::NorthWest, Nwse, corner, thin),
+            edge(Edge::North, Ns, Length::Fill, thin),
+            edge(Edge::NorthEast, Nesw, corner, thin),
+        )
+        .height(thin),
+        line(
+            edge(Edge::West, Ew, thin, Length::Fill),
+            space().width(Length::Fill).into(),
+            edge(Edge::East, Ew, thin, Length::Fill),
+        )
+        .height(Length::Fill),
+        line(
+            edge(Edge::SouthWest, Nesw, corner, thin),
+            edge(Edge::South, Ns, Length::Fill, thin),
+            edge(Edge::SouthEast, Nwse, corner, thin),
+        )
+        .height(thin),
+    ]
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
 }

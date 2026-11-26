@@ -22,8 +22,7 @@ use crate::widgets::splitter::Splitter;
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-/// `update_available` is the newer frename version found by the update check, if any;
-/// `whats_new` the version just installed, until its release notes were seen.
+/// The title bar above it is built from [`title_bar_parts`].
 pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
@@ -193,8 +192,8 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
     let recent = recent_folders::view::dropdown(state.recent_folders(), state.left_width())
         .map(Message::RecentFolders);
 
-    // The right button's position is taken here, over the whole window: a row inside the
-    // scrolled file list does not know where it is on screen.
+    // The right button's position is taken here, over the whole workspace (the window under its
+    // title bar): a row inside the scrolled file list does not know where it is on screen.
     RightPressReporter::new(
         stack![normal_layout, overlay, file_menu, recent]
             .width(Length::Fill)
@@ -206,6 +205,8 @@ pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Mes
 
 /// What the window's own title bar shows of the workspace (§13.12, version A): the mode switch
 /// while a folder is open, the folder's name and where it is, and Settings with its update dot.
+/// `update_available` is the newer frename version found by the update check, if any;
+/// `whats_new` the version just installed, until its release notes were seen.
 pub fn title_bar_parts(
     state: &FolderWorkspace,
     update_available: Option<String>,
@@ -221,18 +222,9 @@ pub fn title_bar_parts(
     let lift = |e: Element<'static, folder::Message>| {
         e.map(|m| crate::app::Message::FolderWorkspace(Message::Folder(m)))
     };
-    let folder = state.directory().map(|dir| {
-        let path = dir.path();
-        title_bar::view::Folder {
-            name: path.file_name().map_or_else(
-                || path.display().to_string(),
-                |n| n.to_string_lossy().into_owned(),
-            ),
-            parent: path
-                .parent()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default(),
-        }
+    let folder = state.directory().map(|dir| title_bar::view::Folder {
+        name: frename_core::recent_folders::folder_name(dir.path()),
+        parent: frename_core::recent_folders::folder_parent(dir.path()).unwrap_or_default(),
     });
     title_bar::view::Parts {
         mode: state.directory().is_some().then(|| lift(mode)),

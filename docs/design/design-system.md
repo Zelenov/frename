@@ -270,6 +270,8 @@ Rules:
 | `bar.height` | 32 | toolbars (folder controls, video controls); icon buttons in them are 32×32 |
 | `appbar.height` | 32 | frename's own title bar (§13.12): `TITLE_BAR_HEIGHT` |
 | `window.button.width` | 46 | its minimise, maximise and close buttons (`WINDOW_BUTTON_WIDTH`) |
+| `window.resize.edge` | 5 | the band along each window edge that resizes it (`RESIZE_EDGE`) |
+| `window.resize.corner` | 12 | how far along the edges a corner reaches (`RESIZE_CORNER`) |
 | `buttonbar.height` | 56 | window button bar (28 button + 2 × 14) |
 | `row.height` | 32 | list row, navigation item, menu item 28 |
 | `row.tall` | 44 | two-line row (recent folders, file list keeps its 52) |
@@ -2192,10 +2194,17 @@ these rules.
   switch and the 32 px icon buttons: the bar costs nothing over the OS title bar it replaces.
 - **Pointer positions:** the file menu's right-press position is taken relative to the workspace
   under the bar, so the menu opens at the pointer.
+- **Resize edges:** a window without the system's frame has no resize edges of its own, on any
+  OS (winit hit-tests nothing). A transparent layer over the whole window gives them back: a 5 px
+  band along each edge (`window.resize.edge`, the top one over the bar) and 12 px corners
+  (`window.resize.corner`), each with its resize cursor, starting `window::drag_resize` on press.
+  Left out while the window is maximised or fullscreen.
+- **Menus:** the switch and Settings are outside the workspace's click-elsewhere layer, so pressing
+  either closes the file menu and the recent folders' list.
+- **No folder open** (§13.7): the bar shows only Settings and the window buttons.
 
 **Not built yet** (each its own issue if wanted): the Windows 11 snap layouts flyout on hover over
-maximise (`Win`+`Z` opens it); a resize strip along the top edge (the window's own resize edges
-work); dimming the bar while the window is inactive; the macOS traffic-light inset and the Linux
+maximise (`Win`+`Z` opens it); dimming the bar while the window is inactive; the macOS traffic-light inset and the Linux
 header-bar conventions. The Settings window keeps the OS title bar.
 
 #### Version B, not built — a thin app bar under the OS title bar (#64 option 2)

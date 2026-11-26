@@ -2659,6 +2659,31 @@ impl FolderWorkspace {
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
+        // The switch and Settings live in the title bar, outside the layer that closes the
+        // workspace's menus on a click elsewhere: pressing them closes those menus here.
+        let popups = if matches!(
+            msg,
+            folder::Message::SetBatchMode(_) | folder::Message::OpenSettings
+        ) {
+            self.close_popups()
+        } else {
+            Task::none()
+        };
+        let task = self.handle_folder_message_inner(msg);
+        Task::batch([popups, task])
+    }
+
+    /// Close the file menu and the recent folders' list, whichever is open.
+    fn close_popups(&mut self) -> Task<Message> {
+        let _ = self.recent_folders.update(recent_folders::Message::Close);
+        if self.file_menu.is_open() {
+            self.handle_file_menu(file_menu::Message::Close)
+        } else {
+            Task::none()
+        }
+    }
+
+    fn handle_folder_message_inner(&mut self, msg: folder::Message) -> Task<Message> {
         match msg {
             folder::Message::SelectFile(index) => self.select_file_on_click(index),
             folder::Message::PreviousFile => self.select_previous(),
@@ -11975,6 +12000,21 @@ mod tests {
         assert_eq!(workspace.recent_folders.highlight(), Some(1));
         let _ = workspace.update(Message::EscapePressed);
         assert!(!workspace.recent_folders.is_open());
+    }
+
+    #[test]
+    fn the_title_bar_switch_and_settings_close_an_open_list() {
+        // They sit outside the workspace's click-elsewhere layer (#64).
+        for press in [
+            folder::Message::SetBatchMode(true),
+            folder::Message::OpenSettings,
+        ] {
+            let mut workspace = workspace_with_recent_folders(&["a"]);
+            let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+            assert!(workspace.recent_folders.is_open());
+            let _ = workspace.update(Message::Folder(press));
+            assert!(!workspace.recent_folders.is_open());
+        }
     }
 
     #[test]

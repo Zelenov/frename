@@ -1,5 +1,5 @@
 //! The toolbar under the file list (`docs/design/design-system.md` §13.4.3): moving between files,
-//! opening a folder. Settings and the mode switch are in the app bar (`app_bar`, #64). Receives
+//! opening a folder. Settings and the mode switch are in the window's title bar (`app_bar_controls`, #64). Receives
 //! only what it shows.
 
 use iced::widget::{column, container, mouse_area, row, space};
