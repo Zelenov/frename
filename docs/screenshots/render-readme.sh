@@ -77,13 +77,14 @@ shot "$work/markers.toml" markers.png
 shot "$work/describe.toml" describe.png
 
 # The crop boxes below follow the window layout of the scenarios (window 1600x860, video panel
-# 820, file list 380, with the dividers between them): WxH+X+Y in window pixels. The file list
-# leaves out the bar with Single file and Batch above it, and the empty rows and buttons below
-# the twelve clips. A layout change can leave them wrong while the script still succeeds: look
-# at the images.
-VIDEO_PANEL=826x860+0+0
-FILE_LIST=392x660+826+36
-RIGHT_COLUMN=382x860+1218+0
+# 820, file list 380, with the dividers between them): WxH+X+Y in window pixels. The crops of
+# one region start under the window's 32 px title bar (the folder, Single file and Batch,
+# Settings and the window buttons), which only the whole-window shots show; the file list also
+# leaves out the empty rows and buttons below the twelve clips. A layout change can leave them
+# wrong while the script still succeeds: look at the images.
+VIDEO_PANEL=826x828+0+32
+FILE_LIST=392x660+826+32
+RIGHT_COLUMN=382x828+1218+32
 
 jpg "$work/main.png" main.jpg
 jpg "$work/batch.png" batch.jpg

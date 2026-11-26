@@ -1,5 +1,6 @@
 # README screenshots: the main window, batch mode (--batch) and monochrome tags (--mono). Rendered by hand with render.sh here.
 source = "../../tests/folder"
+folder_name = "Day 3"
 open = "pick.wide.night.city.MVI_0410.mp4"
 seek = 10.0
 window = [1440, 720]

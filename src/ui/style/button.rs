@@ -32,6 +32,9 @@ pub enum ButtonKind {
     Segment(bool),
     /// An item of a menu (§8.14): no fill until the pointer or the keys are on it.
     MenuItem,
+    /// A window button of the title bar: square corners; `true` for Close, red under the
+    /// pointer.
+    WindowButton(bool),
 }
 
 impl ButtonKind {
@@ -92,6 +95,10 @@ impl ButtonKind {
                 TEXT,
                 clear,
             ),
+            ButtonKind::WindowButton(close) => match (close, status) {
+                (true, Hovered | Pressed) => (DANGER, TEXT_ON_FILL, clear),
+                _ => (layer(clear), TEXT, clear),
+            },
             ButtonKind::Segment(true) => (SELECTED, TEXT, BORDER_CONTROL),
             ButtonKind::Segment(false) => (layer(BG_RAISED), TEXT_SECONDARY, BORDER_CONTROL),
         }
@@ -119,7 +126,12 @@ pub fn button(kind: ButtonKind) -> impl Fn(&Theme, Status) -> Style + Clone {
                 } else {
                     LINE
                 },
-                radius: RADIUS_S.into(),
+                radius: if matches!(kind, ButtonKind::WindowButton(_)) {
+                    0.0
+                } else {
+                    RADIUS_S
+                }
+                .into(),
             },
             shadow: Shadow::default(),
             snap: true,

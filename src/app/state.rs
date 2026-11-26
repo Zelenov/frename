@@ -11,7 +11,8 @@ use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
     batch, drag_drop, drag_out, file_menu, file_name_panel, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
+    media_viewer::video as media_viewer_video, settings, tag_panel, title_bar, updates,
+    video_controls,
 };
 use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
@@ -556,6 +557,9 @@ pub struct FrenameApp {
     /// While it is, size, position and maximized state are not the window's own, so they are
     /// neither tracked nor saved: leaving restores the previous mode, size and position.
     os_fullscreen: bool,
+    /// The left button is down on the title bar's empty part: the next move starts a window
+    /// move. Not on the press itself, or a double click never arrives.
+    title_bar_pressed: bool,
     /// Last known monitor size (logical px); 0×0 if not yet fetched.
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
@@ -611,6 +615,7 @@ impl FrenameApp {
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
+            title_bar_pressed: false,
             demo: None,
             initial_path: None,
             pending_update: None,
@@ -989,6 +994,7 @@ impl FrenameApp {
                 self.save_window_state();
                 fetch
             }
+            Message::TitleBar(msg) => self.handle_title_bar(msg),
             Message::WindowMaximizedFetched(maximized) => {
                 self.is_maximized = maximized;
                 self.save_window_state();
@@ -1126,15 +1132,25 @@ impl FrenameApp {
                 .map(Message::Settings);
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
-        let update_available = self.settings.updates().available_version();
-        let whats_new = self.settings.updates().whats_new();
-        folder_workspace::view::view(
-            &self.folder_workspace,
-            tag_palette,
-            update_available,
-            whats_new,
-        )
-        .map(Message::FolderWorkspace)
+        let workspace = folder_workspace::view::view(&self.folder_workspace, tag_palette)
+            .map(Message::FolderWorkspace);
+        // In the OS fullscreen the video takes the whole monitor: no title bar over it. An empty
+        // space rather than no child, so the workspace keeps its place in the tree (and its
+        // scroll positions).
+        let bar = if self.os_fullscreen || self.folder_workspace.media_fullscreen() {
+            iced::widget::Space::new().into()
+        } else {
+            let mut parts = folder_workspace::view::title_bar_parts(
+                &self.folder_workspace,
+                self.settings.updates().available_version(),
+                self.settings.updates().whats_new(),
+            );
+            if let (Some(_), Some(folder)) = (&self.demo, parts.folder.as_mut()) {
+                folder.parent = crate::demo::SHOWN_PARENT.to_string();
+            }
+            title_bar::view::view(parts, self.is_maximized, Message::TitleBar)
+        };
+        iced::widget::column![bar, workspace].into()
     }
 
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
@@ -1223,6 +1239,33 @@ impl FrenameApp {
         });
         self.settings_window = Some(id);
         Task::batch([open.discard(), read_key, show])
+    }
+
+    /// The title bar's buttons and moves, done to the main window.
+    fn handle_title_bar(&mut self, msg: title_bar::Message) -> Task<Message> {
+        let id = self.main_window;
+        match msg {
+            title_bar::Message::Pressed => {
+                self.title_bar_pressed = true;
+                Task::none()
+            }
+            title_bar::Message::Moved if self.title_bar_pressed => {
+                self.title_bar_pressed = false;
+                window::drag(id)
+            }
+            title_bar::Message::Moved => Task::none(),
+            title_bar::Message::Released => {
+                self.title_bar_pressed = false;
+                Task::none()
+            }
+            title_bar::Message::DoubleClicked | title_bar::Message::ToggleMaximize => {
+                self.title_bar_pressed = false;
+                window::toggle_maximize(id)
+            }
+            title_bar::Message::SystemMenu => window::show_system_menu(id),
+            title_bar::Message::Minimize => window::minimize(id, true),
+            title_bar::Message::Close => Task::done(Message::CloseRequested(id)),
+        }
     }
 
     fn close_settings(&mut self) -> Task<Message> {

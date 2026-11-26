@@ -1,3 +1,7 @@
+# 0.303
+## Changed
+- The window has one bar at the top instead of two: frename draws its own title bar and puts the folder's name, the Single file / Batch switch and Settings in it, so the video, the list and the tags get more room. Drag the empty part of the bar to move the window, double-click it to maximize, right-click it for the window menu. The switch keeps its width when you change mode, so nothing next to it moves.
+
 # 0.302
 ## Fixed
 - Undo now works every time on a clip whose name repeats a tag (rough.rough.clip.mp4). Before, Ctrl+Z after ticking or moving that tag could sometimes do nothing.

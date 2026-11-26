@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- README screenshot template: the demo screenshot batch.png (main.toml in batch mode) with labels
-     and arrows. The window sits at 100,204 at its real size (1440x720); everything else is in
+     and arrows. The window sits at 100,204 (its title bar, with the mode switch at the right, included) at its real size (1440x720); everything else is in
      canvas pixels. The arrow is the one of main.svg, see there. Rendered by render.sh. -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      width="2020" height="1128" viewBox="0 0 2020 1128">
@@ -21,9 +21,9 @@
     <text x="1330" y="140" text-anchor="middle">Batch actions</text>
     <text x="1590" y="368">Pick an action</text>
     <text x="1480" y="1028">Run it</text>
-    <text x="100" y="60">Batch mode on / off</text>
+    <text x="1600" y="140">Batch mode on / off</text>
   </g>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1525,312) rotate(-164.3) scale(1,-1)"/>
   <use xlink:href="#arrow" href="#arrow" transform="translate(1470,925) rotate(-148.2) scale(1,-1)"/>
-  <use xlink:href="#arrow" href="#arrow" transform="translate(215,200) rotate(31.8) scale(1,-1)"/>
+  <use xlink:href="#arrow" href="#arrow" transform="translate(1352,214) rotate(160.3) scale(2,-1)"/>
 </svg>

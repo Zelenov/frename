@@ -665,6 +665,13 @@ file-menu-copied = Copié
 file-menu-not-copied = Non copié : le presse-papiers n’est pas disponible
 file-menu-not-shown = Impossible d’ouvrir le gestionnaire de fichiers
 
+## Title bar
+
+title-bar-minimize = Réduire
+title-bar-maximize = Agrandir
+title-bar-restore = Restaurer
+title-bar-close = Fermer
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Sans tag

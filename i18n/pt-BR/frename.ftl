@@ -665,6 +665,13 @@ file-menu-copied = Copiado
 file-menu-not-copied = Não copiado: a área de transferência não está disponível
 file-menu-not-shown = Não foi possível abrir o gerenciador de arquivos
 
+## Title bar
+
+title-bar-minimize = Minimizar
+title-bar-maximize = Maximizar
+title-bar-restore = Restaurar
+title-bar-close = Fechar
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Sem tags

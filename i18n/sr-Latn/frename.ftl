@@ -669,6 +669,13 @@ file-menu-copied = Kopirano
 file-menu-not-copied = Nije kopirano: klipbord nije dostupan
 file-menu-not-shown = Upravnik datoteka nije mogao da se otvori
 
+## Title bar
+
+title-bar-minimize = Umanji
+title-bar-maximize = Uvećaj
+title-bar-restore = Vrati
+title-bar-close = Zatvori
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Bez tegova

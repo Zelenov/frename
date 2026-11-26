@@ -37,6 +37,10 @@ pub enum Message {
     TimedOut,
 }
 
+/// Where the title bar says a demo's folder is, instead of the throwaway folder in the user's
+/// temp directory (whose path names the user): the same in every screenshot, on every OS.
+pub const SHOWN_PARENT: &str = r"D:\Footage";
+
 /// A demo in progress.
 #[derive(Debug, Clone)]
 pub struct DemoRun {

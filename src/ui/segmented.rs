@@ -17,6 +17,9 @@ pub struct Segment<M> {
     pub icon: Option<Icon>,
     pub label: String,
     pub count: Option<String>,
+    /// The widest count the segment can show: its width is kept while the count is hidden or
+    /// narrower, so the control never changes width (and moves nothing beside it).
+    pub count_room: Option<String>,
     pub selected: bool,
     pub on_press: M,
     pub tip: Option<String>,
@@ -56,7 +59,13 @@ fn segment<'a, M: Clone + 'a>(s: Segment<M>, first: bool, last: bool) -> Element
     let words = row![]
         .push(s.icon.map(|glyph| icon(glyph, ICON_M, color)))
         .push(label)
-        .push(s.count.map(text::caption))
+        .push(match (s.count, s.count_room) {
+            (count, Some(room)) => Some(Element::from(stack![
+                text::caption(room).color(Color::TRANSPARENT),
+                text::caption(count.unwrap_or_default()),
+            ])),
+            (count, None) => count.map(|c| text::caption(c).into()),
+        })
         .spacing(SPACE_TIGHT)
         .align_y(Alignment::Center);
     let underline = container(space())

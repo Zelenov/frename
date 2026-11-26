@@ -675,6 +675,13 @@ file-menu-copied = Скопійовано
 file-menu-not-copied = Не скопійовано: буфер обміну недоступний
 file-menu-not-shown = Не вдалося відкрити файловий менеджер
 
+## Title bar
+
+title-bar-minimize = Згорнути
+title-bar-maximize = Розгорнути
+title-bar-restore = Відновити
+title-bar-close = Закрити
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Без тегів

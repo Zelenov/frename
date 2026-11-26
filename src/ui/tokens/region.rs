@@ -11,6 +11,12 @@ pub const WINDOW_MIN_HEIGHT: f32 = 560.0;
 pub const WINDOW_WIDTH: f32 = 1440.0;
 pub const WINDOW_HEIGHT: f32 = 800.0;
 
+// The main window's own title bar (prototype).
+/// The title bar over the three columns; its window buttons are as high.
+pub const TITLE_BAR_HEIGHT: f32 = BAR_HEIGHT;
+/// A window button (minimize, maximize, close): as wide as the system draws its own.
+pub const WINDOW_BUTTON_WIDTH: f32 = 46.0;
+
 // Columns (§13.1).
 pub const VIDEO_MIN_WIDTH: f32 = 320.0;
 pub const FILE_LIST_MIN_WIDTH: f32 = 200.0;
@@ -95,10 +101,6 @@ pub const COMMENT_CORNER_BUTTONS: usize = 4;
 pub const COMMENT_CORNER_WIDTH: f32 = COMMENT_CORNER_BUTTONS as f32 * ICON_BUTTON_SMALL
     + (COMMENT_CORNER_BUTTONS - 1) as f32 * SPACE_XXS
     + SPACE_XS;
-
-// App bar (#64, §13.12 version B).
-/// The bar under the OS title bar: the 28 px mode switch with 4 px above and below.
-pub const APP_BAR_HEIGHT: f32 = CONTROL_HEIGHT + 2.0 * SPACE_XS;
 
 // File list (§13.4).
 /// The search bar over a list: a 28 px field with 6 px around it.
