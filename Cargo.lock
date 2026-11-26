@@ -780,8 +780,8 @@ dependencies = [
 
 [[package]]
 name = "clipscribe"
-version = "0.17.0"
-source = "git+https://github.com/Zelenov/clipscribe?rev=bab03dbe6e81fbe3cd146d456c3a228d12bba0f3#bab03dbe6e81fbe3cd146d456c3a228d12bba0f3"
+version = "0.18.0"
+source = "git+https://github.com/Zelenov/clipscribe?rev=a2f260cf78e6b037a0ab950fa43a22c559041df1#a2f260cf78e6b037a0ab950fa43a22c559041df1"
 dependencies = [
  "base64 0.22.1",
  "gstreamer",
@@ -790,6 +790,7 @@ dependencies = [
  "image",
  "log",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
  "url",
  "winresource",

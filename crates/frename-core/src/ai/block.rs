@@ -325,9 +325,11 @@ mod tests {
             segments: vec![Segment {
                 start_s: 0.0,
                 end_s: 14.2,
+                title: "Entrance".to_string(),
                 description: "Entrance.".to_string(),
             }],
             main: None,
+            lang: None,
         }
     }
 
@@ -360,6 +362,7 @@ mod tests {
             summary: description().summary,
             segments: vec![],
             main: None,
+            lang: None,
         };
         assert_eq!(format_block(&no_segments), "AI: A guide leads tourists.");
         assert_eq!(
