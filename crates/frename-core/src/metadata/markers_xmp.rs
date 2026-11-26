@@ -206,10 +206,10 @@ fn read_marker(meta: &XmpMeta, marker: &str, rate: Rate) -> Marker {
     let color = color_of(meta, marker);
     let id = param(meta, marker, ID_KEY).map(|id| id.trim().to_ascii_lowercase());
     // Described before ids were kept: an AI run wrote its markers white, with no parameter.
-    let ai = match &id {
-        Some(_) => param(meta, marker, BY_KEY).is_some_and(|by| by.trim() == BY_AI),
-        None => color == crate::markers::AI_MARKER_COLOR,
-    };
+    // The AI's while it is still white: a marker recolored elsewhere (in Premiere, which keeps
+    // the parameter) is the editor's, as a color always kept a marker from a new run.
+    let ai = color == crate::markers::AI_MARKER_COLOR
+        && (id.is_none() || param(meta, marker, BY_KEY).is_some_and(|by| by.trim() == BY_AI));
     Marker {
         guid: guid_of(meta, marker).map(|g| g.trim().to_string()),
         id: id.filter(|id| clipscribe::describe_file::is_short_id(id)),

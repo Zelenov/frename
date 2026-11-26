@@ -368,8 +368,9 @@ impl FileTagger {
 }
 
 /// Whether `new_path`, or one of the sidecars that travel with it (comment, subtitle,
-/// transcript, CAPT, description file, screenshot at a time the old clip has one), already exists — checked before any write a rename would otherwise make, since
-/// renaming onto an existing file (issue #84) or its sidecar would silently replace it.
+/// transcript, CAPT, description file, screenshot at a time the old clip has one), already
+/// exists — checked before any write a rename would otherwise make, since renaming onto an
+/// existing file (issue #84) or its sidecar would silently replace it.
 ///
 /// A `new_path` that differs from `old_path` only by case is never "taken": on Windows' case-
 /// insensitive, case-preserving filesystem it is the same file being renamed, not another one,

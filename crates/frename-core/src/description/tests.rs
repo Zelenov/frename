@@ -34,11 +34,6 @@ fn markers(file: &DescribeFile) -> Vec<Marker> {
     markers
 }
 
-/// The spans of `markers` by id, as the video held them before a write.
-fn ids(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
-    spans(markers)
-}
-
 fn find<'a>(file: &'a DescribeFile, id: &str) -> &'a Item {
     items(file).find(|item| item.id == id).expect("the item")
 }
@@ -128,7 +123,7 @@ fn mentions_are_shown_as_the_speakers_name_or_the_persons_label() {
     // As it was written: following an unchanged marker does not turn the mention into a name.
     let mut markers = markers(&file);
     markers[1].comment = "Ann buys corn from a vendor.".to_string();
-    let before = ids(&markers);
+    let before = spans(&markers);
     assert!(!apply_markers(&mut file, &markers, &before, &names));
     assert_eq!(
         find(&file, "p2r6kc").description.as_deref(),
@@ -143,7 +138,7 @@ fn markers_as_the_file_has_them_change_nothing() {
     assert!(!apply_markers(
         &mut file,
         &markers,
-        &ids(&markers),
+        &spans(&markers),
         &no_names()
     ));
     assert_eq!(file, self::file());
@@ -154,7 +149,7 @@ fn markers_as_the_file_has_them_change_nothing() {
 fn a_marker_the_editor_renamed_recolored_or_moved_is_theirs_in_the_file() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = ids(&markers);
+    let before = spans(&markers);
     // The gate moment: renamed and moved, as the editor's change clears `ai`.
     markers[1].name = "Main gate".to_string();
     markers[1].start_ms = 13_000;
@@ -183,7 +178,7 @@ fn an_undo_that_gives_the_ai_marker_back_makes_the_item_the_ais_again() {
     let original = file();
     let mut file = original.clone();
     let mut markers = markers(&file);
-    let before = ids(&markers);
+    let before = spans(&markers);
     let ai = markers[1].clone();
     markers[1].name = "Main gate".to_string();
     markers[1].ai = false;
@@ -197,7 +192,7 @@ fn an_undo_that_gives_the_ai_marker_back_makes_the_item_the_ais_again() {
 fn a_marker_the_editor_added_is_a_moment_of_theirs_and_one_they_deleted_goes() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = ids(&markers);
+    let before = spans(&markers);
     // The editor's lion point is deleted; a green range is added.
     markers.retain(|m| m.id.as_deref() != Some("1qc62f"));
     let mut added = Marker::new(40_000);
@@ -221,7 +216,7 @@ fn an_item_whose_marker_was_never_in_the_video_stays() {
     let mut file = file();
     // Only the AI part is in the video, and was before: the moments came from elsewhere.
     let markers: Vec<Marker> = markers(&file).into_iter().take(1).collect();
-    let before = ids(&markers);
+    let before = spans(&markers);
     assert!(!apply_markers(&mut file, &markers, &before, &no_names()));
     assert_eq!(file, self::file());
 }
@@ -230,7 +225,7 @@ fn an_item_whose_marker_was_never_in_the_video_stays() {
 fn a_part_made_a_point_is_a_moment() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = ids(&markers);
+    let before = spans(&markers);
     markers[0].duration_ms = 0;
     markers[0].ai = false;
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
@@ -247,7 +242,7 @@ fn a_part_made_a_point_is_a_moment() {
 fn a_millisecond_of_rounding_by_the_video_is_not_a_move() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = ids(&markers);
+    let before = spans(&markers);
     markers[1].start_ms += 1;
     assert!(!apply_markers(&mut file, &markers, &before, &no_names()));
 }
@@ -262,7 +257,7 @@ fn an_ai_marker_from_before_titles_gets_a_short_title_and_its_text_as_the_descri
     let id = old.id.clone().expect("an id");
     let mut markers = markers(&file);
     markers.push(old.clone());
-    let before = ids(&markers);
+    let before = spans(&markers);
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
     let item = find(&file, &id);
     assert_eq!(item.by, By::Ai);
@@ -493,7 +488,7 @@ fn two_parts() -> DescribeFile {
 fn a_part_the_editor_resizes_is_a_moment_and_the_parts_still_cover_the_clip() {
     let mut file = two_parts();
     let mut markers = ai_markers(&file, Path::new("clip.mov"));
-    let before = ids(&markers);
+    let before = spans(&markers);
     let ai = markers[0].clone();
     // The first part's end dragged from 0:30 to 0:20.
     markers[0].duration_ms = 20_000;
@@ -526,7 +521,7 @@ fn a_part_the_editor_resizes_is_a_moment_and_the_parts_still_cover_the_clip() {
 fn a_part_the_editor_deletes_goes_and_the_parts_still_cover_the_clip() {
     let mut file = two_parts();
     let markers = ai_markers(&file, Path::new("clip.mov"));
-    let before = ids(&markers);
+    let before = spans(&markers);
     assert!(apply_markers(
         &mut file,
         &markers[1..],
@@ -553,14 +548,19 @@ fn renaming_the_part_that_took_a_deleted_parts_stretch_keeps_it_a_part() {
     assert!(apply_markers(
         &mut file,
         &markers[1..],
-        &ids(&markers),
+        &spans(&markers),
         &no_names()
     ));
     let left = markers[1..].to_vec();
     let mut renamed = left.clone();
     renamed[0].name = "The gate".to_string();
     renamed[0].ai = false;
-    assert!(apply_markers(&mut file, &renamed, &ids(&left), &no_names()));
+    assert!(apply_markers(
+        &mut file,
+        &renamed,
+        &spans(&left),
+        &no_names()
+    ));
     assert!(file.problems().is_empty(), "{:?}", file.problems());
     let part = file.parts.as_deref().expect("parts");
     assert_eq!(part.len(), 1, "still a part: {file:?}");
@@ -582,11 +582,53 @@ fn a_part_rounded_to_a_frame_by_the_video_and_renamed_stays_a_part() {
     // As the video reads them back at 29.97 fps.
     markers[0].duration_ms = 30_030;
     markers[1].start_ms = 30_030;
-    let before = ids(&markers);
+    let before = spans(&markers);
     markers[0].name = "Walk".to_string();
     markers[0].ai = false;
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
     assert!(file.problems().is_empty(), "{:?}", file.problems());
     assert_eq!(file.parts.as_deref().map(<[Item]>::len), Some(2));
     assert_eq!(find(&file, "k3m9xa").title.as_deref(), Some("Walk"));
+}
+
+/// Round 3 of #665's review: an AI marker recolored in Premiere (which keeps frename's cue-point
+/// parameters) is the editor's, so a new run keeps it, as a color always did.
+#[test]
+fn an_ai_marker_recolored_outside_frename_is_kept_by_a_new_run() {
+    let clip = clip_with_file("recolored-elsewhere");
+    std::fs::remove_file(path(&clip)).expect("no description file");
+    let mut lion = crate::markers::ai_marker(&crate::MarkerLine {
+        start_ms: 50,
+        duration_ms: 0,
+        name: "Lion".to_string(),
+        comment: String::new(),
+        color: MarkerColor::Green,
+    });
+    crate::metadata::save_markers(&clip, &[lion.clone()], &HashSet::new()).expect("saved");
+    // As Premiere leaves it: the color changed, `frename_by` still there.
+    lion.color = MarkerColor::Red;
+    crate::metadata::save_markers(&clip, &[lion], &HashSet::new()).expect("recolored");
+    let read = crate::metadata::load_markers(&clip).expect("markers");
+    assert!(!read[0].ai, "{read:?}");
+    let (kept, dropped) = crate::markers::replace_ai_markers(&read, Vec::new());
+    assert_eq!(kept.len(), 1);
+    assert!(dropped.is_empty());
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
+/// A hand-edited file with a length no video has is left alone, not a panic.
+#[test]
+fn a_file_with_no_length_is_left_alone() {
+    let clip = clip_with_file("no-length");
+    let broken = FILE.replace(r#""duration_s": 60.0"#, r#""duration_s": -1.0"#);
+    std::fs::write(path(&clip), &broken).expect("broken");
+    in_out_saved(
+        &clip,
+        Segment {
+            start: Some(1.0),
+            end: None,
+        },
+    );
+    assert_eq!(std::fs::read_to_string(path(&clip)).expect("kept"), broken);
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
 }

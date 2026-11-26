@@ -126,7 +126,10 @@ where
     }
 
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        set_span(ctx, &self.guid, self.old, self.was_ai);
+        let ((start, duration), ai) = (self.old, self.was_ai);
+        ctx.tag_list.update_marker(&self.guid, |m| {
+            (m.start_ms, m.duration_ms, m.ai) = (start, duration, ai)
+        });
         Ok(())
     }
 
@@ -139,21 +142,6 @@ where
     }
 }
 
-fn set_span<SD, ST>(
-    ctx: &mut UndoContext<'_, SD, ST>,
-    guid: &str,
-    (start, duration): (u64, u64),
-    ai: bool,
-) where
-    ST: StoredTagStore + Clone,
-{
-    ctx.tag_list.update_marker(guid, |m| {
-        m.start_ms = start;
-        m.duration_ms = duration;
-        m.ai = ai;
-    });
-}
-
 /// Records editing a marker's name: one step per row open-to-close, not per key.
 pub struct SetMarkerNameCommand {
     pub guid: String,
@@ -161,21 +149,6 @@ pub struct SetMarkerNameCommand {
     pub new: String,
     /// Whether the marker was the AI's before the change.
     pub was_ai: bool,
-}
-
-impl SetMarkerNameCommand {
-    fn set<SD, ST>(&self, ctx: &mut UndoContext<'_, SD, ST>, name: &str, ai: bool)
-    where
-        ST: StoredTagStore + Clone,
-    {
-        let name = name.to_string();
-        if ai {
-            ctx.tag_list
-                .update_marker(&self.guid, |m| (m.name, m.ai) = (name, true));
-        } else {
-            ctx.tag_list.edit_marker(&self.guid, |m| m.name = name);
-        }
-    }
 }
 
 impl<SD, ST> Undoable<SD, ST> for SetMarkerNameCommand
@@ -188,12 +161,15 @@ where
     }
 
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        self.set(ctx, &self.old, self.was_ai);
+        let (old, ai) = (self.old.clone(), self.was_ai);
+        ctx.tag_list
+            .update_marker(&self.guid, |m| (m.name, m.ai) = (old, ai));
         Ok(())
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        self.set(ctx, &self.new, false);
+        let new = self.new.clone();
+        ctx.tag_list.edit_marker(&self.guid, |m| m.name = new);
         Ok(())
     }
 }
@@ -210,27 +186,6 @@ pub struct SetMarkerTextCommand {
     pub was_ai: bool,
 }
 
-impl SetMarkerTextCommand {
-    fn set<SD, ST>(
-        &self,
-        ctx: &mut UndoContext<'_, SD, ST>,
-        (name, comment): &(String, String),
-        ai: bool,
-    ) where
-        ST: StoredTagStore + Clone,
-    {
-        let text = |m: &mut Marker| (m.name, m.comment) = (name.clone(), comment.clone());
-        if ai {
-            ctx.tag_list.update_marker(&self.guid, |m| {
-                text(m);
-                m.ai = true;
-            });
-        } else {
-            ctx.tag_list.edit_marker(&self.guid, text);
-        }
-    }
-}
-
 impl<SD, ST> Undoable<SD, ST> for SetMarkerTextCommand
 where
     SD: AppStateStore + Clone,
@@ -241,12 +196,17 @@ where
     }
 
     fn undo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        self.set(ctx, &self.old, self.was_ai);
+        let ((name, comment), ai) = (self.old.clone(), self.was_ai);
+        ctx.tag_list.update_marker(&self.guid, |m| {
+            (m.name, m.comment, m.ai) = (name, comment, ai)
+        });
         Ok(())
     }
 
     fn redo(&mut self, ctx: &mut UndoContext<'_, SD, ST>) -> Result<(), UndoError> {
-        self.set(ctx, &self.new, false);
+        let (name, comment) = self.new.clone();
+        ctx.tag_list
+            .edit_marker(&self.guid, |m| (m.name, m.comment) = (name, comment));
         Ok(())
     }
 }

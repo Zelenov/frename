@@ -113,6 +113,15 @@ fn update(video: &Path, change: impl FnOnce(&mut DescribeFile, &HashMap<String, 
     let Some(mut file) = read(video) else {
         return;
     };
+    // A length no video has (a hand-edited file): nothing to place times in.
+    if !(file.duration_s.is_finite() && file.duration_s > 0.0) {
+        log::warn!(
+            "description: {} is left as it is: its duration_s is {}",
+            path.display(),
+            file.duration_s
+        );
+        return;
+    }
     let names = speaker_names(&file, video);
     if !change(&mut file, &names) {
         return;

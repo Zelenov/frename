@@ -409,7 +409,7 @@ batch-written-subtitles = Записанные файлы:
 batch-table-written = Записано
 batch-merged-markers = Объединённые дубли маркеров:
 batch-table-merged = Объединено
-batch-describe-files-not-written = Не записанные файлы описания (.describe.json):
+batch-describe-files-not-written = Незаписанные файлы описания (.describe.json):
 batch-markers-merged = { $count ->
     [one] объединён { $count } дубль маркера
     [few] объединено { $count } дубля маркера

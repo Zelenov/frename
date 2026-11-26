@@ -487,8 +487,8 @@ pub fn subtitle_bytes(video_path: &Path, chosen: Option<SubtitleFormat>) -> usiz
 }
 
 /// Move the subtitle files (the CAPT file among them), the saved transcript and the description
-/// file (`clip.describe.json`) along when their video is renamed, so they keep matching. Does nothing for a file that is not there; never
-/// overwrites an existing one.
+/// file (`clip.describe.json`) along when their video is renamed, so they keep matching. Does
+/// nothing for a file that is not there; never overwrites an existing one.
 pub(crate) fn rename_subtitle_file(
     old_video_path: &Path,
     new_video_path: &Path,
@@ -500,9 +500,9 @@ pub(crate) fn rename_subtitle_file(
 }
 
 /// The subtitle files (the CAPT file among them), the saved transcript and the description file
-/// of `old_video_path`,
-/// each with its name for `new_video_path`, whether or not they are there: the one list that
-/// [`rename_subtitle_file`] moves and a rename's name-length check looks at (#526).
+/// of `old_video_path`, each with its name for `new_video_path`, whether or not they are there:
+/// the one list that [`rename_subtitle_file`] moves and a rename's name-length check looks at
+/// (#526).
 pub(crate) fn companion_paths(
     old_video_path: &Path,
     new_video_path: &Path,

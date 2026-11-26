@@ -797,9 +797,14 @@ pub fn comment_to_markers(
         added.push(marker);
     }
     // Only the markers a line really changed are updates.
+    // A line of the editor's changed them: they are the editor's now, not the AI's (#388).
     let updated = touched
         .into_iter()
         .filter(|marker| existing.iter().all(|m| m != marker))
+        .map(|mut marker| {
+            marker.ai = false;
+            marker
+        })
         .collect();
     CommentToMarkers {
         added,
@@ -1697,6 +1702,17 @@ mod tests {
         );
         assert!(markers[0].ai && markers[0].id.is_some());
         assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
+    }
+
+    /// A comment line that renames an AI marker makes it the editor's (#388).
+    #[test]
+    fn a_comment_line_that_changes_an_ai_marker_makes_it_the_editors() {
+        let mut ai = marker(5_000, 0, "Gate", "");
+        ai.ai = true;
+        let moved = comment_to_markers("0:05 — The main gate", &[ai.clone()], None);
+        assert_eq!(moved.updated.len(), 1);
+        assert_eq!(moved.updated[0].name, "The main gate");
+        assert!(!moved.updated[0].ai);
     }
 
     #[test]

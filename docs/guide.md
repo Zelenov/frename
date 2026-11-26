@@ -458,8 +458,9 @@ lines of the description.
 Every run also saves the description in a file next to the video, with the video's name:
 `MVI_0410.describe.json` next to `MVI_0410.mp4`. It holds the summary, the suggested In and Out,
 the markers with their titles and descriptions, and the tags the AI found. A new run adds to the
-file and keeps what you made or changed. Your later changes to the markers and to the In and Out
-points go into the file too, and `Ctrl+Z` takes them back there as well. The file goes with the
+file and keeps what you made or changed. While markers are kept inside the video, your later
+changes to the markers and to the In and Out points go into the file too, and `Ctrl+Z` takes them
+back there as well. The file goes with the
 clip when frename renames or moves it, like the `.capt` file. If frename cannot read the file
 there (for example, a newer version wrote it), it leaves the file as it is and the batch report
 says so.
