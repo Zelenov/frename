@@ -205,7 +205,8 @@ pub fn dropdown(state: &RecentFoldersState, left_width: f32) -> Element<'_, Mess
             all
         };
         let at = menu_origin(area, left_width, state.entries().len());
-        // A click beside the menu closes it and does nothing more.
+        // A click beside the menu, in the workspace, closes it and does nothing more (a press on
+        // the title bar closes it too, and also does what it does, #64).
         let beside = mouse_area(space().width(Length::Fill).height(Length::Fill))
             .on_press(Message::Close)
             .on_right_press(Message::Close)

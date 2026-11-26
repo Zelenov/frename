@@ -3,6 +3,7 @@
 # shows a listed tag (darker gray) next to an unlisted one (lighter gray) in the tags panel, the
 # file list and the current file's tag chips. Rendered by hand with render.sh here.
 source = "../../tests/folder"
+folder_name = "Day 3"
 open = "pick.wide.night.city.aurora.MVI_0410.mp4"
 seek = 10.0
 window = [1440, 720]

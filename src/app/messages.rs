@@ -2,7 +2,7 @@
 
 use iced::{window, Size};
 
-use crate::features::{drag_drop, folder_workspace, settings};
+use crate::features::{drag_drop, folder_workspace, settings, title_bar};
 
 /// Application messages
 #[derive(Debug, Clone)]
@@ -27,6 +27,8 @@ pub enum Message {
     DragDrop(drag_drop::Message),
     FolderWorkspace(folder_workspace::Message),
     Settings(settings::Message),
+    /// The main window's own title bar: move, minimize, maximize, close.
+    TitleBar(title_bar::Message),
     /// Demo mode (`--demo`): screenshot steps.
     Demo(crate::demo::Message),
     Noop,

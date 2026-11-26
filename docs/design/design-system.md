@@ -268,8 +268,10 @@ Rules:
 |---|---|---|
 | `control.height` | 28 | buttons, fields, dropdowns, segmented control |
 | `bar.height` | 32 | toolbars (folder controls, video controls); icon buttons in them are 32×32 |
-| `appbar.height` | 40 | #64 version A: frename's own title bar (§13.12) |
-| `appbar.height.under_title` | 36 | #64 version B: the app bar under the OS title bar (§13.12) |
+| `appbar.height` | 32 | frename's own title bar (§13.12): `TITLE_BAR_HEIGHT` |
+| `window.button.width` | 46 | its minimise, maximise and close buttons (`WINDOW_BUTTON_WIDTH`) |
+| `window.resize.edge` | 5 | the band along each window edge that resizes it (`RESIZE_EDGE`) |
+| `window.resize.corner` | 12 | how far along the edges a corner reaches (`RESIZE_CORNER`) |
 | `buttonbar.height` | 56 | window button bar (28 button + 2 × 14) |
 | `row.height` | 32 | list row, navigation item, menu item 28 |
 | `row.tall` | 44 | two-line row (recent folders, file list keeps its 52) |
@@ -977,7 +979,7 @@ Today, for comparison (screenshots of the app):
 | ![](design-system/before-main.png) | ![](design-system/before-markers.png) | ![](design-system/before-batch.png) |
 
 ```
-┌ title bar: #64 version A (own, 40) or B (OS + app bar 36), §13.12 ──────────────────────┐
+┌ title bar: frename's own, 32 (§13.12) ─────────────────────────────────────────────────┐
 │ VIDEO PANE (min 320)      ║ FILE LIST (200–720)   ║ TAGS AREA (min 320)                  │
 │ picture                   ║ search · filter       ║ tag search                           │
 │   side list (overlay)     ║ rows                  ║ starred strip                        │
@@ -2150,79 +2152,74 @@ batch screens §13.6):
 These are directions, not specs: each issue writes its own details and may change them within
 these rules.
 
-### 13.12 App bar (#64): two versions
+### 13.12 App bar (#64): frename's own title bar
 
-> **Built (#64): version B**, without the Keyboard button (#62 has not landed) and without the
-> OS title bar's folder name. Version A needs a Windows-only hook for snap layouts that could not be
-> proven in an agent session; moving to it later only replaces the OS title bar. In batch mode the
-> Batch segment shows the number of checked files after its label.
+> **Built: version A, at 32 px** (the owner: "as little height as possible"). It replaced version B
+> (a 36 px app bar under the OS title bar, 68 px of chrome in all), which is kept below for the
+> record. The window has no OS title bar (`decorations: false`, the Windows shadow kept with
+> `undecorated_shadow`); the bar is `features::title_bar`, drawn by the app over the three columns.
 
-⚙ and the mode switch leave the file list's toolbar for a bar of their own (§18 item 3). There are
-two versions: **A** is the one to build; **B** is what is built if A cannot keep every native
-window behaviour on Windows (#64's rule). Both hold the same controls in the same order, so
-everything below the bar, and every other section of this document, is the same for both.
+![The title bar, single file and batch mode](design-system/appbar-built.png)
 
-**The controls, in both versions**
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│ 12 Lisbon 2026-09 · D:\Footage    (drag space)    [▣ Single file|☷ Batch 14] 12 ⚙ 12 ─ □ ✕ │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+  32 px, bg.window; the panes start under it on bg.panel (no line between them)
+```
 
-| Place | Control | Notes |
+**Left to right**
+
+| Place | What | Notes |
 |---|---|---|
-| left, fixed | mode switch: segmented control (§8.4) `file-video-camera` "Single file" · `list-checks` "Batch" | a fixed place: it never moves when the folder name changes. In batch mode the Batch segment is latched and carries the number of checked files as a `badge.accent` ("Batch 12"). Tooltip: "Batch actions on the checked files". Keys: #62 |
-| after it (A only) | folder name (`body.strong`) and its parent path (`caption` `text.secondary`) | plain text, part of the drag area; tooltip: the full path. In B the OS title bar says it |
-| right | `keyboard` "Keyboard shortcuts `Ctrl`+`/`" (#62) · `settings` "Settings" with the update dot (§14.1) | 32×32 icon buttons; the dot keeps its meaning ("an update is ready") |
+| left, flexible | folder name (`body.strong`), 8 px, the folder it is in (`caption`, `text.secondary`) | 12 px from the window's edge; plain text, part of the drag space; the object's name first (AF ch. 14). One line, never wrapped: a long path is cut by the drag space's edge. No folder open: empty |
+| fills the rest | drag space | every pixel that is not a control |
+| right | mode switch: segmented control (§8.4) `file-video-camera` "Single file" · `list-checks` "Batch" | 28 px high, centred in the bar. In batch mode Batch is selected and carries the number of checked files. The Batch segment always keeps room for as many digits as the folder has files, so the switch never changes width when the mode or the count changes (it is right-aligned: a wider switch would move). No folder open: the switch's place is empty |
+| right | 12 px, `settings` "Settings" with the update dot (§14.1) | 32×32 icon button; tooltip as before ("Update available: …", "What's new in …") |
+| right edge | 12 px, minimise · maximise / restore · close | 46×32 each, 12 px Lucide glyphs (`minus`, `square`, `copy` for restore, `x`), square corners; hover white 6 %, pressed 12 %; close hovers `danger` with a white glyph. Tooltips: "Minimize", "Maximize", "Restore", "Close" |
 
-Not in the bar: Open a folder and the recent folders (#63) stay in the file list's toolbar with the
-other file controls; the file name stays in the tags area's card.
+**Behaviour**
 
-#### Version A — frename draws its own title bar (#64 option 1)
+- **Drag space:** press and move moves the window (`window::drag`, which keeps Aero Snap to the
+  screen edges and `Win`+arrows). The move starts on the first movement after the press, not on
+  the press itself, or a double-click would never arrive. Double-click maximises or restores
+  (`window::toggle_maximize`); right-click opens the system window menu
+  (`window::show_system_menu`).
+- **Close** goes the way the OS close button went (`CloseRequested`): the open file is saved and a
+  running job stopped first.
+- **Maximised:** the bar touches the screen's top edge (Fitts); maximise shows restore.
+- **Fullscreen video** (in the window, or the OS fullscreen of §13.3.8): the bar is not shown; an
+  empty space keeps its place in the widget tree, so the panes keep their scroll positions.
+- **Height:** 32 is the OS title bar's own height on Windows 11 and the least that holds the 28 px
+  switch and the 32 px icon buttons: the bar costs nothing over the OS title bar it replaces.
+- **Pointer positions:** the file menu's right-press position is taken relative to the workspace
+  under the bar, so the menu opens at the pointer.
+- **Resize edges:** a window without the system's frame has no resize edges of its own, on any
+  OS (winit hit-tests nothing). A transparent layer over the whole window gives them back: a 5 px
+  band along each edge (`window.resize.edge`, the top one over the bar) and 12 px corners
+  (`window.resize.corner`), each with its resize cursor, starting `window::drag_resize` on press.
+  Left out while the window is maximised or fullscreen. The bands lie over the outer 5 px of
+  whatever touches the window's edge (a scrollbar's outer pixels, the close button's top-right
+  corner): a press there resizes, as on the system's own frame.
+- **Menus:** the bar is outside the workspace's click-elsewhere layer, so any press on it (the
+  drag space, the switch, Settings, a window button) closes the file menu and the recent folders'
+  list.
+- **No folder open** (§13.7): the bar shows only Settings and the window buttons.
 
-![Version A](design-system/appbar-a.png)
+**Not built yet** (each its own issue if wanted): the Windows 11 snap layouts flyout on hover over
+maximise (`Win`+`Z` opens it); with an auto-hiding taskbar, a maximised window covers the whole
+monitor (winit gives it the work area, which is the whole monitor then), so the taskbar no longer
+slides in at the screen's edge; dimming the bar while the window is inactive; the macOS traffic-light inset and the Linux
+header-bar conventions. The Settings window keeps the OS title bar.
 
-- **The window's only title bar**, 40 px (`appbar.height`), `bg.window`, no line under it (the
-  panes start below it on `bg.panel`, which is enough of an edge). Chrome costs 40 px: 8 more than
-  today's OS title bar, and the file toolbar loses two buttons.
-- **Left to right:** 12 px · app icon 16 (`clapperboard` in `text.secondary`; a click opens the
-  window menu, as the OS icon does) · 12 px · mode switch · 16 px · folder name and path ·
-  flexible drag space (at least 120) · Keyboard shortcuts · Settings · 8 px · caption buttons.
-- **Caption buttons** copy the OS so they are recognised, not redesigned: 46×40 each, 10 px
-  glyphs with 1 px lines (minimise, maximise / restore, close — drawn, not Lucide), hover white
-  8 %, pressed white 12 %; close hovers `#C42B1C` with a white glyph (the Windows value, not
-  `danger`). Tooltips are the OS's words ("Minimize", "Maximize", "Restore Down", "Close").
-- **The drag area** is every pixel of the bar that is not a control, the folder name included:
-  press and drag moves the window (`window::drag`, which also gives Aero Snap to the screen edges),
-  double-click maximises or restores (`window::toggle_maximize`), right-click opens the window
-  menu (`window::show_system_menu`).
-- **Resizing:** the window keeps its resize edges; along the top, a 4 px strip above the bar
-  resizes it when the window is not maximised (`window::drag_resize`). Maximised, the bar touches
-  the screen's top edge, where its buttons are easiest to hit (BIR on Fitts's law).
-- **Inactive window:** the bar's text and icons at 55 %; colors and places stay.
-- **Narrow window** (900): the parent path goes first, then the folder name is cut with "…" (full
-  path in the tooltip) so the drag space never drops below 120. The switch, Keyboard, Settings and
-  the caption buttons never go.
-- **Fullscreen video:** the bar hides with the rest of the chrome (§13.3.8).
-- **macOS:** the OS keeps its own traffic lights on the left (iced's `titlebar_transparent` +
-  `fullsize_content_view`, so tiling and full screen stay native); the bar starts 72 px in and has
-  no caption buttons. **Linux:** the bar is the header bar the desktop expects; caption buttons on
-  the right.
-- **Windows 11 snap layouts** (the flyout when hovering maximise) is the one behaviour iced 0.14
-  does not give: winit offers no way to tell Windows that the maximise button is there (the
-  `WM_NCHITTEST` answer `HTMAXBUTTON`). Version A therefore needs a small Windows-only hook on the
-  window procedure that answers it for the maximise button's rectangle. `Win`+`Z` opens snap
-  layouts either way.
-
-**What must be proven before A is chosen** (#64's prototype, checked by the owner on Windows 10
-and 11): snap layouts on hover; Aero Snap by dragging to the edges and corners; resize from every
-edge and corner; double-click; the window menu (and `Alt`+`Space`); moving between monitors with
-different scaling; minimise / restore animations; the taskbar title and thumbnail. One failure
-and B is built.
-
-#### Version B — a thin app bar under the OS title bar (#64 option 2)
+#### Version B, not built — a thin app bar under the OS title bar (#64 option 2)
 
 ![Version B](design-system/appbar-b.png)
 
 - **The OS title bar stays** and says where the user is: "2026-09 Lisbon — frename" (the object's
   name first, AF ch. 14; today it shows the open file's whole path). Every native behaviour is the
   OS's own.
-- **The app bar** under it: 36 px (`appbar.height.under_title`: the 28 px switch and 4 px above and
+- **The app bar** under it: 36 px (the 28 px switch and 4 px above and
   below), `bg.window`, a 1 px `border.subtle` line under it, padding 0×8. The mode switch at the
   left, Keyboard shortcuts and Settings at the right; nothing else, so nothing in it is ever cut.
 - **Cost:** 32 + 36 = 68 px of chrome, 36 more than today, taken from the video and the tags on a
@@ -2549,6 +2546,8 @@ main window does not change in #57 and the README has no Settings screenshot.
      hook) is the one to build if #64's prototype keeps every native behaviour; otherwise
      **version B** (a thin bar under the OS title bar). Both are drawn and specified in §13.12,
      with the same controls in the same order.
+     **Built:** version A at 32 px, with the switch and Settings at the right next to the window
+     buttons; the snap layouts hook is left for later (§13.12).
 4. **Toggle switches for settings that apply at once (Windows 11 style)?** No, one checkbox look
    (§8.5).
 5. **Remember the last Settings page across restarts?** No, only within a session; it is a small

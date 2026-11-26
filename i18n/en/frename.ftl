@@ -609,6 +609,13 @@ file-menu-copied = Copied
 file-menu-not-copied = Not copied: the clipboard is not available
 file-menu-not-shown = Could not open the file manager
 
+## Title bar
+
+title-bar-minimize = Minimize
+title-bar-maximize = Maximize
+title-bar-restore = Restore
+title-bar-close = Close
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Untagged

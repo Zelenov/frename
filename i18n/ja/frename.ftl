@@ -848,3 +848,11 @@ batch-ai-notes-once-placeholder = 例: このクリップ: 赤い服の女性は
 file-workspace-ai-notes-on = メモあり
 file-workspace-ai-notes-tip = AI へのメモは、このフォルダーのすべての AI リクエストに添えられます。「{ batch-action-describe-ai }」（一括処理）で編集できます: { $notes }
 batch-ai-notes-no-subtitles = メモは話されている内容についてのようですが、{ $videos }に字幕がありません。AI が言葉を読み取れるよう、先に字幕を生成してください（字幕を生成）。
+
+## Title bar
+
+title-bar-minimize = 最小化
+title-bar-maximize = 最大化
+title-bar-restore = 元に戻す
+title-bar-close = 閉じる
+

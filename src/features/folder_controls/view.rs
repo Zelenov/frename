@@ -1,6 +1,6 @@
 //! The toolbar under the file list (`docs/design/design-system.md` §13.4.3): moving between files,
-//! opening a folder. Settings and the mode switch are in the app bar (`app_bar`, #64). Receives
-//! only what it shows.
+//! opening a folder. Settings and the mode switch are in the window's title bar
+//! (`app_bar_controls`, #64). Receives only what it shows.
 
 use iced::widget::{column, container, mouse_area, row, space};
 use iced::{Alignment, Element, Length, Padding};
@@ -95,28 +95,37 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
     .into()
 }
 
-/// What the app bar shows (§13.12, version B).
+/// What the title bar shows of the app's controls (§13.12, version A).
 pub struct AppBarProps {
     /// Batch mode is on: the Batch segment is the selected one.
     pub batch_mode: bool,
     /// How many files are checked, shown after "Batch" while batch mode is on.
     pub checked: usize,
+    /// How many files the folder has: the most that can be checked, whose digits the count keeps
+    /// room for.
+    pub files: usize,
     /// A newer frename version, when the update check found one: the dot on Settings.
     pub update_available: Option<String>,
     /// The version just installed, until its release notes were seen: the dot on Settings too.
     pub whats_new: Option<String>,
 }
 
-/// The bar under the OS title bar: the mode switch (single file or batch) on the left, Settings
-/// on the right. A running job goes on behind the closed batch panel (#249), so the switch is
-/// never disabled. `Esc` still leaves batch mode (`EscapePressed`).
-pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
+/// The app's two controls, for the window's own title bar: the mode switch (single file or
+/// batch), at its left, and Settings, at its right. A running job goes on behind the closed batch
+/// panel (#249), so the switch is never disabled. `Esc` still leaves batch mode (`EscapePressed`).
+pub fn app_bar_controls(
+    props: AppBarProps,
+) -> (
+    Element<'static, folder::Message>,
+    Element<'static, folder::Message>,
+) {
     use folder::Message as M;
     let mode = segmented([
         Segment {
             icon: Some(Icon::FileVideoCamera),
             label: fl!("app-bar-single"),
             count: None,
+            count_room: None,
             selected: !props.batch_mode,
             on_press: M::SetBatchMode(false),
             tip: props.batch_mode.then(|| fl!("folder-controls-batch-back")),
@@ -125,6 +134,7 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
             icon: Some(Icon::ListChecks),
             label: fl!("app-bar-batch"),
             count: props.batch_mode.then(|| props.checked.to_string()),
+            count_room: Some("0".repeat(props.files.to_string().len())),
             selected: props.batch_mode,
             on_press: M::SetBatchMode(true),
             tip: (!props.batch_mode).then(|| fl!("folder-controls-batch")),
@@ -142,20 +152,7 @@ pub fn app_bar(props: AppBarProps) -> Element<'static, folder::Message> {
         .dot(props.update_available.is_some() || props.whats_new.is_some())
         .tip(settings_tip, Position::Bottom)
         .on_press(M::OpenSettings);
-    column![
-        container(
-            row![mode, space::horizontal(), Element::from(settings)].align_y(Alignment::Center)
-        )
-        .padding(Padding::from([0.0, SPACE_S]))
-        .width(Length::Fill)
-        .center_y(APP_BAR_HEIGHT - LINE)
-        .style(style::window),
-        container(space())
-            .width(Length::Fill)
-            .height(LINE)
-            .style(style::divider),
-    ]
-    .into()
+    (mode, settings.into())
 }
 
 #[cfg(test)]

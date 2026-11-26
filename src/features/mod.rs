@@ -17,5 +17,6 @@ pub mod settings;
 pub mod sync_panel;
 pub mod tag_grid;
 pub mod tag_panel;
+pub mod title_bar;
 pub mod updates;
 pub mod video_controls;

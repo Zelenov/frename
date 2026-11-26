@@ -670,6 +670,13 @@ file-menu-copied = Copiato
 file-menu-not-copied = Non copiato: gli appunti non sono disponibili
 file-menu-not-shown = Impossibile aprire il file manager
 
+## Title bar
+
+title-bar-minimize = Riduci a icona
+title-bar-maximize = Ingrandisci
+title-bar-restore = Ripristina
+title-bar-close = Chiudi
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Senza tag

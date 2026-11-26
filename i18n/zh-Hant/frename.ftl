@@ -848,3 +848,11 @@ batch-ai-notes-once-placeholder = 例如：這個片段：穿紅衣的女士是 
 file-workspace-ai-notes-on = 備註已開啟
 file-workspace-ai-notes-tip = 給 AI 的備註會附在此資料夾的每個 AI 請求中。請在「{ batch-action-describe-ai }」（批次動作）中編輯：{ $notes }
 batch-ai-notes-no-subtitles = 你的備註似乎與說話內容有關，但有 { $videos } 沒有字幕：請先產生字幕（產生字幕），AI 才能讀到說話內容。
+
+## Title bar
+
+title-bar-minimize = 最小化
+title-bar-maximize = 最大化
+title-bar-restore = 還原
+title-bar-close = 關閉
+

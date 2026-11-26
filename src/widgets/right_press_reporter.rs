@@ -1,6 +1,6 @@
-//! Widget that reports where the right mouse button was pressed, in the coordinates of the
-//! widget's own parent (the window, when it wraps the whole window content), before its
-//! content sees the press. A context menu opens there: the row that was right-clicked only
+//! Widget that reports where the right mouse button was pressed, relative to the widget's own
+//! top-left corner (the workspace's, when it wraps the whole workspace), before its content sees
+//! the press. A context menu opens there: the row that was right-clicked only
 //! says *which* file, since a widget inside a scrollable sees the cursor shifted by the
 //! scroll offset.
 
@@ -84,7 +84,11 @@ where
         // Published before the content's own messages, so the position is known by the time
         // the row's "open the menu for this file" arrives.
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event {
-            if let Some(position) = cursor.position_over(layout.bounds()) {
+            // Relative to this widget, where the menu layer over it starts: the title bar
+            // above it must not push the menu down.
+            let bounds = layout.bounds();
+            if let Some(position) = cursor.position_over(bounds) {
+                let position = Point::new(position.x - bounds.x, position.y - bounds.y);
                 shell.publish((self.on_right_press)(position));
             }
         }

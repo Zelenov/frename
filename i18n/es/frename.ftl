@@ -667,6 +667,13 @@ file-menu-copied = Copiado
 file-menu-not-copied = No copiado: el portapapeles no está disponible
 file-menu-not-shown = No se pudo abrir el gestor de archivos
 
+## Title bar
+
+title-bar-minimize = Minimizar
+title-bar-maximize = Maximizar
+title-bar-restore = Restaurar
+title-bar-close = Cerrar
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Sin tags

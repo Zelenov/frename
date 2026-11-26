@@ -663,6 +663,7 @@ pub(super) fn subtitle_file_picker<'a>(
         icon: (!file.readable).then_some(Icon::CircleAlert),
         label: subtitle_format_label(file.format),
         count: None,
+        count_room: None,
         selected: state.subtitle_shown() == Some(file.format),
         on_press: Message::PickSubtitleFile(file.format),
         tip: (!file.readable).then(|| fl!("media-viewer-video-subtitle-file-unreadable")),
@@ -736,6 +737,7 @@ fn side_list_header<'a>(
                 count: tab_count(markers.search, subs.cues().len(), || {
                     frename_core::matching_cues(subs, markers.search.words()).len()
                 }),
+                count_room: None,
                 selected: shown == Overlay::Subtitles,
                 on_press: Message::ShowOverlay(Overlay::Subtitles),
                 tip: None,
@@ -746,6 +748,7 @@ fn side_list_header<'a>(
                 count: tab_count(markers.search, list.len(), || {
                     markers::view::shown_markers(list, markers.state, markers.search.words()).len()
                 }),
+                count_room: None,
                 selected: shown == Overlay::Markers,
                 on_press: Message::ShowOverlay(Overlay::Markers),
                 tip: None,

@@ -677,6 +677,13 @@ file-menu-copied = Скопировано
 file-menu-not-copied = Не скопировано: буфер обмена недоступен
 file-menu-not-shown = Не удалось открыть файловый менеджер
 
+## Title bar
+
+title-bar-minimize = Свернуть
+title-bar-maximize = Развернуть
+title-bar-restore = Восстановить
+title-bar-close = Закрыть
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Без тегов

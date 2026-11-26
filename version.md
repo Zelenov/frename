@@ -1,3 +1,7 @@
+# 0.303
+## Changed
+- The window has one bar at the top instead of two, so the video, the list and the tags get more room: the folder's name, the Single file / Batch switch and Settings are in frename's own title bar. Drag its empty part to move the window, double-click to maximize, right-click for the window menu; on Windows 11, Win+Z opens the snap layouts.
+
 # 0.302
 ## Fixed
 - Undo now works every time on a clip whose name repeats a tag (rough.rough.clip.mp4). Before, Ctrl+Z after ticking or moving that tag could sometimes do nothing.

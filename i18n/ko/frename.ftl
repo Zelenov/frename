@@ -848,3 +848,11 @@ batch-ai-notes-once-placeholder = 예: 이 클립: 빨간 옷을 입은 여자�
 file-workspace-ai-notes-on = 메모 켜짐
 file-workspace-ai-notes-tip = AI용 메모는 이 폴더의 모든 AI 요청과 함께 전송됩니다. { batch-action-describe-ai }(일괄 작업)에서 편집하세요: { $notes }
 batch-ai-notes-no-subtitles = 메모가 대사에 관한 내용인 것 같은데 { $videos }에 자막이 없습니다. AI가 대사를 읽을 수 있도록 먼저 자막을 생성하세요.
+
+## Title bar
+
+title-bar-minimize = 최소화
+title-bar-maximize = 최대화
+title-bar-restore = 이전 크기로 복원
+title-bar-close = 닫기
+

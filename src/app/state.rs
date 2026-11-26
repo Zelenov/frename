@@ -11,7 +11,8 @@ use iced::{event, keyboard, window, Element, Subscription, Task};
 
 use crate::features::{
     batch, drag_drop, drag_out, file_menu, file_name_panel, folder, folder_workspace, media_viewer,
-    media_viewer::video as media_viewer_video, settings, tag_panel, updates, video_controls,
+    media_viewer::video as media_viewer_video, settings, tag_panel, title_bar, updates,
+    video_controls,
 };
 use crate::ui::palette::TagPalette;
 use frename_core::ai::key::{self as api_key, ApiKey};
@@ -556,6 +557,9 @@ pub struct FrenameApp {
     /// While it is, size, position and maximized state are not the window's own, so they are
     /// neither tracked nor saved: leaving restores the previous mode, size and position.
     os_fullscreen: bool,
+    /// The title bar's press: the next move over it starts a window move. Not the press itself,
+    /// or a double click never arrives.
+    title_bar: title_bar::State,
     /// Last known monitor size (logical px); 0×0 if not yet fetched.
     monitor_size: (f32, f32),
     /// The demo being run (`--demo`), if any.
@@ -611,6 +615,7 @@ impl FrenameApp {
             monitor_size: saved
                 .map(|g| (g.monitor_width, g.monitor_height))
                 .unwrap_or((0.0, 0.0)),
+            title_bar: title_bar::State::default(),
             demo: None,
             initial_path: None,
             pending_update: None,
@@ -926,9 +931,15 @@ impl FrenameApp {
                 self.settings.begin_key_request(ApiKey::Soniox),
                 || Ok(()),
             ),
+            // Settings is in the title bar, outside the workspace's click-elsewhere layer.
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
-            )) => Task::done(Message::OpenSettings(None)),
+            )) => Task::batch([
+                self.folder_workspace
+                    .close_popups()
+                    .map(Message::FolderWorkspace),
+                Task::done(Message::OpenSettings(None)),
+            ]),
             // Tag commented and Apply tag spacing: their settings are on the Saving page.
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSettings,
@@ -988,6 +999,21 @@ impl FrenameApp {
                 let fetch = self.fetch_window_extra();
                 self.save_window_state();
                 fetch
+            }
+            Message::TitleBar(msg) => {
+                // A press on the bar is a click outside the workspace's menus: they close, as
+                // they did when the controls were inside the workspace.
+                let popups = if matches!(
+                    msg,
+                    title_bar::Message::Moved | title_bar::Message::Released
+                ) {
+                    Task::none()
+                } else {
+                    self.folder_workspace
+                        .close_popups()
+                        .map(Message::FolderWorkspace)
+                };
+                Task::batch([popups, self.handle_title_bar(msg)])
             }
             Message::WindowMaximizedFetched(maximized) => {
                 self.is_maximized = maximized;
@@ -1126,15 +1152,41 @@ impl FrenameApp {
                 .map(Message::Settings);
         }
         let tag_palette = TagPalette::from_monochrome(self.settings.settings().monochrome_tags);
-        let update_available = self.settings.updates().available_version();
-        let whats_new = self.settings.updates().whats_new();
-        folder_workspace::view::view(
-            &self.folder_workspace,
-            tag_palette,
-            update_available,
-            whats_new,
-        )
-        .map(Message::FolderWorkspace)
+        let workspace = folder_workspace::view::view(&self.folder_workspace, tag_palette)
+            .map(Message::FolderWorkspace);
+        // In the OS fullscreen the video takes the whole monitor: no title bar over it. An empty
+        // space rather than no child, so the workspace keeps its place in the tree (and its
+        // scroll positions).
+        let bar = if self.os_fullscreen || self.folder_workspace.media_fullscreen() {
+            iced::widget::space().into()
+        } else {
+            let mut parts = folder_workspace::view::title_bar_parts(
+                &self.folder_workspace,
+                self.settings.updates().available_version(),
+                self.settings.updates().whats_new(),
+            )
+            .map(Message::FolderWorkspace);
+            if let (Some(_), Some(folder)) = (&self.demo, parts.folder.as_mut()) {
+                folder.parent = crate::demo::SHOWN_PARENT.to_string();
+            }
+            title_bar::view::view(
+                parts,
+                self.title_bar.pressed(),
+                self.is_maximized,
+                Message::TitleBar,
+            )
+        };
+        let window = iced::widget::column![bar, workspace];
+        // Without the system's frame, the window's own edges resize it; a maximized or fullscreen
+        // window has none. An empty layer rather than none keeps the tree's shape.
+        let resizable =
+            !(self.is_maximized || self.os_fullscreen || self.folder_workspace.media_fullscreen());
+        let edges = if resizable {
+            title_bar::view::edges(Message::TitleBar)
+        } else {
+            iced::widget::space().into()
+        };
+        iced::widget::stack![window, edges].into()
     }
 
     /// Tell the subtitle action the settings it uses: the languages and the cue length.
@@ -1223,6 +1275,20 @@ impl FrenameApp {
         });
         self.settings_window = Some(id);
         Task::batch([open.discard(), read_key, show])
+    }
+
+    /// The title bar's buttons, moves and the window's edges, done to the main window.
+    fn handle_title_bar(&mut self, msg: title_bar::Message) -> Task<Message> {
+        let id = self.main_window;
+        match self.title_bar.update(msg) {
+            None => Task::none(),
+            Some(title_bar::WindowOp::Drag) => window::drag(id),
+            Some(title_bar::WindowOp::Resize(edge)) => window::drag_resize(id, edge.direction()),
+            Some(title_bar::WindowOp::ToggleMaximize) => window::toggle_maximize(id),
+            Some(title_bar::WindowOp::SystemMenu) => window::show_system_menu(id),
+            Some(title_bar::WindowOp::Minimize) => window::minimize(id, true),
+            Some(title_bar::WindowOp::Close) => Task::done(Message::CloseRequested(id)),
+        }
     }
 
     fn close_settings(&mut self) -> Task<Message> {
@@ -1413,6 +1479,30 @@ mod tests {
             folder_workspace::Message::EscapePressed,
         ));
         assert!(!app.os_fullscreen);
+    }
+
+    /// #64: the title bar is outside the workspace's click-elsewhere layer, so its presses close
+    /// the workspace's menus themselves; Settings is taken by the app before the workspace.
+    #[test]
+    fn title_bar_presses_and_settings_close_the_recent_folders_list() {
+        let presses = [
+            Message::FolderWorkspace(folder_workspace::Message::Folder(
+                folder::Message::OpenSettings,
+            )),
+            Message::TitleBar(title_bar::Message::Pressed),
+            Message::TitleBar(title_bar::Message::Minimize),
+        ];
+        for press in presses {
+            let mut app = FrenameApp::new(window::Id::unique(), None);
+            let _ = app.update(Message::FolderWorkspace(
+                folder_workspace::Message::RecentFolders(
+                    crate::features::recent_folders::Message::Toggle,
+                ),
+            ));
+            assert!(app.folder_workspace.recent_folders().is_open());
+            let _ = app.update(press);
+            assert!(!app.folder_workspace.recent_folders().is_open());
+        }
     }
 
     #[test]

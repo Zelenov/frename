@@ -647,6 +647,13 @@ file-menu-copied = Kopiert
 file-menu-not-copied = Nicht kopiert: Die Zwischenablage ist nicht verfügbar
 file-menu-not-shown = Der Dateimanager konnte nicht geöffnet werden
 
+## Title bar
+
+title-bar-minimize = Minimieren
+title-bar-maximize = Maximieren
+title-bar-restore = Wiederherstellen
+title-bar-close = Schließen
+
 ## Controls bar under the file list
 
 folder-controls-filter-untagged = Ohne Tags

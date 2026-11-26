@@ -10,6 +10,7 @@ use crate::features::folder::view::ListProps;
 use crate::features::folder_controls::view::{AppBarProps, ToolbarProps};
 use crate::features::{
     batch, file_menu, file_workspace, folder, folder_controls, media_viewer, recent_folders,
+    title_bar,
 };
 use crate::ui::icons::{icon, spinner, Icon};
 use crate::ui::palette::TagPalette;
@@ -21,14 +22,8 @@ use crate::widgets::splitter::Splitter;
 use super::{FolderWorkspace, Message};
 
 /// Workspace layout: one big drop panel when no folder is open; otherwise regions and splitters.
-/// `update_available` is the newer frename version found by the update check, if any;
-/// `whats_new` the version just installed, until its release notes were seen.
-pub fn view(
-    state: &FolderWorkspace,
-    tag_palette: TagPalette,
-    update_available: Option<String>,
-    whats_new: Option<String>,
-) -> Element<'_, Message> {
+/// The title bar above it is built from [`title_bar_parts`].
+pub fn view(state: &FolderWorkspace, tag_palette: TagPalette) -> Element<'_, Message> {
     let seg_start = state.file_workspace().segment_start_secs();
     let seg_end = state.file_workspace().segment_end_secs();
     let markers = media_viewer::video::view::MarkersView {
@@ -75,15 +70,6 @@ pub fn view(
         batch_running: state.batch().is_running(),
         recent_open: state.recent_folders().is_open(),
     };
-    // The bar under the OS title bar: the mode switch and Settings (#64).
-    let app_bar = folder_controls::view::app_bar(AppBarProps {
-        batch_mode: state.batch().is_active(),
-        checked: state.batch().checked_count(),
-        update_available,
-        whats_new,
-    })
-    .map(Message::Folder);
-
     // Bound to a local so the folder list can borrow it instead of taking a clone per frame.
     let tag_color_mapping = state.file_workspace().tag_color_mapping();
     let list = container(folder::view::view(ListProps {
@@ -168,17 +154,12 @@ pub fn view(
     };
 
     let normal_layout = container(
-        column![
-            app_bar,
-            row![
-                video,
-                left_splitter,
-                folder_list,
-                right_splitter,
-                right_panel
-            ]
-            .width(Length::Fill)
-            .height(Length::Fill),
+        row![
+            video,
+            left_splitter,
+            folder_list,
+            right_splitter,
+            right_panel
         ]
         .width(Length::Fill)
         .height(Length::Fill),
@@ -211,8 +192,8 @@ pub fn view(
     let recent = recent_folders::view::dropdown(state.recent_folders(), state.left_width())
         .map(Message::RecentFolders);
 
-    // The right button's position is taken here, over the whole window: a row inside the
-    // scrolled file list does not know where it is on screen.
+    // The right button's position is taken here, over the whole workspace (the window under its
+    // title bar): a row inside the scrolled file list does not know where it is on screen.
     RightPressReporter::new(
         stack![normal_layout, overlay, file_menu, recent]
             .width(Length::Fill)
@@ -220,6 +201,34 @@ pub fn view(
         |position| Message::FileMenu(file_menu::Message::RightPressed(position)),
     )
     .into()
+}
+
+/// What the window's own title bar shows of the workspace (§13.12, version A): the mode switch
+/// while a folder is open, the folder's name and where it is, and Settings with its update dot.
+/// `update_available` is the newer frename version found by the update check, if any;
+/// `whats_new` the version just installed, until its release notes were seen.
+pub fn title_bar_parts(
+    state: &FolderWorkspace,
+    update_available: Option<String>,
+    whats_new: Option<String>,
+) -> title_bar::view::Parts<'static, Message> {
+    let (mode, settings) = folder_controls::view::app_bar_controls(AppBarProps {
+        batch_mode: state.batch().is_active(),
+        checked: state.batch().checked_count(),
+        files: state.directory().map_or(0, |dir| dir.all_files().count()),
+        update_available,
+        whats_new,
+    });
+    let lift = |e: Element<'static, folder::Message>| e.map(Message::Folder);
+    let folder = state.directory().map(|dir| title_bar::view::Folder {
+        name: frename_core::recent_folders::folder_name(dir.path()),
+        parent: frename_core::recent_folders::folder_parent(dir.path()).unwrap_or_default(),
+    });
+    title_bar::view::Parts {
+        mode: state.directory().is_some().then(|| lift(mode)),
+        folder,
+        settings: lift(settings),
+    }
 }
 
 /// The whole window when no folder is open (§13.7): what to do first and the button that does
