@@ -34,8 +34,9 @@ fn markers(file: &DescribeFile) -> Vec<Marker> {
     markers
 }
 
-fn ids(markers: &[Marker]) -> HashSet<String> {
-    markers.iter().filter_map(|m| m.id.clone()).collect()
+/// The spans of `markers` by id, as the video held them before a write.
+fn ids(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
+    spans(markers)
 }
 
 fn find<'a>(file: &'a DescribeFile, id: &str) -> &'a Item {
@@ -541,4 +542,51 @@ fn a_part_the_editor_deletes_goes_and_the_parts_still_cover_the_clip() {
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
     assert!(file.problems().is_empty(), "{:?}", file.problems());
     assert!(items(&file).any(|item| item.id == "k3m9xa"));
+}
+
+/// Round 2 of #665's review: after a deleted part's stretch went to its neighbour in the file,
+/// renaming that neighbour (its marker still spans 30–60 s) keeps it a part.
+#[test]
+fn renaming_the_part_that_took_a_deleted_parts_stretch_keeps_it_a_part() {
+    let mut file = two_parts();
+    let markers = ai_markers(&file, Path::new("clip.mov"));
+    assert!(apply_markers(
+        &mut file,
+        &markers[1..],
+        &ids(&markers),
+        &no_names()
+    ));
+    let left = markers[1..].to_vec();
+    let mut renamed = left.clone();
+    renamed[0].name = "The gate".to_string();
+    renamed[0].ai = false;
+    assert!(apply_markers(&mut file, &renamed, &ids(&left), &no_names()));
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    let part = file.parts.as_deref().expect("parts");
+    assert_eq!(part.len(), 1, "still a part: {file:?}");
+    assert_eq!(
+        (part[0].start_s, part[0].end_s, part[0].by),
+        (0.0, Some(60.0), By::User)
+    );
+    assert_eq!(part[0].title.as_deref(), Some("The gate"));
+}
+
+/// A track counted in frames rounds a part's time when its marker is written: renaming the part
+/// is still not a move.
+#[test]
+fn a_part_rounded_to_a_frame_by_the_video_and_renamed_stays_a_part() {
+    let mut file = two_parts();
+    file.parts.as_mut().expect("parts")[0].end_s = Some(30.017);
+    file.parts.as_mut().expect("parts")[1].start_s = 30.017;
+    let mut markers = ai_markers(&file, Path::new("clip.mov"));
+    // As the video reads them back at 29.97 fps.
+    markers[0].duration_ms = 30_030;
+    markers[1].start_ms = 30_030;
+    let before = ids(&markers);
+    markers[0].name = "Walk".to_string();
+    markers[0].ai = false;
+    assert!(apply_markers(&mut file, &markers, &before, &no_names()));
+    assert!(file.problems().is_empty(), "{:?}", file.problems());
+    assert_eq!(file.parts.as_deref().map(<[Item]>::len), Some(2));
+    assert_eq!(find(&file, "k3m9xa").title.as_deref(), Some("Walk"));
 }

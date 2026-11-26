@@ -98,6 +98,13 @@ pub trait FileTaggerBackend: Send + Sync {
         false
     }
 
+    /// Whether this backend writes what frename saves into the files on disk. A backend that
+    /// keeps its changes in memory (a debug build) answers `false`, and side files such as a
+    /// clip's description file are not written either.
+    fn writes_files(&self) -> bool {
+        true
+    }
+
     /// Where the file at `path` is on disk. A backend that renames files only in memory
     /// keeps the files where they were; reading one (e.g. to play it) must use this path.
     fn disk_path(&self, path: &Path) -> PathBuf {

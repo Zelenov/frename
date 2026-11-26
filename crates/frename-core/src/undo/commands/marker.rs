@@ -1,8 +1,9 @@
 //! Undo commands for the clip markers of the open file. Markers are matched by GUID, both here
 //! and when they are written into the file, so undoing and redoing can never duplicate one.
 //!
-//! A change by the editor makes an AI marker theirs ([`Marker::ai`] goes); each command that
-//! changes a marker keeps whether it was the AI's (`was_ai`), so an undo makes it the AI's again.
+//! A change by the editor makes an AI marker theirs ([`Marker::ai`] goes): every redo goes
+//! through [`crate::TagList::edit_marker`]. Each command that changes a marker keeps whether it
+//! was the AI's (`was_ai`), so an undo makes it the AI's again.
 
 use super::super::traits::Undoable;
 use super::super::{UndoContext, UndoError};
@@ -167,8 +168,13 @@ impl SetMarkerNameCommand {
     where
         ST: StoredTagStore + Clone,
     {
-        ctx.tag_list
-            .update_marker(&self.guid, |m| (m.name, m.ai) = (name.to_string(), ai));
+        let name = name.to_string();
+        if ai {
+            ctx.tag_list
+                .update_marker(&self.guid, |m| (m.name, m.ai) = (name, true));
+        } else {
+            ctx.tag_list.edit_marker(&self.guid, |m| m.name = name);
+        }
     }
 }
 
@@ -213,11 +219,15 @@ impl SetMarkerTextCommand {
     ) where
         ST: StoredTagStore + Clone,
     {
-        ctx.tag_list.update_marker(&self.guid, |m| {
-            m.name = name.clone();
-            m.comment = comment.clone();
-            m.ai = ai;
-        });
+        let text = |m: &mut Marker| (m.name, m.comment) = (name.clone(), comment.clone());
+        if ai {
+            ctx.tag_list.update_marker(&self.guid, |m| {
+                text(m);
+                m.ai = true;
+            });
+        } else {
+            ctx.tag_list.edit_marker(&self.guid, text);
+        }
     }
 }
 

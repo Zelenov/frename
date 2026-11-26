@@ -401,7 +401,7 @@ batch-written-subtitles = Записане датотеке:
 batch-table-written = Записано
 batch-merged-markers = Спојени дупликати маркера:
 batch-table-merged = Спојено
-batch-describe-files-not-written = Неуписане датотеке описа (clip.describe.json):
+batch-describe-files-not-written = Неуписане датотеке описа (.describe.json):
 batch-markers-merged = { $count ->
     [one] Спојен је { $count } дупликат маркера
     [few] Спојена су { $count } дупликата маркера
@@ -498,7 +498,7 @@ batch-ai-fail-unreadable = Снимак није могао да се прочи
 batch-ai-fail-too-long = Клип је предугачак за AI (преко 30 мин)
 batch-ai-fail-not-saved = Опис није могао да се сачува
 batch-ai-describe-file-kept = Остављена каква је била: ова верзија frename-а не може да је прочита
-batch-ai-describe-file-failed = Није уписана: { $reason }
+batch-ai-describe-file-failed = Није уписана: датотека није могла да се сачува
 batch-ai-fail-key-rejected = { $provider } је одбио кључ
 batch-ai-fail-no-credit = На налогу { $provider } нема више кредита
 batch-ai-fail-network = Грешка мреже

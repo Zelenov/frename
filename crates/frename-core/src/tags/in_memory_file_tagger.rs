@@ -155,6 +155,10 @@ impl FileTaggerBackend for InMemoryFileTagger {
         Ok(turned)
     }
 
+    fn writes_files(&self) -> bool {
+        false
+    }
+
     fn disk_path(&self, path: &Path) -> PathBuf {
         self.disk_paths
             .lock()

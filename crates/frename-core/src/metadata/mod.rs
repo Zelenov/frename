@@ -500,17 +500,13 @@ pub(crate) fn save_markers(
     markers: &[Marker],
     known: &HashSet<String>,
 ) -> Result<(), MarkersError> {
-    // The ids the video's markers have before the write, for the description file: only read
-    // when the clip has one.
+    // The video's markers before the write, for the description file: only read when the clip
+    // has one.
     let description = crate::description::path(path).is_file();
-    let before: HashSet<String> = if description {
-        xmp::read_markers(path)
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|m| m.id)
-            .collect()
+    let before: Vec<Marker> = if description {
+        xmp::read_markers(path).unwrap_or_default()
     } else {
-        HashSet::new()
+        Vec::new()
     };
     xmp::write_markers(path, markers, known).map_err(|e| match e {
         xmp::XmpWriteError::Unsupported => cannot_hold_markers(path),

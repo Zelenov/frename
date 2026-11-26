@@ -255,6 +255,11 @@ impl FileTagger {
         }
     }
 
+    /// Whether saves reach the files on disk; see [`FileTaggerBackend::writes_files`].
+    pub fn writes_files() -> bool {
+        backend().writes_files()
+    }
+
     /// Where the file at `path` is on disk; see [`FileTaggerBackend::disk_path`].
     pub fn disk_path(path: &Path) -> PathBuf {
         backend().disk_path(path)

@@ -975,7 +975,12 @@ pub fn run_clip(
     progress.set(0.98, fl!("batch-ai-progress-saving"));
     // The description file first, next to the clip before a save may rename it (it travels
     // with the clip then); the markers are made from it.
-    let written = write_description_file(&on_disk, &described_clip, options, cancel);
+    // A debug build keeps what it saves in memory: no file next to the real clip.
+    let written = if FileTagger::writes_files() {
+        write_description_file(&on_disk, &described_clip, options, cancel)
+    } else {
+        Err(None)
+    };
     let mut new_block = match frename_core::marker_storage() {
         MarkerStorage::Comment => block::format_block(&description),
         MarkerStorage::InVideo => {
@@ -1080,10 +1085,8 @@ fn write_description_file(
                 "ai: the description file of {} not written: {e}",
                 on_disk.display()
             );
-            Err(Some(fl!(
-                "batch-ai-describe-file-failed",
-                reason = e.to_string()
-            )))
+            // The system's own words are in the log; the report says it in the editor's language.
+            Err(Some(fl!("batch-ai-describe-file-failed")))
         }
     }
 }

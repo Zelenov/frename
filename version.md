@@ -1,6 +1,6 @@
 # 0.303
 ## Added
-- Every AI description is now also saved in a file next to the clip, `clip.describe.json`. It keeps the summary, the suggested in and out points, the markers and the tags the AI found. A new run adds to it and keeps what you made or changed, and the file moves with the clip when frename renames it.
+- Every AI description is now also saved in a file next to the clip, with the clip's name and `.describe.json` at the end. It keeps the summary, the suggested in and out points, the markers and the tags the AI found. A new run adds to it and keeps what you made or changed, and the file moves with the clip when frename renames it.
 - Your changes to markers and to the in and out points now go into that file too, and `Ctrl+Z` takes them back there as well.
 
 ## Changed

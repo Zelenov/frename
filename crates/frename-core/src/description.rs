@@ -79,13 +79,23 @@ pub fn ai_markers(file: &DescribeFile, video: &Path) -> Vec<Marker> {
 }
 
 /// The clip's markers were just written into `video`: bring its description file, if it has
-/// one, in line with `after`, the markers it holds now. `before` holds the ids its markers had
-/// before the write: an item whose id was among them and is gone now was deleted by the editor.
-/// Items whose markers were never in the video (made elsewhere) stay.
-pub(crate) fn markers_saved(video: &Path, before: &HashSet<String>, after: &[Marker]) {
+/// one, in line with `after`, the markers it holds now. `before` is the markers it held before
+/// the write: an item whose marker was among them and is gone now was deleted by the editor,
+/// and a part whose marker spans other times now was moved by them. Items whose markers were
+/// never in the video (made elsewhere) stay.
+pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
+    let before = spans(before);
     update(video, |file, names| {
-        apply_markers(file, after, before, names)
+        apply_markers(file, after, &before, names)
     });
+}
+
+/// Each marker's `(start_ms, duration_ms)` by its id.
+fn spans(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
+    markers
+        .iter()
+        .filter_map(|m| Some((m.id.clone()?, (m.start_ms, m.duration_ms))))
+        .collect()
 }
 
 /// The clip's In and Out points were just saved: bring its description file, if it has one,
@@ -106,6 +116,10 @@ fn update(video: &Path, change: impl FnOnce(&mut DescribeFile, &HashMap<String, 
     let names = speaker_names(&file, video);
     if !change(&mut file, &names) {
         return;
+    }
+    // As clipscribe's own save does: a rule the file breaks is in the log.
+    for problem in file.problems() {
+        log::warn!("description: {}: {problem}", path.display());
     }
     match file.write(&path) {
         Ok(()) => log::info!("description: {} brought in line", path.display()),
@@ -146,11 +160,15 @@ fn shown(text: Option<&str>, people: &[Person], names: &HashMap<String, String>)
 /// - a marker the file has no item for is added as a moment;
 /// - a moment whose id is in `before` but has no marker now goes.
 ///
+/// `before` is the span each marker had in the video before this write: a part was moved when
+/// its marker's span changed, not when it differs from the file (a part may hold a stretch its
+/// marker does not show, and a track's frame rate rounds times).
+///
 /// Only markers frename can write (with a GUID and an id) count. Returns whether `file` changed.
 fn apply_markers(
     file: &mut DescribeFile,
     markers: &[Marker],
-    before: &HashSet<String>,
+    before: &HashMap<String, (u64, u64)>,
     names: &HashMap<String, String>,
 ) -> bool {
     let original = file.clone();
@@ -161,7 +179,14 @@ fn apply_markers(
         .collect();
     let people = people(file).to_vec();
     let duration_s = file.duration_s;
-    let deleted = |id: &str| !by_id.contains_key(id) && before.contains(id);
+    let deleted = |id: &str| !by_id.contains_key(id) && before.contains_key(id);
+    let moved_by_editor = |m: &Marker| {
+        let id = m.id.as_deref().unwrap_or_default();
+        !m.ai
+            && before
+                .get(id)
+                .is_some_and(|span| *span != (m.start_ms, m.duration_ms))
+    };
     let mut in_file: HashSet<String> = HashSet::new();
     let mut left_parts: Vec<Item> = Vec::new();
     if let Some(parts) = file.parts.take() {
@@ -175,7 +200,7 @@ fn apply_markers(
                 kept.push(part);
                 continue;
             };
-            if !marker.ai && moved(&part, marker, duration_s) {
+            if moved_by_editor(marker) {
                 follow(&mut part, marker, &people, names, duration_s);
                 left_parts.push(part);
             } else {

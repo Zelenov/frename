@@ -333,7 +333,7 @@ batch-written-subtitles = 만든 파일:
 batch-table-written = 생성됨
 batch-merged-markers = 병합된 중복 마커:
 batch-table-merged = 병합됨
-batch-describe-files-not-written = 쓰지 못한 설명 파일 (clip.describe.json):
+batch-describe-files-not-written = 쓰지 못한 설명 파일 (.describe.json):
 batch-markers-merged = { $count ->
    *[other] 중복 마커 { $count }개 병합됨
 }
@@ -424,7 +424,7 @@ batch-ai-fail-unreadable = 비디오를 읽을 수 없습니다
 batch-ai-fail-too-long = 클립이 AI에 비해 너무 깁니다 (30분 초과)
 batch-ai-fail-not-saved = 설명을 저장하지 못했습니다
 batch-ai-describe-file-kept = 그대로 두었습니다: 이 버전의 frename은 이 파일을 읽을 수 없습니다
-batch-ai-describe-file-failed = 쓰지 못했습니다: { $reason }
+batch-ai-describe-file-failed = 쓰지 못했습니다: 파일을 저장할 수 없습니다
 batch-ai-fail-key-rejected = { $provider }에서 키를 거부했습니다
 batch-ai-fail-no-credit = { $provider } 계정에 크레딧이 없습니다
 batch-ai-fail-network = 네트워크 오류
