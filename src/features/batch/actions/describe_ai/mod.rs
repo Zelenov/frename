@@ -1355,6 +1355,7 @@ mod tests {
                 summary: "A lion.".to_string(),
                 segments: Vec::new(),
                 main: None,
+                lang: None,
             },
             tags: None,
             usage: clipscribe::AiUsage {
