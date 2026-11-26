@@ -26,6 +26,17 @@ pub struct Parts<'a, M> {
     pub settings: Element<'a, M>,
 }
 
+impl<'a, M: 'a> Parts<'a, M> {
+    /// The same parts, their controls' messages lifted by `f` (as a child's view is mapped).
+    pub fn map<N: 'a>(self, f: fn(M) -> N) -> Parts<'a, N> {
+        Parts {
+            mode: self.mode.map(|mode| mode.map(f)),
+            folder: self.folder,
+            settings: self.settings.map(f),
+        }
+    }
+}
+
 /// The bar. `pressed` is [`super::State::pressed`]; `maximized` turns maximize into restore; `on`
 /// lifts the bar's own messages.
 pub fn view<'a, M: Clone + 'a>(
@@ -84,19 +95,19 @@ pub fn view<'a, M: Clone + 'a>(
             .push(window_button(
                 Icon::Minus,
                 fl!("title-bar-minimize"),
-                false,
+                WindowButtonKind::Plain,
                 on(Message::Minimize),
             ))
             .push(window_button(
                 size_icon,
                 size_tip,
-                false,
+                WindowButtonKind::Plain,
                 on(Message::ToggleMaximize),
             ))
             .push(window_button(
                 Icon::X,
                 fl!("title-bar-close"),
-                true,
+                WindowButtonKind::Close,
                 on(Message::Close),
             ))
             .align_y(Alignment::Center),
@@ -107,11 +118,17 @@ pub fn view<'a, M: Clone + 'a>(
     .into()
 }
 
+#[derive(Clone, Copy)]
+enum WindowButtonKind {
+    Plain,
+    Close,
+}
+
 /// One window button: as wide as the system's own, the close one red under the pointer.
 fn window_button<'a, M: Clone + 'a>(
     glyph: Icon,
     tip: String,
-    close: bool,
+    kind: WindowButtonKind,
     message: M,
 ) -> Element<'a, M> {
     let face = container(icon(glyph, ICON_S, TEXT))
@@ -121,7 +138,10 @@ fn window_button<'a, M: Clone + 'a>(
         .width(WINDOW_BUTTON_WIDTH)
         .height(TITLE_BAR_HEIGHT)
         .padding(0)
-        .style(style::button(ButtonKind::WindowButton(close)))
+        .style(style::button(match kind {
+            WindowButtonKind::Plain => ButtonKind::WindowButton,
+            WindowButtonKind::Close => ButtonKind::WindowClose,
+        }))
         .on_press(message);
     tooltip::tip(button, tip, Position::Bottom)
 }

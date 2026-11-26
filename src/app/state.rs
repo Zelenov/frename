@@ -931,9 +931,15 @@ impl FrenameApp {
                 self.settings.begin_key_request(ApiKey::Soniox),
                 || Ok(()),
             ),
+            // Settings is in the title bar, outside the workspace's click-elsewhere layer.
             Message::FolderWorkspace(folder_workspace::Message::Folder(
                 folder::Message::OpenSettings,
-            )) => Task::done(Message::OpenSettings(None)),
+            )) => Task::batch([
+                self.folder_workspace
+                    .close_popups()
+                    .map(Message::FolderWorkspace),
+                Task::done(Message::OpenSettings(None)),
+            ]),
             // Tag commented and Apply tag spacing: their settings are on the Saving page.
             Message::FolderWorkspace(folder_workspace::Message::Batch(batch::Message::Action(
                 batch::ActionMessage::OpenSettings,
@@ -994,7 +1000,21 @@ impl FrenameApp {
                 self.save_window_state();
                 fetch
             }
-            Message::TitleBar(msg) => self.handle_title_bar(msg),
+            Message::TitleBar(msg) => {
+                // A press on the bar is a click outside the workspace's menus: they close, as
+                // they did when the controls were inside the workspace.
+                let popups = if matches!(
+                    msg,
+                    title_bar::Message::Moved | title_bar::Message::Released
+                ) {
+                    Task::none()
+                } else {
+                    self.folder_workspace
+                        .close_popups()
+                        .map(Message::FolderWorkspace)
+                };
+                Task::batch([popups, self.handle_title_bar(msg)])
+            }
             Message::WindowMaximizedFetched(maximized) => {
                 self.is_maximized = maximized;
                 self.save_window_state();
@@ -1138,13 +1158,14 @@ impl FrenameApp {
         // space rather than no child, so the workspace keeps its place in the tree (and its
         // scroll positions).
         let bar = if self.os_fullscreen || self.folder_workspace.media_fullscreen() {
-            iced::widget::Space::new().into()
+            iced::widget::space().into()
         } else {
             let mut parts = folder_workspace::view::title_bar_parts(
                 &self.folder_workspace,
                 self.settings.updates().available_version(),
                 self.settings.updates().whats_new(),
-            );
+            )
+            .map(Message::FolderWorkspace);
             if let (Some(_), Some(folder)) = (&self.demo, parts.folder.as_mut()) {
                 folder.parent = crate::demo::SHOWN_PARENT.to_string();
             }
@@ -1163,7 +1184,7 @@ impl FrenameApp {
         let edges = if resizable {
             title_bar::view::edges(Message::TitleBar)
         } else {
-            iced::widget::Space::new().into()
+            iced::widget::space().into()
         };
         iced::widget::stack![window, edges].into()
     }
@@ -1458,6 +1479,30 @@ mod tests {
             folder_workspace::Message::EscapePressed,
         ));
         assert!(!app.os_fullscreen);
+    }
+
+    /// #64: the title bar is outside the workspace's click-elsewhere layer, so its presses close
+    /// the workspace's menus themselves; Settings is taken by the app before the workspace.
+    #[test]
+    fn title_bar_presses_and_settings_close_the_recent_folders_list() {
+        let presses = [
+            Message::FolderWorkspace(folder_workspace::Message::Folder(
+                folder::Message::OpenSettings,
+            )),
+            Message::TitleBar(title_bar::Message::Pressed),
+            Message::TitleBar(title_bar::Message::Minimize),
+        ];
+        for press in presses {
+            let mut app = FrenameApp::new(window::Id::unique(), None);
+            let _ = app.update(Message::FolderWorkspace(
+                folder_workspace::Message::RecentFolders(
+                    crate::features::recent_folders::Message::Toggle,
+                ),
+            ));
+            assert!(app.folder_workspace.recent_folders().is_open());
+            let _ = app.update(press);
+            assert!(!app.folder_workspace.recent_folders().is_open());
+        }
     }
 
     #[test]

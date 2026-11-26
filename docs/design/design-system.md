@@ -2198,13 +2198,18 @@ these rules.
   OS (winit hit-tests nothing). A transparent layer over the whole window gives them back: a 5 px
   band along each edge (`window.resize.edge`, the top one over the bar) and 12 px corners
   (`window.resize.corner`), each with its resize cursor, starting `window::drag_resize` on press.
-  Left out while the window is maximised or fullscreen.
-- **Menus:** the switch and Settings are outside the workspace's click-elsewhere layer, so pressing
-  either closes the file menu and the recent folders' list.
+  Left out while the window is maximised or fullscreen. The bands lie over the outer 5 px of
+  whatever touches the window's edge (a scrollbar's outer pixels, the close button's top-right
+  corner): a press there resizes, as on the system's own frame.
+- **Menus:** the bar is outside the workspace's click-elsewhere layer, so any press on it (the
+  drag space, the switch, Settings, a window button) closes the file menu and the recent folders'
+  list.
 - **No folder open** (§13.7): the bar shows only Settings and the window buttons.
 
 **Not built yet** (each its own issue if wanted): the Windows 11 snap layouts flyout on hover over
-maximise (`Win`+`Z` opens it); dimming the bar while the window is inactive; the macOS traffic-light inset and the Linux
+maximise (`Win`+`Z` opens it); with an auto-hiding taskbar, a maximised window covers the whole
+monitor (winit gives it the work area, which is the whole monitor then), so the taskbar no longer
+slides in at the screen's edge; dimming the bar while the window is inactive; the macOS traffic-light inset and the Linux
 header-bar conventions. The Settings window keeps the OS title bar.
 
 #### Version B, not built — a thin app bar under the OS title bar (#64 option 2)

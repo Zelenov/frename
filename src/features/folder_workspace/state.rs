@@ -2659,12 +2659,10 @@ impl FolderWorkspace {
     }
 
     fn handle_folder_message(&mut self, msg: folder::Message) -> Task<Message> {
-        // The switch and Settings live in the title bar, outside the layer that closes the
-        // workspace's menus on a click elsewhere: pressing them closes those menus here.
-        let popups = if matches!(
-            msg,
-            folder::Message::SetBatchMode(_) | folder::Message::OpenSettings
-        ) {
+        // The switch lives in the title bar, outside the layer that closes the workspace's menus
+        // on a click elsewhere: pressing it closes those menus here. (The app closes them for
+        // the bar's other presses, Settings among them, which it takes before they get here.)
+        let popups = if matches!(msg, folder::Message::SetBatchMode(_)) {
             self.close_popups()
         } else {
             Task::none()
@@ -2673,8 +2671,9 @@ impl FolderWorkspace {
         Task::batch([popups, task])
     }
 
-    /// Close the file menu and the recent folders' list, whichever is open.
-    fn close_popups(&mut self) -> Task<Message> {
+    /// Close the file menu and the recent folders' list, whichever is open: a press outside the
+    /// workspace (the title bar) does what a click elsewhere in it does.
+    pub fn close_popups(&mut self) -> Task<Message> {
         let _ = self.recent_folders.update(recent_folders::Message::Close);
         if self.file_menu.is_open() {
             self.handle_file_menu(file_menu::Message::Close)
@@ -12003,18 +12002,13 @@ mod tests {
     }
 
     #[test]
-    fn the_title_bar_switch_and_settings_close_an_open_list() {
-        // They sit outside the workspace's click-elsewhere layer (#64).
-        for press in [
-            folder::Message::SetBatchMode(true),
-            folder::Message::OpenSettings,
-        ] {
-            let mut workspace = workspace_with_recent_folders(&["a"]);
-            let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
-            assert!(workspace.recent_folders.is_open());
-            let _ = workspace.update(Message::Folder(press));
-            assert!(!workspace.recent_folders.is_open());
-        }
+    fn the_title_bar_switch_closes_an_open_list() {
+        // It sits outside the workspace's click-elsewhere layer (#64).
+        let mut workspace = workspace_with_recent_folders(&["a"]);
+        let _ = workspace.update(Message::RecentFolders(recent_folders::Message::Toggle));
+        assert!(workspace.recent_folders.is_open());
+        let _ = workspace.update(Message::Folder(folder::Message::SetBatchMode(true)));
+        assert!(!workspace.recent_folders.is_open());
     }
 
     #[test]

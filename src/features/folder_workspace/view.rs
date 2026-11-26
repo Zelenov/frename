@@ -211,7 +211,7 @@ pub fn title_bar_parts(
     state: &FolderWorkspace,
     update_available: Option<String>,
     whats_new: Option<String>,
-) -> title_bar::view::Parts<'static, crate::app::Message> {
+) -> title_bar::view::Parts<'static, Message> {
     let (mode, settings) = folder_controls::view::app_bar_controls(AppBarProps {
         batch_mode: state.batch().is_active(),
         checked: state.batch().checked_count(),
@@ -219,9 +219,7 @@ pub fn title_bar_parts(
         update_available,
         whats_new,
     });
-    let lift = |e: Element<'static, folder::Message>| {
-        e.map(|m| crate::app::Message::FolderWorkspace(Message::Folder(m)))
-    };
+    let lift = |e: Element<'static, folder::Message>| e.map(Message::Folder);
     let folder = state.directory().map(|dir| title_bar::view::Folder {
         name: frename_core::recent_folders::folder_name(dir.path()),
         parent: frename_core::recent_folders::folder_parent(dir.path()).unwrap_or_default(),
