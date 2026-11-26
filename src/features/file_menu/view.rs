@@ -27,8 +27,9 @@ pub fn view(state: &FileMenuState) -> Element<'_, Message> {
         });
         let size = ui::menu::size(items.len());
         let at = inside(menu.position, size, area);
-        // A click anywhere else closes the menu and does nothing more: the click is not passed
-        // to what is under it, as in any other program's menu.
+        // A click anywhere else in the workspace closes the menu and does nothing more: the click
+        // is not passed to what is under it, as in any other program's menu. A press on the title
+        // bar, outside this layer, closes it and also does what it does (#64).
         let outside = mouse_area(space().width(Length::Fill).height(Length::Fill))
             .on_press(Message::Close)
             .on_right_press(Message::Close)

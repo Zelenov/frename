@@ -1,6 +1,6 @@
 //! The toolbar under the file list (`docs/design/design-system.md` §13.4.3): moving between files,
-//! opening a folder. Settings and the mode switch are in the window's title bar (`app_bar_controls`, #64). Receives
-//! only what it shows.
+//! opening a folder. Settings and the mode switch are in the window's title bar
+//! (`app_bar_controls`, #64). Receives only what it shows.
 
 use iced::widget::{column, container, mouse_area, row, space};
 use iced::{Alignment, Element, Length, Padding};
@@ -95,7 +95,7 @@ pub fn view(props: ToolbarProps) -> Element<'static, folder::Message> {
     .into()
 }
 
-/// What the app bar shows (§13.12, version B).
+/// What the title bar shows of the app's controls (§13.12, version A).
 pub struct AppBarProps {
     /// Batch mode is on: the Batch segment is the selected one.
     pub batch_mode: bool,
@@ -110,7 +110,7 @@ pub struct AppBarProps {
     pub whats_new: Option<String>,
 }
 
-/// The app bar's two controls, for the window's own title bar: the mode switch (single file or
+/// The app's two controls, for the window's own title bar: the mode switch (single file or
 /// batch), at its left, and Settings, at its right. A running job goes on behind the closed batch
 /// panel (#249), so the switch is never disabled. `Esc` still leaves batch mode (`EscapePressed`).
 pub fn app_bar_controls(

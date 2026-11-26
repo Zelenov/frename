@@ -1,6 +1,6 @@
 # 0.303
 ## Changed
-- The window has one bar at the top instead of two, so the video, the list and the tags get more room: the folder's name, the Single file / Batch switch and Settings are in frename's own title bar. Drag its empty part to move the window, double-click to maximize, right-click for the window menu; Win+Z opens the snap layouts.
+- The window has one bar at the top instead of two, so the video, the list and the tags get more room: the folder's name, the Single file / Batch switch and Settings are in frename's own title bar. Drag its empty part to move the window, double-click to maximize, right-click for the window menu; on Windows 11, Win+Z opens the snap layouts.
 
 # 0.302
 ## Fixed
