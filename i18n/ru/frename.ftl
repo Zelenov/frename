@@ -409,6 +409,7 @@ batch-written-subtitles = Записанные файлы:
 batch-table-written = Записано
 batch-merged-markers = Объединённые дубли маркеров:
 batch-table-merged = Объединено
+batch-describe-files-not-written = Незаписанные файлы описания (.describe.json):
 batch-markers-merged = { $count ->
     [one] объединён { $count } дубль маркера
     [few] объединено { $count } дубля маркера
@@ -504,6 +505,8 @@ batch-ai-fail-no-key = Нет ключа API
 batch-ai-fail-unreadable = Видео не удалось прочитать
 batch-ai-fail-too-long = Видео слишком длинное для AI (больше 30 мин)
 batch-ai-fail-not-saved = Не удалось сохранить описание
+batch-ai-describe-file-kept = Оставлен как был: эта версия frename не может его прочитать
+batch-ai-describe-file-failed = Не записан: не удалось сохранить файл
 batch-ai-fail-key-rejected = { $provider } отклонил ключ
 batch-ai-fail-no-credit = На счёте { $provider } закончились деньги
 batch-ai-fail-network = Ошибка сети

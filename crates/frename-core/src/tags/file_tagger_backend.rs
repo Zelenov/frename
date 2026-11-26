@@ -98,16 +98,25 @@ pub trait FileTaggerBackend: Send + Sync {
         false
     }
 
+    /// Whether this backend writes what frename saves into the files on disk. A backend that
+    /// keeps its changes in memory (a debug build) answers `false`, and side files such as a
+    /// clip's description file are not written either.
+    fn writes_files(&self) -> bool {
+        true
+    }
+
     /// Where the file at `path` is on disk. A backend that renames files only in memory
     /// keeps the files where they were; reading one (e.g. to play it) must use this path.
     fn disk_path(&self, path: &Path) -> PathBuf {
         path.to_path_buf()
     }
 
-    /// The clip markers in the file's XMP; `None` when it cannot hold them. Reading never
-    /// changes a file, so every backend reads them from where the file is on disk.
+    /// The clip markers in the file's XMP; `None` when it cannot hold them. Every backend reads
+    /// them from where the file is on disk. This reading never changes the file: a backend that
+    /// writes files also stores the ids given to markers that had none (see
+    /// [`crate::metadata::read_markers`]).
     fn load_markers(&self, path: &Path) -> Option<Vec<Marker>> {
-        crate::metadata::load_markers(&self.disk_path(path))
+        crate::metadata::read_markers(&self.disk_path(path))
     }
 
     /// Write the clip markers into the file's XMP (see [`crate::FileTagger::save_markers`]).

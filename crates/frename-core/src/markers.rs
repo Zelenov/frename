@@ -5,6 +5,7 @@
 //! into comments and reads back: `<time>[–<time>] — <name>[ — <comment>]`. The segment lines of
 //! a comment's AI block (`0:00–0:14 Street.`) become markers too, in [`AI_MARKER_COLOR`].
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -18,12 +19,30 @@ pub const MARKER_SNAP_MS: u64 = 500;
 /// Premiere marker color without a hue, so they stand apart from the editor's own.
 pub const AI_MARKER_COLOR: MarkerColor = MarkerColor::White;
 
+/// The namespace of the GUIDs of markers frename makes: a marker's `xmpDM:guid` is the UUID v5
+/// of its short id in it, so the two always go together.
+const MARKER_GUID_NAMESPACE: uuid::Uuid =
+    uuid::Uuid::from_u128(0x5c2f_8a61_3d4e_4b0f_9a7c_1e2d_6b8f_0a93);
+
+/// The `xmpDM:guid` of a marker frename makes with the short id `id` (#388).
+pub(crate) fn guid_for_id(id: &str) -> String {
+    uuid::Uuid::new_v5(&MARKER_GUID_NAMESPACE, id.as_bytes()).to_string()
+}
+
 /// One clip marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
     /// Premiere's `xmpDM:guid`. `None` for markers other tools wrote without one: frename shows
     /// those but never changes them, since it could not find them again in the file.
     pub guid: Option<String>,
+    /// The marker's id in the clip's description file (`clip.describe.json`): 6 lower-case
+    /// Crockford base32 characters, kept in the `frename_id` cue point parameter. A marker read
+    /// without one (made in Premiere) gets one when it is read; `None` only for read-only
+    /// markers.
+    pub id: Option<String>,
+    /// Made by an AI run and not changed by the editor since (`frename_by` = `ai`). A white
+    /// marker with no `frename_id`, written by an AI run before ids existed, is read as AI too.
+    pub ai: bool,
     pub start_ms: u64,
     /// 0 for a point marker.
     pub duration_ms: u64,
@@ -35,10 +54,14 @@ pub struct Marker {
 }
 
 impl Marker {
-    /// A new point marker at `start_ms` with a fresh GUID, green like Premiere's default.
+    /// A new point marker at `start_ms` with a fresh short id and the GUID made from it, green
+    /// like Premiere's default.
     pub fn new(start_ms: u64) -> Self {
+        let id = clipscribe::describe_file::new_id(&HashSet::new());
         Self {
-            guid: Some(uuid::Uuid::new_v4().to_string()),
+            guid: Some(guid_for_id(&id)),
+            id: Some(id),
+            ai: false,
             start_ms,
             duration_ms: 0,
             name: String::new(),
@@ -109,6 +132,31 @@ pub fn sort_markers(markers: &mut [Marker]) {
             .cmp(&b.start_ms)
             .then_with(|| a.duration_ms.cmp(&b.duration_ms))
     });
+}
+
+/// Give every editable marker without a short id (made in Premiere, or by frename before ids)
+/// a new one, and a marker whose id another marker already has (a copy) a new one too. Returns
+/// whether any marker got one: the caller writes them into the file so they stay.
+pub(crate) fn give_ids(markers: &mut [Marker]) -> bool {
+    use clipscribe::describe_file::{is_short_id, new_id};
+    // Every id in the list, so a new one repeats none of them.
+    let mut taken: HashSet<String> = markers.iter().filter_map(|m| m.id.clone()).collect();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut given = false;
+    for marker in markers.iter_mut().filter(|m| m.is_editable()) {
+        let keep = marker
+            .id
+            .as_deref()
+            .is_some_and(|id| is_short_id(id) && !seen.contains(id));
+        if !keep {
+            let id = new_id(&taken);
+            taken.insert(id.clone());
+            marker.id = Some(id);
+            given = true;
+        }
+        seen.extend(marker.id.clone());
+    }
+    given
 }
 
 /// A marker color as Premiere stores it: a `keywordExtDVAv1_…` cue point parameter holding
@@ -476,29 +524,32 @@ fn ai_segments(comment: &str) -> Vec<MarkerLine> {
         .unwrap_or_default()
 }
 
-/// `existing` with its AI markers (those in [`AI_MARKER_COLOR`]) replaced by one per segment,
-/// as a new AI run writes them. Markers of any other color stay: the editor's, or AI ones the
-/// editor recolored. Also returns the GUIDs of the AI markers it dropped, which a write of
-/// the list deletes from the file.
+/// `existing` with its AI markers (those an AI run made that the editor has not changed since,
+/// see [`Marker::ai`]) replaced by `new_ai`, as a new AI run writes them. Every other marker
+/// stays: the editor's, or AI ones the editor changed. Also returns the GUIDs of the AI markers
+/// it dropped, which a write of the list deletes from the file.
 pub fn replace_ai_markers(
     existing: &[Marker],
-    segments: &[MarkerLine],
+    new_ai: Vec<Marker>,
 ) -> (Vec<Marker>, std::collections::HashSet<String>) {
-    let (old_ai, mut kept): (Vec<&Marker>, Vec<&Marker>) = existing
-        .iter()
-        .partition(|m| m.color == AI_MARKER_COLOR && m.is_editable());
+    let (old_ai, kept): (Vec<&Marker>, Vec<&Marker>) =
+        existing.iter().partition(|m| m.ai && m.is_editable());
     let dropped = old_ai.iter().filter_map(|m| m.guid.clone()).collect();
-    let mut markers: Vec<Marker> = kept.drain(..).cloned().collect();
-    markers.extend(segments.iter().map(|segment| {
-        let mut marker = Marker::new(segment.start_ms);
-        marker.duration_ms = segment.duration_ms;
-        marker.name = segment.name.clone();
-        marker.comment = segment.comment.clone();
-        marker.color = AI_MARKER_COLOR;
-        marker
-    }));
+    let mut markers: Vec<Marker> = kept.into_iter().cloned().collect();
+    markers.extend(new_ai);
     sort_markers(&mut markers);
     (markers, dropped)
+}
+
+/// A new AI marker for one moment of an AI description, in [`AI_MARKER_COLOR`].
+pub fn ai_marker(segment: &MarkerLine) -> Marker {
+    let mut marker = Marker::new(segment.start_ms);
+    marker.duration_ms = segment.duration_ms;
+    marker.name = segment.name.clone();
+    marker.comment = segment.comment.clone();
+    marker.color = AI_MARKER_COLOR;
+    marker.ai = true;
+    marker
 }
 
 /// Markers kept in a comment (see [`crate::MarkerStorage::Comment`]): `comment` without the
@@ -742,12 +793,18 @@ pub fn comment_to_markers(
         } else {
             parsed.color
         };
+        marker.ai = in_block;
         added.push(marker);
     }
     // Only the markers a line really changed are updates.
+    // A line of the editor's changed them: they are the editor's now, not the AI's (#388).
     let updated = touched
         .into_iter()
         .filter(|marker| existing.iter().all(|m| m != marker))
+        .map(|mut marker| {
+            marker.ai = false;
+            marker
+        })
         .collect();
     CommentToMarkers {
         added,
@@ -1619,23 +1676,75 @@ mod tests {
     }
 
     #[test]
-    fn a_new_ai_run_replaces_only_the_ai_colored_markers() {
+    fn a_new_ai_run_replaces_only_the_markers_the_editor_left_as_the_ai_made_them() {
         let mut old_ai = marker(0, 3_000, "Old moment", "");
         old_ai.color = AI_MARKER_COLOR;
+        old_ai.ai = true;
+        // An AI marker the editor recolored is theirs now.
         let mut recolored = marker(5_000, 2_000, "Kept by the editor", "");
         recolored.color = MarkerColor::Red;
+        // White, but the editor's: it is not the AI's.
+        let mut white = marker(7_000, 0, "White and mine", "");
+        white.color = AI_MARKER_COLOR;
         let mine = marker(1_000, 0, "Mine", "");
         let segments = [line(0, 4_000, "New moment", "")];
-        let (markers, dropped) = replace_ai_markers(&[old_ai.clone(), recolored, mine], &segments);
+        let new_ai: Vec<Marker> = segments.iter().map(ai_marker).collect();
+        let (markers, dropped) =
+            replace_ai_markers(&[old_ai.clone(), recolored, mine, white], new_ai);
         assert_eq!(
             spans(&markers),
             [
                 (0, 4_000, "New moment", AI_MARKER_COLOR),
                 (1_000, 0, "Mine", MarkerColor::Green),
                 (5_000, 2_000, "Kept by the editor", MarkerColor::Red),
+                (7_000, 0, "White and mine", AI_MARKER_COLOR),
             ]
         );
+        assert!(markers[0].ai && markers[0].id.is_some());
         assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
+    }
+
+    /// A comment line that renames an AI marker makes it the editor's (#388).
+    #[test]
+    fn a_comment_line_that_changes_an_ai_marker_makes_it_the_editors() {
+        let mut ai = marker(5_000, 0, "Gate", "");
+        ai.ai = true;
+        let moved = comment_to_markers("0:05 — The main gate", &[ai.clone()], None);
+        assert_eq!(moved.updated.len(), 1);
+        assert_eq!(moved.updated[0].name, "The main gate");
+        assert!(!moved.updated[0].ai);
+    }
+
+    #[test]
+    fn a_new_marker_has_a_short_id_and_the_guid_made_from_it() {
+        let marker = Marker::new(0);
+        let id = marker.id.clone().expect("an id");
+        assert!(clipscribe::describe_file::is_short_id(&id), "{id}");
+        assert_eq!(marker.guid, Some(guid_for_id(&id)));
+        assert!(uuid::Uuid::parse_str(&guid_for_id(&id)).is_ok());
+        assert!(!marker.ai);
+    }
+
+    #[test]
+    fn markers_without_an_id_or_with_a_copied_one_get_a_new_one() {
+        let mut premiere = marker(0, 0, "From Premiere", "");
+        premiere.id = None;
+        let first = marker(1_000, 0, "First", "");
+        let mut copy = marker(2_000, 0, "Copy", "");
+        copy.id = first.id.clone();
+        let mut read_only = marker(3_000, 0, "Read-only", "");
+        read_only.guid = None;
+        read_only.id = None;
+        let mut markers = vec![premiere, first.clone(), copy, read_only];
+        assert!(give_ids(&mut markers));
+        let ids: Vec<Option<String>> = markers.iter().map(|m| m.id.clone()).collect();
+        assert!(ids[0]
+            .as_deref()
+            .is_some_and(clipscribe::describe_file::is_short_id));
+        assert_eq!(ids[1], first.id, "the first keeps its id");
+        assert!(ids[2].is_some() && ids[2] != first.id && ids[2] != ids[0]);
+        assert_eq!(ids[3], None, "a read-only marker cannot keep one");
+        assert!(!give_ids(&mut markers), "nothing more to give");
     }
 
     #[test]

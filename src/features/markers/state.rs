@@ -51,6 +51,9 @@ pub struct MarkerEdit {
     pub name: iced::widget::text_editor::Content,
     /// The marker's name when the row opened, to record the editing as one undo step.
     pub original_name: String,
+    /// Whether the marker was the AI's when the row opened: typing makes it the editor's, and
+    /// the name typed back to the AI's makes it the AI's again.
+    pub original_ai: bool,
 }
 
 #[derive(Debug, Default)]
@@ -103,7 +106,8 @@ impl MarkersState {
     }
 
     /// Open the row of `guid` for renaming; its field starts with `name`, the cursor at the end.
-    pub fn open(&mut self, guid: String, name: &str) {
+    /// `ai`: whether the marker is the AI's now.
+    pub fn open(&mut self, guid: String, name: &str, ai: bool) {
         let mut content = iced::widget::text_editor::Content::with_text(name);
         content.perform(iced::widget::text_editor::Action::Move(
             iced::widget::text_editor::Motion::DocumentEnd,
@@ -112,6 +116,7 @@ impl MarkersState {
             guid,
             name: content,
             original_name: name.to_string(),
+            original_ai: ai,
         });
         self.color_picker = None;
         self.last_added = None;

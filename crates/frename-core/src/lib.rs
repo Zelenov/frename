@@ -6,6 +6,7 @@ mod atomic_write;
 pub(crate) mod comment;
 mod db;
 pub mod demo;
+pub mod description;
 mod directory;
 mod file;
 mod file_kind;
@@ -41,7 +42,7 @@ pub use file::{File, FileId};
 pub use file_kind::FileKind;
 pub use folder_file::{choose_dropped_path, FolderAndFile};
 pub use markers::{
-    comment_holds_markers, comment_kept_markers, comment_to_markers, format_marker_line,
+    ai_marker, comment_holds_markers, comment_kept_markers, comment_to_markers, format_marker_line,
     format_marker_time, marker_text_with_moment, markers_from_comment, markers_into_comment,
     markers_text, markers_text_path, markers_to_comment, merge_duplicate_markers,
     native_line_breaks, parse_ai_line, parse_marker_line, replace_ai_markers, sort_markers,

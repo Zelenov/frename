@@ -125,18 +125,32 @@ impl FolderWorkspace {
         let Some(edit) = self.markers.edit() else {
             return;
         };
-        let (guid, original) = (edit.guid.clone(), edit.original_name.clone());
+        let (guid, original, was_ai) = (
+            edit.guid.clone(),
+            edit.original_name.clone(),
+            edit.original_ai,
+        );
         let now = self
             .file_workspace
             .tag_list()
             .marker(&guid)
             .map(|m| m.name.clone());
-        if let Some(new) = now.filter(|name| *name != original) {
-            self.history.push(Box::new(SetMarkerNameCommand {
-                guid,
-                old: original,
-                new,
-            }));
+        match now {
+            Some(new) if new != original => {
+                self.history.push(Box::new(SetMarkerNameCommand {
+                    guid,
+                    old: original,
+                    new,
+                    was_ai,
+                }));
+            }
+            // Typed back to what it was: the marker is as it was, the AI's if it was.
+            Some(_) => {
+                self.file_workspace
+                    .tag_list_mut()
+                    .update_marker(&guid, |m| m.ai = was_ai);
+            }
+            None => {}
         }
         self.markers.close();
     }
@@ -187,9 +201,10 @@ impl FolderWorkspace {
             M::NameAction(action) => {
                 // A name is one line: the field wraps it, `Enter` closes the row.
                 if let Some((guid, name)) = self.markers.edit_name(action) {
+                    // The editor's name now: the marker is theirs.
                     self.file_workspace
                         .tag_list_mut()
-                        .update_marker(&guid, |m| m.name = name);
+                        .edit_marker(&guid, |m| m.name = name);
                 }
                 Task::none()
             }
@@ -199,22 +214,23 @@ impl FolderWorkspace {
             }
             M::SetColor(guid, color) => {
                 self.markers.close_color_picker();
-                let Some(old) = self
+                let Some((old, was_ai)) = self
                     .file_workspace
                     .tag_list()
                     .marker(&guid)
-                    .map(|m| m.color)
+                    .map(|m| (m.color, m.ai))
                 else {
                     return Task::none();
                 };
                 if old != color {
                     self.file_workspace
                         .tag_list_mut()
-                        .update_marker(&guid, |m| m.color = color);
+                        .edit_marker(&guid, |m| m.color = color);
                     self.history.push(Box::new(SetMarkerColorCommand {
                         guid,
                         old,
                         new: color,
+                        was_ai,
                     }));
                 }
                 Task::none()
@@ -365,21 +381,23 @@ impl FolderWorkspace {
             .tag_list()
             .marker(guid)
             .filter(|m| m.is_editable())
-            .map(|m| (m.start_ms, m.duration_ms))
+            .map(|m| ((m.start_ms, m.duration_ms), m.ai))
         else {
             return;
         };
+        let (old, was_ai) = old;
         let new = (start_ms, at_least_a_range(end_ms - start_ms));
         if old == new {
             return;
         }
         self.file_workspace
             .tag_list_mut()
-            .update_marker(guid, |m| (m.start_ms, m.duration_ms) = new);
+            .edit_marker(guid, |m| (m.start_ms, m.duration_ms) = new);
         self.history.push(Box::new(SetMarkerSpanCommand {
             guid: guid.to_string(),
             old,
             new,
+            was_ai,
         }));
     }
 
@@ -472,7 +490,8 @@ impl FolderWorkspace {
             return Task::none();
         };
         let current = markers[index].name.clone();
-        self.markers.open(guid, &current);
+        let ai = markers[index].ai;
+        self.markers.open(guid, &current, ai);
         let name = iced::widget::Id::new(markers::view::MARKER_NAME_INPUT_ID);
         // A click on a row in view does not scroll the list (§13.2); a row out of view (opened by
         // key) is brought in with a row of context above it.

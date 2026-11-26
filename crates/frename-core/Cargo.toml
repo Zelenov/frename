@@ -13,7 +13,7 @@ test-support = []
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1", features = ["fs", "rt", "time"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
 indexmap = "2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

@@ -31,6 +31,11 @@ const VERSION: u32 = 1;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct StoredMarker {
     guid: Option<String>,
+    /// Absent in entries written before markers had ids.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    ai: bool,
     start_ms: u64,
     duration_ms: u64,
     name: String,
@@ -42,6 +47,8 @@ impl StoredMarker {
     fn new(marker: &Marker) -> Self {
         Self {
             guid: marker.guid.clone(),
+            id: marker.id.clone(),
+            ai: marker.ai,
             start_ms: marker.start_ms,
             duration_ms: marker.duration_ms,
             name: marker.name.clone(),
@@ -53,6 +60,8 @@ impl StoredMarker {
     /// Whether `marker` is the one stored.
     fn is(&self, marker: &Marker) -> bool {
         self.guid == marker.guid
+            && self.id == marker.id
+            && self.ai == marker.ai
             && self.start_ms == marker.start_ms
             && self.duration_ms == marker.duration_ms
             && self.name == marker.name
@@ -63,6 +72,8 @@ impl StoredMarker {
     fn marker(&self) -> Marker {
         Marker {
             guid: self.guid.clone(),
+            id: self.id.clone(),
+            ai: self.ai,
             start_ms: self.start_ms,
             duration_ms: self.duration_ms,
             name: self.name.clone(),

@@ -400,6 +400,7 @@ batch-written-subtitles = File scritti:
 batch-table-written = Scritti
 batch-merged-markers = Marcatori duplicati uniti:
 batch-table-merged = Uniti
+batch-describe-files-not-written = File di descrizione (.describe.json) non scritti:
 batch-markers-merged = { $count ->
     [one] { $count } marcatore duplicato unito
    *[other] { $count } marcatori duplicati uniti
@@ -492,6 +493,8 @@ batch-ai-fail-no-key = Nessuna chiave API
 batch-ai-fail-unreadable = Impossibile leggere il video
 batch-ai-fail-too-long = La clip è troppo lunga per l'IA (oltre 30 min)
 batch-ai-fail-not-saved = Impossibile salvare la descrizione
+batch-ai-describe-file-kept = Lasciato com’era: questa versione di frename non riesce a leggerlo
+batch-ai-describe-file-failed = Non scritto: impossibile salvare il file
 batch-ai-fail-key-rejected = { $provider } ha rifiutato la chiave
 batch-ai-fail-no-credit = L’account { $provider } non ha più credito
 batch-ai-fail-network = Errore di rete

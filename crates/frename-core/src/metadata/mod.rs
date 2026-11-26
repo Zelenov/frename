@@ -433,10 +433,46 @@ impl std::fmt::Display for MarkersError {
     }
 }
 
-/// The clip markers kept in the file's XMP. `None` when the file cannot hold them.
-pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
+/// The clip markers kept in the file's XMP, as they read, without writing anything. `None` when
+/// the file cannot hold them. A marker without a short id (made in Premiere) is given one here
+/// (see [`crate::markers::give_ids`]); [`load_markers`] writes it into the file.
+///
+/// A white marker without an id was written by an AI run before ids existed, but only on a
+/// clip that was described: its comment has an `AI:` block. On any other clip a white marker
+/// is the editor's (#388).
+pub(crate) fn read_markers(path: &Path) -> Option<Vec<Marker>> {
     let mut markers = xmp::read_markers(path)?;
     crate::markers::sort_markers(&mut markers);
+    let guessed = |m: &Marker| m.ai && m.id.is_none();
+    if markers.iter().any(guessed) && !was_described(path) {
+        for marker in markers.iter_mut().filter(|m| guessed(m)) {
+            marker.ai = false;
+        }
+    }
+    crate::markers::give_ids(&mut markers);
+    Some(markers)
+}
+
+/// Whether the clip's comment (in the video or in its text file) holds an AI block.
+fn was_described(path: &Path) -> bool {
+    let described = |comment: &str| crate::ai::block::ai_block(comment).is_some();
+    described(&crate::comment::load_comment(path)) || described(&xmp::read(path).comment)
+}
+
+/// [`read_markers`], and the ids given to markers that had none written into the file at once,
+/// so a marker keeps its id on every later read (#388). A file that cannot be written keeps the
+/// ids until its markers are next saved.
+pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
+    let markers = read_markers(path)?;
+    let unstored = xmp::read_markers(path)
+        .unwrap_or_default()
+        .iter()
+        .any(|m| m.guid.is_some() && m.id.is_none());
+    if unstored {
+        if let Err(e) = save_markers(path, &markers, &HashSet::new()) {
+            log::warn!("metadata: the ids of the markers of {path:?} not written yet: {e}");
+        }
+    }
     Some(markers)
 }
 
@@ -464,6 +500,14 @@ pub(crate) fn save_markers(
     markers: &[Marker],
     known: &HashSet<String>,
 ) -> Result<(), MarkersError> {
+    // The video's markers before the write, for the description file: only read when the clip
+    // has one.
+    let description = crate::description::path(path).is_file();
+    let before: Vec<Marker> = if description {
+        xmp::read_markers(path).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     xmp::write_markers(path, markers, known).map_err(|e| match e {
         xmp::XmpWriteError::Unsupported => cannot_hold_markers(path),
         other => {
@@ -473,6 +517,11 @@ pub(crate) fn save_markers(
     })?;
     // The write keeps the file's time, so a same-size file would still match its old line.
     cache::reload_line(path);
+    if description {
+        // As the video holds them now: markers added elsewhere meanwhile are kept there.
+        let after = xmp::read_markers(path).unwrap_or_default();
+        crate::description::markers_saved(path, &before, &after);
+    }
     Ok(())
 }
 

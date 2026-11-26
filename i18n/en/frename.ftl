@@ -354,6 +354,7 @@ batch-written-subtitles = Files written:
 batch-table-written = Written
 batch-merged-markers = Duplicate markers merged:
 batch-table-merged = Merged
+batch-describe-files-not-written = Description files (.describe.json) not written:
 batch-markers-merged = { $count ->
     [one] { $count } duplicate marker merged
    *[other] { $count } duplicate markers merged
@@ -446,6 +447,8 @@ batch-ai-fail-no-key = No API key
 batch-ai-fail-unreadable = Video could not be read
 batch-ai-fail-too-long = The clip is too long for AI (over 30 min)
 batch-ai-fail-not-saved = The description could not be saved
+batch-ai-describe-file-kept = Kept as it was: this version of frename cannot read it
+batch-ai-describe-file-failed = Not written: the file could not be saved
 batch-ai-fail-key-rejected = { $provider } rejected the key
 batch-ai-fail-no-credit = The { $provider } account has no credit left
 batch-ai-fail-network = Network error

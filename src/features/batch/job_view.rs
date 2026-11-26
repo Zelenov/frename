@@ -557,18 +557,31 @@ fn files_not_done<'a>(
 }
 
 /// The videos that got something worth listing and what, when the action says: the subtitle
-/// files written (a Premiere transcript), or the duplicate markers merged away, as a table.
+/// files written (a Premiere transcript), the duplicate markers merged away, or why a clip's
+/// description file was not written, as a table.
 fn files_written<'a>(
     state: &'a BatchState,
     action: Action,
     directory: Option<&'a Directory>,
 ) -> Option<Element<'a, Message>> {
-    let (title, caption) = match action {
-        Action::GenerateSubtitles => (fl!("batch-written-subtitles"), fl!("batch-table-written")),
-        Action::MarkersComment => (fl!("batch-merged-markers"), fl!("batch-table-merged")),
+    let (title, caption, written) = match action {
+        Action::GenerateSubtitles => (
+            fl!("batch-written-subtitles"),
+            fl!("batch-table-written"),
+            state.done_with_reason(),
+        ),
+        Action::MarkersComment => (
+            fl!("batch-merged-markers"),
+            fl!("batch-table-merged"),
+            state.done_with_reason(),
+        ),
+        Action::DescribeAi | Action::PrepareClips => (
+            fl!("batch-describe-files-not-written"),
+            fl!("batch-table-why"),
+            state.done_with_note(),
+        ),
         _ => return None,
     };
-    let written = state.done_with_reason();
     if written.is_empty() {
         return None;
     }

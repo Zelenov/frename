@@ -319,15 +319,21 @@ impl FolderWorkspace {
             return Self::notice(&fl!("markers-ai-gone"));
         };
         let new = marker_text_with_moment(&marker, name, description);
+        let was_ai = marker.ai;
         let old = (marker.name, marker.comment);
         if new == old {
             return Self::notice(&fl!("markers-ai-nothing-new"));
         }
+        // Described at the editor's asking: the marker is theirs now (`by: user`).
         self.file_workspace
             .tag_list_mut()
-            .update_marker(&guid, |m| (m.name, m.comment) = new.clone());
-        self.history
-            .push(Box::new(SetMarkerTextCommand { guid, old, new }));
+            .edit_marker(&guid, |m| (m.name, m.comment) = new.clone());
+        self.history.push(Box::new(SetMarkerTextCommand {
+            guid,
+            old,
+            new,
+            was_ai,
+        }));
         Task::batch([
             self.write_markers_to_comment_now(),
             Self::notice(&fl!("markers-ai-done")),

@@ -333,6 +333,7 @@ batch-written-subtitles = 已寫入的檔案：
 batch-table-written = 已寫入
 batch-merged-markers = 已合併的重複標記：
 batch-table-merged = 已合併
+batch-describe-files-not-written = 未寫入的描述檔案 (.describe.json)：
 batch-markers-merged = { $count ->
    *[other] 已合併 { $count } 個重複標記
 }
@@ -422,6 +423,8 @@ batch-ai-fail-no-key = 沒有 API 金鑰
 batch-ai-fail-unreadable = 無法讀取影片
 batch-ai-fail-too-long = 片段太長，無法使用 AI（超過 30 分鐘）
 batch-ai-fail-not-saved = 無法儲存描述
+batch-ai-describe-file-kept = 保持原樣：此版本的 frename 無法讀取它
+batch-ai-describe-file-failed = 未寫入：無法儲存檔案
 batch-ai-fail-key-rejected = { $provider } 拒絕了金鑰
 batch-ai-fail-no-credit = { $provider } 帳戶餘額不足
 batch-ai-fail-network = 網路錯誤

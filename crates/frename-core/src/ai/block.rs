@@ -296,11 +296,19 @@ pub fn segment_lines(description: &Description) -> Vec<crate::MarkerLine> {
         .iter()
         .map(|segment| {
             let start_ms = ms(segment.start_s);
+            // The marker's name is the moment's short title (#388); its description is the
+            // comment, unless it only says the title again.
+            let name = clipscribe::marker_title(&segment.title, &segment.description);
+            let description = segment.description.trim();
             crate::MarkerLine {
                 start_ms,
                 duration_ms: ms(segment.end_s).saturating_sub(start_ms),
-                name: one_line(&segment.description),
-                comment: String::new(),
+                comment: if description == name {
+                    String::new()
+                } else {
+                    description.to_string()
+                },
+                name,
                 color: crate::MarkerColor::Green,
             }
         })
@@ -349,8 +357,8 @@ mod tests {
             [crate::MarkerLine {
                 start_ms: 0,
                 duration_ms: 14_200,
-                name: "Entrance.".to_string(),
-                comment: String::new(),
+                name: "Entrance".to_string(),
+                comment: "Entrance.".to_string(),
                 color: crate::MarkerColor::Green,
             }]
         );

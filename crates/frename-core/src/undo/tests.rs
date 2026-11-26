@@ -1334,12 +1334,14 @@ mod tests {
             guid: guid.clone(),
             old: MarkerColor::Green,
             new: MarkerColor::Red,
+            was_ai: false,
         }));
         tag_list.update_marker(&guid, |m| m.duration_ms = 1_500);
         history.push(Box::new(SetMarkerSpanCommand {
             guid: guid.clone(),
             old: (0, 0),
             new: (0, 1_500),
+            was_ai: false,
         }));
 
         run(&mut history, &mut tag_list, true);
@@ -1368,12 +1370,14 @@ mod tests {
             guid: guid.clone(),
             old: (41_000, 6_000),
             new: (40_000, 7_000),
+            was_ai: false,
         }));
         tag_list.update_marker(&guid, |m| m.duration_ms = 0);
         history.push(Box::new(SetMarkerSpanCommand {
             guid: guid.clone(),
             old: (40_000, 7_000),
             new: (40_000, 0),
+            was_ai: false,
         }));
         let span = |tag_list: &TagList<FakeAppStorage>| {
             tag_list.marker(&guid).map(|m| (m.start_ms, m.duration_ms))
@@ -1827,6 +1831,7 @@ mod tests {
             guid: guid.clone(),
             old: String::new(),
             new: "hello".to_string(),
+            was_ai: false,
         }));
 
         run(&mut history, &mut tag_list, true);
@@ -1840,26 +1845,32 @@ mod tests {
         let mut tag_list = marker_list();
         let mut marker = Marker::new(0);
         marker.comment = "mine".to_string();
+        // An AI marker: the change makes it the editor's, the undo the AI's again (#388).
+        marker.ai = true;
         let guid = marker.guid.clone().unwrap();
         tag_list.add_marker(marker);
         let new = ("Lion".to_string(), "mine\nA lion walks past.".to_string());
-        tag_list.update_marker(&guid, |m| (m.name, m.comment) = new.clone());
+        tag_list.update_marker(&guid, |m| {
+            ((m.name, m.comment), m.ai) = (new.clone(), false)
+        });
         let mut history = History::new(50);
         history.push(Box::new(SetMarkerTextCommand {
             guid: guid.clone(),
             old: (String::new(), "mine".to_string()),
             new: new.clone(),
+            was_ai: true,
         }));
 
         run(&mut history, &mut tag_list, true);
         let undone = tag_list.marker(&guid).unwrap();
         assert_eq!(
-            (undone.name.as_str(), undone.comment.as_str()),
-            ("", "mine")
+            (undone.name.as_str(), undone.comment.as_str(), undone.ai),
+            ("", "mine", true)
         );
         run(&mut history, &mut tag_list, false);
         let redone = tag_list.marker(&guid).unwrap();
         assert_eq!((redone.name.clone(), redone.comment.clone()), new);
+        assert!(!redone.ai);
     }
 
     #[test]
@@ -2185,6 +2196,7 @@ mod tests {
         let sidecars = |video: &std::path::Path| {
             let mut all = crate::subtitles::subtitle_candidates(video);
             all.push(crate::subtitles::transcript_path(video));
+            all.push(crate::description::path(video));
             all
         };
         for p in sidecars(&after) {
