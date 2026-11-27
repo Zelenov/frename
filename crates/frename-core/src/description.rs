@@ -20,6 +20,7 @@
 //! A clip without the file gets none from an edit: the file needs what only a run measures
 //! (the picture's size and frame rate). A file this version cannot read is never written.
 
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -27,7 +28,7 @@ use clipscribe::describe_file::{
     describe_file_path, render_mentions, By, DescribeFile, Extra, InOut, Marker as Item, Person,
 };
 
-use crate::markers::{guid_for_id, Marker, MarkerColor, AI_MARKER_COLOR};
+use crate::markers::{guid_for_id, AtItem, Marker, MarkerColor, AI_MARKER_COLOR};
 use crate::metadata::Segment;
 
 /// Where the description file of `video` is: `clip.mp4` → `clip.describe.json`.
@@ -84,39 +85,55 @@ pub fn ai_markers(file: &DescribeFile, video: &Path) -> Vec<Marker> {
 /// and a part whose marker spans other times now was moved by them. Items whose markers were
 /// never in the video (made elsewhere) stay.
 pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
-    let before = spans(before, &at_item(video));
+    let at = at_item(video);
+    let before = spans(&without_copies(before, &at));
+    let after = without_copies(after, &at);
     update(video, |file, names| {
-        apply_markers(file, after, &before, names)
+        apply_markers(file, &after, &before, names)
     });
 }
 
-/// Each editable marker's `(start_ms, duration_ms)` by its id. Of markers that share an id (a
-/// copy pasted in Premiere), the one counts that [`crate::markers::id_keepers`] picks from them
-/// in [`crate::markers::sort_markers`]' order, as `give_ids` does on a read: the copy's times
-/// are not a move of the original (#668, #671).
-fn spans(
-    markers: &[Marker],
-    at_item: &dyn Fn(&str, &Marker) -> bool,
-) -> HashMap<String, (u64, u64)> {
+/// `markers` in [`crate::markers::sort_markers`]' order without the copies: of markers that
+/// share an id (a copy pasted in Premiere and not read by frename yet), only the one
+/// [`crate::markers::id_keepers`] keeps, as `give_ids` does on a read. So the copy's times are
+/// not a move of the original, and the original's item stays bound to it (#668, #671).
+fn without_copies(markers: &[Marker], at_item: AtItem) -> Vec<Marker> {
     let mut sorted = markers.to_vec();
     crate::markers::sort_markers(&mut sorted);
-    crate::markers::id_keepers(&sorted, at_item)
-        .into_iter()
-        .filter_map(|n| {
-            let m = &sorted[n];
-            Some((m.id.clone()?, (m.start_ms, m.duration_ms)))
-        })
+    let keepers = crate::markers::id_keepers(&sorted, at_item);
+    let mut ids: HashMap<&str, usize> = HashMap::new();
+    for m in sorted.iter().filter(|m| m.is_editable()) {
+        if let Some(id) = m.id.as_deref() {
+            *ids.entry(id).or_default() += 1;
+        }
+    }
+    let copy = |(n, m): &(usize, &Marker)| {
+        m.is_editable() && m.id.as_deref().is_some_and(|id| ids[id] > 1) && !keepers.contains(n)
+    };
+    sorted
+        .iter()
+        .enumerate()
+        .filter(|nm| !copy(nm))
+        .map(|(_, m)| m.clone())
+        .collect()
+}
+
+/// Each marker's `(start_ms, duration_ms)` by its id.
+fn spans(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
+    markers
+        .iter()
+        .filter_map(|m| Some((m.id.clone()?, (m.start_ms, m.duration_ms))))
         .collect()
 }
 
 /// Whether a marker sits where the description file of `video` has the item of an id: the same
 /// start and end (see [`moved`]). The file is read when first asked, once. No file: never.
 pub(crate) fn at_item(video: &Path) -> impl Fn(&str, &Marker) -> bool + '_ {
-    let file = std::cell::OnceCell::new();
+    let file: OnceCell<Option<DescribeFile>> = OnceCell::new();
     move |id, marker| {
         file.get_or_init(|| read(video))
             .as_ref()
-            .is_some_and(|file: &DescribeFile| {
+            .is_some_and(|file| {
                 items(file).any(|item| item.id == id && !moved(item, marker, file.duration_s))
             })
     }
