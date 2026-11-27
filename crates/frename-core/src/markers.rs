@@ -728,7 +728,10 @@ pub fn comment_to_markers(
         }
         // Another line for a moment already given: its text joins the marker's, so a line is
         // never dropped without a trace. An AI segment only ever adds its marker once.
-        if let Some(pending) = added.iter_mut().find(|m| is_at(m, &parsed, in_block)) {
+        if let Some(pending) = added
+            .iter_mut()
+            .find(|m| is_at(m, &parsed, in_block, block.is_some()))
+        {
             if !in_block {
                 join_text(pending, &parsed);
             }
@@ -738,7 +741,7 @@ pub fn comment_to_markers(
         // GUID is read-only.
         let found = existing
             .iter()
-            .filter(|m| is_at(m, &parsed, in_block))
+            .filter(|m| is_at(m, &parsed, in_block, block.is_some()))
             .min_by_key(|m| m.guid.is_none());
         if let Some(found) = found {
             if !in_block {
@@ -864,11 +867,14 @@ pub fn markers_to_comment(comment: &str, markers: &[Marker]) -> (String, usize) 
     (result, added)
 }
 
-/// Whether the marker `m` is the one a line is about: the AI's segments only meet the AI's
-/// markers, the editor's lines the editor's, and the moment is the same.
-fn is_at(m: &Marker, line: &MarkerLine, in_block: bool) -> bool {
-    (m.color == AI_MARKER_COLOR) == in_block
-        && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
+/// Whether the marker `m` is the one a line is about: the moment is the same, and the AI's
+/// segments only meet the AI's markers, the editor's lines the editor's. A marker in
+/// [`AI_MARKER_COLOR`] is on the AI's side when the comment has a block (where
+/// [`markers_into_comment`] writes it) or when it is the AI's ([`Marker::ai`]); without a block,
+/// an editor's white marker is written as an editor's line and meets it again (#673).
+fn is_at(m: &Marker, line: &MarkerLine, in_block: bool, has_block: bool) -> bool {
+    let ais = m.color == AI_MARKER_COLOR && (has_block || m.ai);
+    ais == in_block && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
 }
 
 /// The text of a line added to a marker's own (see [`merge_text`]).
@@ -1709,6 +1715,26 @@ mod tests {
         assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
     }
 
+    /// #673: without an AI block, a white marker is written as an editor's line; that line,
+    /// edited, renames it in place (as for any other colour) instead of adding a second one.
+    #[test]
+    fn an_edited_line_renames_a_white_marker_when_there_is_no_ai_block() {
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let comment = markers_into_comment("", std::slice::from_ref(&white));
+        assert!(comment.contains("Use this"), "{comment}");
+        let edited = comment.replace("Use this", "Use that");
+        let result = comment_to_markers(&edited, std::slice::from_ref(&white), None);
+        assert!(result.added.is_empty(), "{:?}", result.added);
+        assert_eq!(result.updated.len(), 1);
+        assert_eq!(result.updated[0].name, "Use that");
+        assert_eq!(result.updated[0].guid, white.guid);
+        assert_eq!(result.updated[0].color, AI_MARKER_COLOR);
+        // Unchanged, it changes nothing.
+        let same = comment_to_markers(&comment, std::slice::from_ref(&white), None);
+        assert!(same.added.is_empty() && same.comment.is_empty(), "{same:?}");
+    }
+
     /// A comment line that renames an AI marker makes it the editor's (#388).
     #[test]
     fn a_comment_line_that_changes_an_ai_marker_makes_it_the_editors() {
@@ -1868,6 +1894,7 @@ mod tests {
     fn an_ai_segment_and_the_editors_line_do_not_meet() {
         let mut ai = marker(10_000, 0, "AI", "");
         ai.color = AI_MARKER_COLOR;
+        ai.ai = true;
         let result = comment_to_markers("0:10 — Mine", &[ai], None);
         assert_eq!(result.added.len(), 1, "the AI's marker is not renamed");
         assert!(result.updated.is_empty());
