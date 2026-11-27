@@ -1,3 +1,7 @@
+# 0.304
+## Fixed
+- A marker copied in Premiere together with frename's id now gets its own id once and keeps it. Before, it got a new id every time the clip was read, until its markers were saved, and its entry in the clip's `.describe.json` was replaced on every save.
+
 # 0.303
 ## Added
 - Every AI description is now also saved in a file next to the clip, with the clip's name and `.describe.json` at the end. It keeps the summary, the suggested in and out points, the markers and the tags the AI found. A new run adds to it and keeps what you made or changed, and the file moves with the clip when frename renames or moves it.

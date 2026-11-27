@@ -441,6 +441,12 @@ impl std::fmt::Display for MarkersError {
 /// clip that was described: its comment has an `AI:` block. On any other clip a white marker
 /// is the editor's (#388).
 pub(crate) fn read_markers(path: &Path) -> Option<Vec<Marker>> {
+    read_markers_and_ids(path).map(|(markers, _)| markers)
+}
+
+/// [`read_markers`], and whether [`crate::markers::give_ids`] gave any marker a new id: one
+/// without an id, or a copy that carries another marker's id.
+fn read_markers_and_ids(path: &Path) -> Option<(Vec<Marker>, bool)> {
     let mut markers = xmp::read_markers(path)?;
     crate::markers::sort_markers(&mut markers);
     let guessed = |m: &Marker| m.ai && m.id.is_none();
@@ -449,8 +455,8 @@ pub(crate) fn read_markers(path: &Path) -> Option<Vec<Marker>> {
             marker.ai = false;
         }
     }
-    crate::markers::give_ids(&mut markers);
-    Some(markers)
+    let given = crate::markers::give_ids(&mut markers);
+    Some((markers, given))
 }
 
 /// Whether the clip's comment (in the video or in its text file) holds an AI block.
@@ -459,16 +465,13 @@ fn was_described(path: &Path) -> bool {
     described(&crate::comment::load_comment(path)) || described(&xmp::read(path).comment)
 }
 
-/// [`read_markers`], and the ids given to markers that had none written into the file at once,
-/// so a marker keeps its id on every later read (#388). A file that cannot be written keeps the
-/// ids until its markers are next saved.
+/// [`read_markers`], and the ids it gave (to markers that had none, and to copies that carry
+/// another marker's id) written into the file at once, so a marker keeps its id on every later
+/// read (#388, #668). A file that cannot be written keeps the ids until its markers are next
+/// saved.
 pub(crate) fn load_markers(path: &Path) -> Option<Vec<Marker>> {
-    let markers = read_markers(path)?;
-    let unstored = xmp::read_markers(path)
-        .unwrap_or_default()
-        .iter()
-        .any(|m| m.guid.is_some() && m.id.is_none());
-    if unstored {
+    let (markers, given) = read_markers_and_ids(path)?;
+    if given {
         if let Err(e) = save_markers(path, &markers, &HashSet::new()) {
             log::warn!("metadata: the ids of the markers of {path:?} not written yet: {e}");
         }

@@ -404,6 +404,34 @@ fn a_premiere_marker_gets_a_short_id_once_and_keeps_its_guid() {
     let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
 }
 
+/// A marker copied with its `frename_id` (two markers, one id) gets a new id once, and keeps it
+/// on every later read: the new id is written into the file at the first read (#668).
+#[test]
+fn a_copied_marker_gets_a_new_id_once() {
+    let clip = clip_with_file("copied-id");
+    let marker = |start_ms: u64, guid: &str| {
+        let mut marker = Marker::new(start_ms);
+        marker.guid = Some(guid.to_string());
+        marker.id = Some("k3m9xa".to_string());
+        marker.color = MarkerColor::Red;
+        marker
+    };
+    let original = marker(1_000, "6f1c2b8e-0d3a-4e5f-9a7b-1c2d3e4f5a6b");
+    let copy = marker(2_000, "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d");
+    crate::metadata::save_markers(&clip, &[original, copy], &HashSet::new()).expect("saved");
+
+    let first = crate::metadata::load_markers(&clip).expect("markers");
+    let ids: Vec<_> = first.iter().map(|m| m.id.clone().expect("an id")).collect();
+    assert_eq!(ids[0], "k3m9xa", "the first keeps its id");
+    assert_ne!(ids[1], ids[0], "the copy gets its own id");
+    for _ in 0..2 {
+        let again = crate::metadata::load_markers(&clip).expect("markers");
+        let again_ids: Vec<_> = again.iter().map(|m| m.id.clone().expect("an id")).collect();
+        assert_eq!(again_ids, ids, "the same ids on every read");
+    }
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
 /// Described before ids: an AI run wrote white markers without parameters. On a described clip
 /// (its comment has an `AI:` block) they read as the AI's, and keep being the AI's once frename
 /// has given them an id; on a clip never described, a white marker is the editor's.
