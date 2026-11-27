@@ -1,6 +1,6 @@
 # 0.306
 ## Fixed
-- Markers ⇄ comment: when the clip has no AI description, changing the line of a white marker of your own now renames that marker. Before, the marker kept its old name with the new one added after a dash.
+- Markers ⇄ comment: changing the line of a white marker of your own now renames that marker. Before, the marker kept its old name with the new one added after a dash.
 
 # 0.305
 ## Fixed
