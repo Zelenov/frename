@@ -571,6 +571,50 @@ fn a_save_while_a_copy_shares_the_id_keeps_the_part() {
     }
 }
 
+/// #671 (round 4 of PR #674): a part made in Premiere, copied and pasted at the same time and
+/// length, then the original moved later in frename before frename reads the copy: the marker
+/// that kept the id before the save still keeps it, though the copy now sits at the item.
+#[test]
+fn a_moved_original_beats_a_same_place_copy_on_a_save() {
+    let clip = clip_with_file("save-same-place-copy");
+    let mut file = file();
+    file.parts.as_mut().expect("parts")[0].by = By::User;
+    file.write(&path(&clip)).expect("description file");
+    let mut part = Marker::new(0);
+    part.id = Some("k3m9xa".to_string());
+    part.guid = Some("11111111-2222-4333-8444-555555555555".to_string());
+    part.duration_ms = 60_000;
+    part.color = MarkerColor::Red;
+    let mut copy = part.clone();
+    copy.guid = Some("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d".to_string());
+    let mut held = markers(&file);
+    held.retain(|m| m.id.as_deref() != Some("k3m9xa"));
+    held.push(part);
+    crate::metadata::save_markers(&clip, &held, &HashSet::new()).expect("saved");
+    let known: HashSet<String> = held.iter().filter_map(|m| m.guid.clone()).collect();
+    let hidden = clip.with_file_name("hidden.json");
+    std::fs::rename(path(&clip), &hidden).expect("hide");
+    let mut pasted = held.clone();
+    pasted.push(copy);
+    crate::metadata::save_markers(&clip, &pasted, &HashSet::new()).expect("saved");
+    std::fs::rename(&hidden, path(&clip)).expect("back");
+
+    let original = held
+        .iter_mut()
+        .find(|m| m.id.as_deref() == Some("k3m9xa"))
+        .expect("the original");
+    original.start_ms = 10_000;
+    original.duration_ms = 50_000;
+    crate::metadata::save_markers(&clip, &held, &known).expect("saved");
+    let read_markers = crate::metadata::load_markers(&clip).expect("markers");
+    let moved = read_markers
+        .iter()
+        .find(|m| m.start_ms == 10_000)
+        .expect("the original");
+    assert_eq!(moved.id.as_deref(), Some("k3m9xa"), "the original keeps it");
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
 /// The editor's part `k3m9xa` (0–60 s, marker GUID `part_guid`) saved by frename, then copied in
 /// Premiere and pasted at 0 s for 5 s. Returns the clip, the markers frename held before the
 /// paste and the description file before it.

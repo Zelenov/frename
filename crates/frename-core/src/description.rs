@@ -28,7 +28,7 @@ use clipscribe::describe_file::{
     describe_file_path, render_mentions, By, DescribeFile, Extra, InOut, Marker as Item, Person,
 };
 
-use crate::markers::{guid_for_id, AtItem, Marker, MarkerColor, AI_MARKER_COLOR};
+use crate::markers::{guid_for_id, KeepRule, Marker, MarkerColor, AI_MARKER_COLOR};
 use crate::metadata::Segment;
 
 /// Where the description file of `video` is: `clip.mp4` → `clip.describe.json`.
@@ -86,16 +86,16 @@ pub fn ai_markers(file: &DescribeFile, video: &Path) -> Vec<Marker> {
 /// never in the video (made elsewhere) stay.
 pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
     let at = at_item(video);
-    let before = without_copies(before, &at);
+    let before = without_copies(before, &[&at]);
     // The keeper of an id after the write is the marker that kept it before (its GUID survives
-    // the write), even when the editor just moved it away from its item.
+    // the write), even when the editor just moved it away from its item; only when none has
+    // that GUID any more, the one at the item.
     let kept_before: HashMap<&str, &str> = before
         .iter()
         .filter_map(|m| Some((m.id.as_deref()?, m.guid.as_deref()?)))
         .collect();
-    let kept =
-        |id: &str, m: &Marker| kept_before.get(id).copied() == m.guid.as_deref() || at(id, m);
-    let after = without_copies(after, &kept);
+    let kept = |id: &str, m: &Marker| kept_before.get(id).copied() == m.guid.as_deref();
+    let after = without_copies(after, &[&kept, &at]);
     let before = spans(&before);
     update(video, |file, names| {
         apply_markers(file, &after, &before, names)
@@ -106,10 +106,10 @@ pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
 /// share an id (a copy pasted in Premiere and not read by frename yet), only the one
 /// [`crate::markers::id_keepers`] keeps, as `give_ids` does on a read. So the copy's times are
 /// not a move of the original, and the original's item stays bound to it (#668, #671).
-fn without_copies(markers: &[Marker], at_item: AtItem) -> Vec<Marker> {
+fn without_copies(markers: &[Marker], rules: &[KeepRule]) -> Vec<Marker> {
     let mut sorted = markers.to_vec();
     crate::markers::sort_markers(&mut sorted);
-    let keepers = crate::markers::id_keepers(&sorted, at_item);
+    let keepers = crate::markers::id_keepers(&sorted, rules);
     let mut ids: HashMap<&str, usize> = HashMap::new();
     for m in sorted.iter().filter(|m| m.is_editable()) {
         if let Some(id) = m.id.as_deref() {
