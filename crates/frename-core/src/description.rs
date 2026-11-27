@@ -86,8 +86,17 @@ pub fn ai_markers(file: &DescribeFile, video: &Path) -> Vec<Marker> {
 /// never in the video (made elsewhere) stay.
 pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
     let at = at_item(video);
-    let before = spans(&without_copies(before, &at));
-    let after = without_copies(after, &at);
+    let before = without_copies(before, &at);
+    // The keeper of an id after the write is the marker that kept it before (its GUID survives
+    // the write), even when the editor just moved it away from its item.
+    let kept_before: HashMap<&str, &str> = before
+        .iter()
+        .filter_map(|m| Some((m.id.as_deref()?, m.guid.as_deref()?)))
+        .collect();
+    let kept =
+        |id: &str, m: &Marker| kept_before.get(id).copied() == m.guid.as_deref() || at(id, m);
+    let after = without_copies(after, &kept);
+    let before = spans(&before);
     update(video, |file, names| {
         apply_markers(file, &after, &before, names)
     });
@@ -118,10 +127,11 @@ fn without_copies(markers: &[Marker], at_item: AtItem) -> Vec<Marker> {
         .collect()
 }
 
-/// Each marker's `(start_ms, duration_ms)` by its id.
+/// Each editable marker's `(start_ms, duration_ms)` by its id.
 fn spans(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
     markers
         .iter()
+        .filter(|m| m.is_editable())
         .filter_map(|m| Some((m.id.clone()?, (m.start_ms, m.duration_ms))))
         .collect()
 }

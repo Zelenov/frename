@@ -539,6 +539,34 @@ fn a_save_while_a_copy_shares_the_id_keeps_the_part() {
             after.parts, before.parts,
             "{test}: the part stays where it was"
         );
+
+        // The editor resizes the original in frename, the copy still unread: the item follows
+        // the original, and the next read keeps the id on it.
+        let original = held
+            .iter_mut()
+            .find(|m| m.id.as_deref() == Some("k3m9xa"))
+            .expect("the original");
+        original.duration_ms = 50_000;
+        crate::metadata::save_markers(&clip, &held, &known).expect("saved");
+        let resized = read(&clip).expect("description");
+        let item = resized
+            .moments
+            .iter()
+            .flatten()
+            .chain(resized.parts.iter().flatten())
+            .find(|item| item.id == "k3m9xa")
+            .expect("the item");
+        assert_eq!((item.start_s, item.end_s), (0.0, Some(50.0)), "{test}");
+        let read_markers = crate::metadata::load_markers(&clip).expect("markers");
+        let original = read_markers
+            .iter()
+            .find(|m| m.duration_ms == 50_000)
+            .expect("the original");
+        assert_eq!(
+            original.id.as_deref(),
+            Some("k3m9xa"),
+            "{test}: the original keeps it"
+        );
         let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
     }
 }
