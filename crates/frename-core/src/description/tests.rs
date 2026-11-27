@@ -424,11 +424,72 @@ fn a_copied_marker_gets_a_new_id_once() {
     let ids: Vec<_> = first.iter().map(|m| m.id.clone().expect("an id")).collect();
     assert_eq!(ids[0], "k3m9xa", "the first keeps its id");
     assert_ne!(ids[1], ids[0], "the copy gets its own id");
+    assert!(
+        clipscribe::describe_file::is_short_id(&ids[1]),
+        "{}",
+        ids[1]
+    );
     for _ in 0..2 {
         let again = crate::metadata::load_markers(&clip).expect("markers");
         let again_ids: Vec<_> = again.iter().map(|m| m.id.clone().expect("an id")).collect();
         assert_eq!(again_ids, ids, "the same ids on every read");
     }
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
+/// A part of the editor's copied in Premiere with its `frename_id`: the first read gives the copy
+/// its own id and writes it, and the description file keeps the part where it is and gets the
+/// copy as one new moment. The copy's times are not taken for a move of the part (#668).
+#[test]
+fn a_copied_part_stays_a_part_and_the_copy_becomes_a_moment() {
+    let clip = clip_with_file("copied-part");
+    let mut file = file();
+    file.parts.as_mut().expect("parts")[0].by = By::User;
+    file.write(&path(&clip)).expect("description file");
+    let mut part = Marker::new(0);
+    part.id = Some("k3m9xa".to_string());
+    part.guid = Some("6f1c2b8e-0d3a-4e5f-9a7b-1c2d3e4f5a6b".to_string());
+    part.duration_ms = 60_000;
+    part.name = "Fortress walk".to_string();
+    part.comment = "Someone walks up to the gate.".to_string();
+    part.color = MarkerColor::Red;
+    let mut copy = part.clone();
+    copy.guid = Some("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d".to_string());
+    copy.start_ms = 20_000;
+    copy.duration_ms = 5_000;
+    let mut markers = markers(&file);
+    markers.retain(|m| m.id.as_deref() != Some("k3m9xa"));
+    markers.push(part);
+    crate::metadata::save_markers(&clip, &markers, &HashSet::new()).expect("saved");
+    let before = read(&clip).expect("description");
+
+    // Premiere writes the copy: it knows nothing of the description file.
+    let hidden = clip.with_file_name("hidden.json");
+    std::fs::rename(path(&clip), &hidden).expect("hide");
+    markers.push(copy);
+    crate::metadata::save_markers(&clip, &markers, &HashSet::new()).expect("saved");
+    std::fs::rename(&hidden, path(&clip)).expect("back");
+
+    let read_markers = crate::metadata::load_markers(&clip).expect("markers");
+    let copy_id = read_markers
+        .iter()
+        .find(|m| m.start_ms == 20_000)
+        .and_then(|m| m.id.clone())
+        .expect("the copy");
+    assert_ne!(copy_id, "k3m9xa");
+    let after = read(&clip).expect("description");
+    assert_eq!(after.parts, before.parts, "the part stays where it was");
+    let new: Vec<_> = after
+        .moments
+        .iter()
+        .flatten()
+        .filter(|m| !before.moments.iter().flatten().any(|b| b.id == m.id))
+        .collect();
+    assert_eq!(new.len(), 1, "{new:?}");
+    assert_eq!(
+        (new[0].id.as_str(), new[0].start_s),
+        (copy_id.as_str(), 20.0)
+    );
     let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
 }
 

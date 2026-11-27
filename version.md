@@ -1,6 +1,6 @@
 # 0.304
 ## Fixed
-- A marker copied in Premiere together with frename's id now gets its own id once and keeps it. Before, it got a new id every time the clip was read, until its markers were saved, and its entry in the clip's `.describe.json` was replaced on every save.
+- A marker you copy and paste in Premiere now gets one entry of its own in the clip's `.describe.json`, and keeps it. Before, frename gave the copy a new entry each time it opened the clip, until you changed its markers.
 
 # 0.303
 ## Added
