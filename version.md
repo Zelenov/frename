@@ -1,6 +1,6 @@
 # 0.307
 ## Fixed
-- With markers kept in the comment, a white marker of your own on a described clip (an AI marker you renamed or moved, or one you made white) now stays yours after the clip is saved and opened again. Before, it came back as the AI's, and the next Describe with AI run dropped it, with your text.
+- With markers kept in the comment, a white marker of your own on a described clip (an AI marker you renamed, moved, resized or described, or one you made white) now stays yours after the clip is saved and opened again. Before, it came back as the AI's, and the next Describe with AI run dropped it, with your text.
 
 # 0.306
 ## Changed

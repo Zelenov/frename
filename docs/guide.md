@@ -453,7 +453,8 @@ summary. Each marker's name is a short title of a few words, and its comment say
 A new run replaces the AI markers you left as they were. A marker you renamed, moved, resized,
 recolored or described is yours from then on, and a new run keeps it, even when it is still
 white. With markers kept in the comment, or a format that cannot hold markers, the segments are
-lines of the description.
+lines of the description. A segment you change there becomes a line of your own above the
+description, and a new run keeps it.
 
 Every run also saves the description in a file next to the video, with the video's name:
 `MVI_0410.describe.json` next to `MVI_0410.mp4`. It holds the summary, the suggested In and Out,
