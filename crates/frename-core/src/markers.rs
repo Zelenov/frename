@@ -943,9 +943,10 @@ fn same_moment(a_start_ms: u64, a_duration_ms: u64, b_start_ms: u64, b_duration_
 /// The markers of a clip with the ones on the same moment (same start within
 /// [`SAME_MOMENT_MS`], same length) merged into one, and how many were merged away. The first
 /// keeps its GUID and color. A marker without a GUID is read-only (it cannot be saved), so it
-/// never merges. Names: when one holds the other the longer stays, otherwise both
-/// are kept as `name — other name`; comments are joined the same way, so nothing is lost
-/// silently.
+/// never merges, and markers of the AI and of the editor never merge, nor white ones with others
+/// (see [`Marker::ai`], [`AI_MARKER_COLOR`]). Names: when one holds the other the longer stays,
+/// otherwise both are kept as `name — other name`; comments are joined the same way, so nothing
+/// is lost silently.
 pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
     let mut merged: Vec<Marker> = Vec::new();
     let mut count = 0;
@@ -954,8 +955,12 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
             m.guid.is_some()
                 && marker.guid.is_some()
                 && same_moment(m.start_ms, m.duration_ms, marker.start_ms, marker.duration_ms)
-                // The AI's segments are not the editor's markers: they never merge into one.
+                // White markers and markers of other colors never merge: the comment keeps the
+                // AI's segments (white) apart from the editor's lines.
                 && (m.color == AI_MARKER_COLOR) == (marker.color == AI_MARKER_COLOR)
+                // An editor's white marker never merges into the AI's: a new AI run would drop
+                // it, and the editor's text with it (#669).
+                && m.ai == marker.ai
         });
         match same {
             Some(kept) => {
@@ -1995,6 +2000,33 @@ mod tests {
             ai,
         ];
         assert_eq!(merge_duplicate_markers(&all), (all.to_vec(), 0));
+    }
+
+    /// #669: an editor's white point on the moment of an AI point stays its own marker, so the
+    /// next AI run (which drops the AI's) keeps it, text and all. Two AI points still merge.
+    #[test]
+    fn an_editors_white_marker_never_merges_into_the_ais() {
+        let mut ai = marker(5_000, 0, "Gate", "");
+        ai.color = AI_MARKER_COLOR;
+        ai.ai = true;
+        let mut mine = marker(5_000, 0, "Use this", "");
+        mine.color = AI_MARKER_COLOR;
+        let all = [ai.clone(), mine.clone()];
+        assert_eq!(merge_duplicate_markers(&all), (all.to_vec(), 0));
+        let all = [mine.clone(), ai.clone()];
+        assert_eq!(merge_duplicate_markers(&all), (all.to_vec(), 0));
+
+        let mut other_ai = marker(5_000, 0, "Gate opens", "");
+        other_ai.color = AI_MARKER_COLOR;
+        other_ai.ai = true;
+        let (merged, away) = merge_duplicate_markers(&[ai, other_ai]);
+        assert_eq!((merged.len(), away), (1, 1));
+        assert!(merged[0].ai);
+        let mut other_mine = marker(5_000, 0, "Keep", "");
+        other_mine.color = AI_MARKER_COLOR;
+        let (merged, away) = merge_duplicate_markers(&[mine, other_mine]);
+        assert_eq!((merged.len(), away), (1, 1));
+        assert!(!merged[0].ai);
     }
 
     /// Random-ish markers renamed between rounds: five XMP → comment → XMP rounds keep the
