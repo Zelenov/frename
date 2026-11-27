@@ -730,8 +730,8 @@ pub fn comment_to_markers(
         }
         // Another line for a moment already given: its text joins the marker's, so a line is
         // never dropped without a trace. An AI segment only ever adds its marker once: it meets
-        // only a marker an earlier segment line added, never an editor's white line on the same
-        // moment (#676).
+        // only a marker an earlier segment line added (`ai`), never an editor's white line on the
+        // same moment, which is white too (#676), so this is not [`is_at`], which goes by color.
         let pending = added.iter_mut().find(|m| {
             if in_block {
                 m.ai && same_moment(
@@ -741,7 +741,7 @@ pub fn comment_to_markers(
                     parsed.duration_ms,
                 )
             } else {
-                is_at(m, &parsed, in_block)
+                is_at(m, &parsed, false)
             }
         });
         if let Some(pending) = pending {
@@ -880,8 +880,9 @@ pub fn markers_to_comment(comment: &str, markers: &[Marker]) -> (String, usize) 
     (result, added)
 }
 
-/// Whether the marker `m` is the one a line is about: the AI's segments only meet the AI's
-/// markers, the editor's lines the editor's, and the moment is the same.
+/// Whether the marker `m` is the one a line is about, told by color (white is the AI's): the
+/// AI's segments only meet white markers, the editor's lines the others, and the moment is the
+/// same.
 fn is_at(m: &Marker, line: &MarkerLine, in_block: bool) -> bool {
     (m.color == AI_MARKER_COLOR) == in_block
         && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
