@@ -1,5 +1,5 @@
 //! "Describe with AI": for each checked video, key frames (chosen where the picture changes the
-//! most) and its subtitles go to Claude, and the summary and time-ranged segments it returns —
+//! most and, with subtitles, at speech pauses and line starts) and its subtitles go to Claude, and the summary and time-ranged segments it returns —
 //! only what stands out, possibly none for a static or uniform clip — are written into the AI
 //! block of the video's comment (see `frename_core::ai::block`). The editor's own text is never
 //! touched. While tag suggestions are on (Settings) and the folder has tags of its own, the same
