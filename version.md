@@ -1,3 +1,7 @@
+# 0.305
+## Fixed
+- A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment. Before, the next Describe with AI run could drop it, with your text.
+
 # 0.304
 ## Fixed
 - A marker you copy and paste in Premiere now gets one entry of its own in the clip's `.describe.json`, and keeps it. Before, frename gave the copy a new entry each time it opened the clip, until you changed its markers.
