@@ -1,3 +1,7 @@
+# 0.304
+## Fixed
+- A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment or Prepare clips. Before, the next Describe with AI run could drop it, with your text.
+
 # 0.303
 ## Added
 - Every AI description is now also saved in a file next to the clip, with the clip's name and `.describe.json` at the end. It keeps the summary, the suggested in and out points, the markers and the tags the AI found. A new run adds to it and keeps what you made or changed, and the file moves with the clip when frename renames or moves it.
