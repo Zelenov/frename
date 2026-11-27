@@ -9567,6 +9567,7 @@ mod tests {
             name: "Street".to_string(),
             comment: "keep this note".to_string(),
             color: frename_core::AI_MARKER_COLOR,
+            ai: true,
             ..frename_core::Marker::new(2_000)
         };
         markers_the_comment_cannot_hold_stay_in_the_video(vec![street], "AI: Two lions.");
