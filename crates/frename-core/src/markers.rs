@@ -904,9 +904,10 @@ fn same_moment(a_start_ms: u64, a_duration_ms: u64, b_start_ms: u64, b_duration_
 /// The markers of a clip with the ones on the same moment (same start within
 /// [`SAME_MOMENT_MS`], same length) merged into one, and how many were merged away. The first
 /// keeps its GUID and color. A marker without a GUID is read-only (it cannot be saved), so it
-/// never merges. Names: when one holds the other the longer stays, otherwise both
-/// are kept as `name — other name`; comments are joined the same way, so nothing is lost
-/// silently.
+/// never merges, and markers of the AI and of the editor never merge, nor white ones with others
+/// (see [`Marker::ai`], [`AI_MARKER_COLOR`]). Names: when one holds the other the longer stays,
+/// otherwise both are kept as `name — other name`; comments are joined the same way, so nothing
+/// is lost silently.
 pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
     let mut merged: Vec<Marker> = Vec::new();
     let mut count = 0;
@@ -915,10 +916,11 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
             m.guid.is_some()
                 && marker.guid.is_some()
                 && same_moment(m.start_ms, m.duration_ms, marker.start_ms, marker.duration_ms)
-                // The AI's segments are not the editor's markers: they never merge into one.
-                // An editor's white marker is not the AI's either, though of the AI's color: a
-                // new AI run would drop it, and the editor's text with it (#669).
+                // White markers and markers of other colors never merge: the comment keeps the
+                // AI's segments (white) apart from the editor's lines.
                 && (m.color == AI_MARKER_COLOR) == (marker.color == AI_MARKER_COLOR)
+                // An editor's white marker never merges into the AI's: a new AI run would drop
+                // it, and the editor's text with it (#669).
                 && m.ai == marker.ai
         });
         match same {

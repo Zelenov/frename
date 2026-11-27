@@ -1,6 +1,6 @@
 # 0.304
 ## Fixed
-- A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment or Prepare clips. Before, the next Describe with AI run could drop it, with your text.
+- A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment. Before, the next Describe with AI run could drop it, with your text.
 
 # 0.303
 ## Added
