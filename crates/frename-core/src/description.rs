@@ -84,22 +84,42 @@ pub fn ai_markers(file: &DescribeFile, video: &Path) -> Vec<Marker> {
 /// and a part whose marker spans other times now was moved by them. Items whose markers were
 /// never in the video (made elsewhere) stay.
 pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
-    let before = spans(before);
+    let before = spans(before, &at_item(video));
     update(video, |file, names| {
         apply_markers(file, after, &before, names)
     });
 }
 
 /// Each editable marker's `(start_ms, duration_ms)` by its id. Of markers that share an id (a
-/// copy pasted in Premiere), the one [`crate::markers::give_ids`] lets keep it counts, in the
-/// order it sees them: the copy's times are not a move of the original (#668, #671).
-fn spans(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
+/// copy pasted in Premiere), the one counts that [`crate::markers::id_keepers`] picks from them
+/// in [`crate::markers::sort_markers`]' order, as `give_ids` does on a read: the copy's times
+/// are not a move of the original (#668, #671).
+fn spans(
+    markers: &[Marker],
+    at_item: &dyn Fn(&str, &Marker) -> bool,
+) -> HashMap<String, (u64, u64)> {
     let mut sorted = markers.to_vec();
     crate::markers::sort_markers(&mut sorted);
-    crate::markers::id_keepers(&sorted)
+    crate::markers::id_keepers(&sorted, at_item)
         .into_iter()
-        .map(|(id, n)| (id.to_string(), (sorted[n].start_ms, sorted[n].duration_ms)))
+        .filter_map(|n| {
+            let m = &sorted[n];
+            Some((m.id.clone()?, (m.start_ms, m.duration_ms)))
+        })
         .collect()
+}
+
+/// Whether a marker sits where the description file of `video` has the item of an id: the same
+/// start and end (see [`moved`]). The file is read when first asked, once. No file: never.
+pub(crate) fn at_item(video: &Path) -> impl Fn(&str, &Marker) -> bool + '_ {
+    let file = std::cell::OnceCell::new();
+    move |id, marker| {
+        file.get_or_init(|| read(video))
+            .as_ref()
+            .is_some_and(|file: &DescribeFile| {
+                items(file).any(|item| item.id == id && !moved(item, marker, file.duration_s))
+            })
+    }
 }
 
 /// The clip's In and Out points were just saved: bring its description file, if it has one,

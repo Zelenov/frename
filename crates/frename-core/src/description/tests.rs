@@ -123,7 +123,7 @@ fn mentions_are_shown_as_the_speakers_name_or_the_persons_label() {
     // As it was written: following an unchanged marker does not turn the mention into a name.
     let mut markers = markers(&file);
     markers[1].comment = "Ann buys corn from a vendor.".to_string();
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     assert!(!apply_markers(&mut file, &markers, &before, &names));
     assert_eq!(
         find(&file, "p2r6kc").description.as_deref(),
@@ -138,7 +138,7 @@ fn markers_as_the_file_has_them_change_nothing() {
     assert!(!apply_markers(
         &mut file,
         &markers,
-        &spans(&markers),
+        &spans(&markers, &|_, _| false),
         &no_names()
     ));
     assert_eq!(file, self::file());
@@ -149,7 +149,7 @@ fn markers_as_the_file_has_them_change_nothing() {
 fn a_marker_the_editor_renamed_recolored_or_moved_is_theirs_in_the_file() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     // The gate moment: renamed and moved, as the editor's change clears `ai`.
     markers[1].name = "Main gate".to_string();
     markers[1].start_ms = 13_000;
@@ -178,7 +178,7 @@ fn an_undo_that_gives_the_ai_marker_back_makes_the_item_the_ais_again() {
     let original = file();
     let mut file = original.clone();
     let mut markers = markers(&file);
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     let ai = markers[1].clone();
     markers[1].name = "Main gate".to_string();
     markers[1].ai = false;
@@ -192,7 +192,7 @@ fn an_undo_that_gives_the_ai_marker_back_makes_the_item_the_ais_again() {
 fn a_marker_the_editor_added_is_a_moment_of_theirs_and_one_they_deleted_goes() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     // The editor's lion point is deleted; a green range is added.
     markers.retain(|m| m.id.as_deref() != Some("1qc62f"));
     let mut added = Marker::new(40_000);
@@ -216,7 +216,7 @@ fn an_item_whose_marker_was_never_in_the_video_stays() {
     let mut file = file();
     // Only the AI part is in the video, and was before: the moments came from elsewhere.
     let markers: Vec<Marker> = markers(&file).into_iter().take(1).collect();
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     assert!(!apply_markers(&mut file, &markers, &before, &no_names()));
     assert_eq!(file, self::file());
 }
@@ -225,7 +225,7 @@ fn an_item_whose_marker_was_never_in_the_video_stays() {
 fn a_part_made_a_point_is_a_moment() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     markers[0].duration_ms = 0;
     markers[0].ai = false;
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
@@ -242,7 +242,7 @@ fn a_part_made_a_point_is_a_moment() {
 fn a_millisecond_of_rounding_by_the_video_is_not_a_move() {
     let mut file = file();
     let mut markers = markers(&file);
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     markers[1].start_ms += 1;
     assert!(!apply_markers(&mut file, &markers, &before, &no_names()));
 }
@@ -257,7 +257,7 @@ fn an_ai_marker_from_before_titles_gets_a_short_title_and_its_text_as_the_descri
     let id = old.id.clone().expect("an id");
     let mut markers = markers(&file);
     markers.push(old.clone());
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));
     let item = find(&file, &id);
     assert_eq!(item.by, By::Ai);
@@ -498,13 +498,32 @@ fn a_copied_part_stays_a_part_and_the_copy_becomes_a_moment() {
 /// copy later moves only the copy's moment.
 #[test]
 fn a_part_copied_and_pasted_before_it_stays_bound_to_the_original() {
-    let clip = clip_with_file("copied-part-earlier");
+    copied_and_pasted_before(
+        "copied-part-earlier",
+        &crate::markers::guid_for_id("k3m9xa"),
+    );
+}
+
+/// #671: the same with a part whose marker was made in Premiere (Premiere's GUID, the id given
+/// by frename later): the original is the one where the description file has the part.
+#[test]
+fn a_premiere_part_copied_and_pasted_before_it_stays_bound_to_the_original() {
+    copied_and_pasted_before(
+        "copied-premiere-part-earlier",
+        "11111111-2222-4333-8444-555555555555",
+    );
+}
+
+/// The editor's part `k3m9xa` (0–60 s) with the marker GUID `part_guid`, copied in Premiere and
+/// pasted at 0 s for 5 s; then the copy moved to 30 s in frename.
+fn copied_and_pasted_before(test: &str, part_guid: &str) {
+    let clip = clip_with_file(test);
     let mut file = file();
     file.parts.as_mut().expect("parts")[0].by = By::User;
     file.write(&path(&clip)).expect("description file");
     let mut part = Marker::new(0);
     part.id = Some("k3m9xa".to_string());
-    part.guid = Some(crate::markers::guid_for_id("k3m9xa"));
+    part.guid = Some(part_guid.to_string());
     part.duration_ms = 60_000;
     part.name = "Fortress walk".to_string();
     part.comment = "Someone walks up to the gate.".to_string();
@@ -641,7 +660,7 @@ fn two_parts() -> DescribeFile {
 fn a_part_the_editor_resizes_is_a_moment_and_the_parts_still_cover_the_clip() {
     let mut file = two_parts();
     let mut markers = ai_markers(&file, Path::new("clip.mov"));
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     let ai = markers[0].clone();
     // The first part's end dragged from 0:30 to 0:20.
     markers[0].duration_ms = 20_000;
@@ -674,7 +693,7 @@ fn a_part_the_editor_resizes_is_a_moment_and_the_parts_still_cover_the_clip() {
 fn a_part_the_editor_deletes_goes_and_the_parts_still_cover_the_clip() {
     let mut file = two_parts();
     let markers = ai_markers(&file, Path::new("clip.mov"));
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     assert!(apply_markers(
         &mut file,
         &markers[1..],
@@ -701,7 +720,7 @@ fn renaming_the_part_that_took_a_deleted_parts_stretch_keeps_it_a_part() {
     assert!(apply_markers(
         &mut file,
         &markers[1..],
-        &spans(&markers),
+        &spans(&markers, &|_, _| false),
         &no_names()
     ));
     let left = markers[1..].to_vec();
@@ -711,7 +730,7 @@ fn renaming_the_part_that_took_a_deleted_parts_stretch_keeps_it_a_part() {
     assert!(apply_markers(
         &mut file,
         &renamed,
-        &spans(&left),
+        &spans(&left, &|_, _| false),
         &no_names()
     ));
     assert!(file.problems().is_empty(), "{:?}", file.problems());
@@ -735,7 +754,7 @@ fn a_part_rounded_to_a_frame_by_the_video_and_renamed_stays_a_part() {
     // As the video reads them back at 29.97 fps.
     markers[0].duration_ms = 30_030;
     markers[1].start_ms = 30_030;
-    let before = spans(&markers);
+    let before = spans(&markers, &|_, _| false);
     markers[0].name = "Walk".to_string();
     markers[0].ai = false;
     assert!(apply_markers(&mut file, &markers, &before, &no_names()));

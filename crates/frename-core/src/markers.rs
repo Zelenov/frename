@@ -135,13 +135,22 @@ pub fn sort_markers(markers: &mut [Marker]) {
 }
 
 /// Of editable markers that share a short id (a copy pasted in Premiere keeps the original's
-/// `frename_id`), which one keeps it, by its index in `markers`: the one whose GUID frename made
-/// from that id ([`guid_for_id`]), so the original stays the original wherever the copy is
-/// pasted (#671); when none has it, the first in `markers`' order. Every short id of an
-/// editable marker is in the map.
-pub(crate) fn id_keepers(markers: &[Marker]) -> HashMap<&str, usize> {
+/// `frename_id`), the indexes in `markers` of the ones that keep it, so the original stays the
+/// original wherever the copy is pasted (#671). Of one id, the first in `markers`' order of:
+/// 1. the marker whose GUID frename made from the id ([`guid_for_id`]): one frename made;
+/// 2. else the one `at_item` says sits where the clip's description file has that id's item
+///    (a marker made in Premiere keeps Premiere's GUID);
+/// 3. else any.
+///
+/// Every short id of an editable marker has one keeper.
+pub(crate) fn id_keepers(
+    markers: &[Marker],
+    at_item: &dyn Fn(&str, &Marker) -> bool,
+) -> HashSet<usize> {
     use clipscribe::describe_file::is_short_id;
-    let mut keepers: HashMap<&str, usize> = HashMap::new();
+    // The best rank seen for each id, and the marker that has it.
+    let mut best: HashMap<&str, (u8, usize)> = HashMap::new();
+    let mut shared: HashSet<&str> = HashSet::new();
     for (n, marker) in markers.iter().enumerate() {
         let Some(id) = marker.id.as_deref().filter(|id| is_short_id(id)) else {
             continue;
@@ -149,39 +158,47 @@ pub(crate) fn id_keepers(markers: &[Marker]) -> HashMap<&str, usize> {
         if !marker.is_editable() {
             continue;
         }
-        let own = |m: &Marker| m.guid.as_deref() == Some(guid_for_id(id).as_str());
-        match keepers.get(id) {
-            Some(&kept) if own(&markers[kept]) || !own(marker) => {}
-            _ => {
-                keepers.insert(id, n);
+        if best.contains_key(id) {
+            shared.insert(id);
+        }
+        best.entry(id).or_insert((0, n));
+    }
+    // Only an id that two markers share needs the rules (and the description file).
+    for (n, marker) in markers.iter().enumerate() {
+        let Some(id) = marker.id.as_deref().filter(|id| shared.contains(id)) else {
+            continue;
+        };
+        if !marker.is_editable() {
+            continue;
+        }
+        let rank = if marker.guid.as_deref() == Some(guid_for_id(id).as_str()) {
+            2
+        } else if at_item(id, marker) {
+            1
+        } else {
+            0
+        };
+        if let Some(kept) = best.get_mut(id) {
+            if rank > kept.0 {
+                *kept = (rank, n);
             }
         }
     }
-    keepers
+    best.into_values().map(|(_, n)| n).collect()
 }
 
 /// Give every editable marker without a short id (made in Premiere, or by frename before ids)
-/// a new one, and a marker whose id another marker already has (a copy) a new one too; which of
-/// them keeps the id is [`id_keepers`]'. Returns whether any marker got one: the caller writes
-/// them into the file so they stay.
-pub(crate) fn give_ids(markers: &mut [Marker]) -> bool {
+/// a new one, and a marker whose id another marker already has (a copy) a new one too.
+/// [`id_keepers`] decides which of them keeps the id; `at_item` is its rule 2. Returns whether
+/// any marker got one: the caller writes them into the file so they stay.
+pub(crate) fn give_ids(markers: &mut [Marker], at_item: &dyn Fn(&str, &Marker) -> bool) -> bool {
     use clipscribe::describe_file::new_id;
-    let keep: Vec<bool> = {
-        let keepers = id_keepers(markers);
-        markers
-            .iter()
-            .enumerate()
-            .map(|(n, m)| {
-                m.id.as_deref()
-                    .is_some_and(|id| keepers.get(id) == Some(&n))
-            })
-            .collect()
-    };
+    let keep = id_keepers(markers, at_item);
     // Every id in the list, so a new one repeats none of them.
     let mut taken: HashSet<String> = markers.iter().filter_map(|m| m.id.clone()).collect();
     let mut given = false;
-    for (marker, keep) in markers.iter_mut().zip(keep) {
-        if marker.is_editable() && !keep {
+    for (n, marker) in markers.iter_mut().enumerate() {
+        if marker.is_editable() && !keep.contains(&n) {
             let id = new_id(&taken);
             taken.insert(id.clone());
             marker.id = Some(id);
@@ -1768,7 +1785,7 @@ mod tests {
         read_only.guid = None;
         read_only.id = None;
         let mut markers = vec![premiere, first.clone(), copy, read_only];
-        assert!(give_ids(&mut markers));
+        assert!(give_ids(&mut markers, &|_, _| false));
         let ids: Vec<Option<String>> = markers.iter().map(|m| m.id.clone()).collect();
         assert!(ids[0]
             .as_deref()
@@ -1776,7 +1793,10 @@ mod tests {
         assert_eq!(ids[1], first.id, "the first keeps its id");
         assert!(ids[2].is_some() && ids[2] != first.id && ids[2] != ids[0]);
         assert_eq!(ids[3], None, "a read-only marker cannot keep one");
-        assert!(!give_ids(&mut markers), "nothing more to give");
+        assert!(
+            !give_ids(&mut markers, &|_, _| false),
+            "nothing more to give"
+        );
     }
 
     /// #671: of a marker and its copy, the one whose GUID frename made from the id keeps it,
@@ -1788,7 +1808,7 @@ mod tests {
         let mut copy = marker(5_000, 0, "Copy", "");
         copy.id = Some(id.clone());
         let mut markers = vec![copy.clone(), original.clone()];
-        assert!(give_ids(&mut markers));
+        assert!(give_ids(&mut markers, &|_, _| false));
         assert_eq!(
             markers[1].id.as_deref(),
             Some(id.as_str()),
@@ -1797,7 +1817,10 @@ mod tests {
         assert!(markers[0].id.as_deref().is_some_and(|new| new != id));
         assert_eq!(markers[1].guid, original.guid, "GUIDs are untouched");
         assert_eq!(markers[0].guid, copy.guid);
-        assert!(!give_ids(&mut markers), "nothing more to give");
+        assert!(
+            !give_ids(&mut markers, &|_, _| false),
+            "nothing more to give"
+        );
 
         // Two markers of Premiere's own (no GUID made from the id): the first keeps it.
         let mut premiere = marker(5_000, 0, "A", "");
@@ -1805,10 +1828,17 @@ mod tests {
         let mut pasted = marker(10_000, 0, "B", "");
         pasted.guid = Some("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d".to_string());
         pasted.id = premiere.id.clone();
-        let mut markers = vec![premiere.clone(), pasted];
-        assert!(give_ids(&mut markers));
+        let mut markers = vec![premiere.clone(), pasted.clone()];
+        assert!(give_ids(&mut markers, &|_, _| false));
         assert_eq!(markers[0].id, premiere.id);
         assert_ne!(markers[1].id, premiere.id);
+
+        // The one where the description file has the item keeps it, wherever it is.
+        let mut markers = vec![premiere.clone(), pasted];
+        let at_item = |_: &str, m: &Marker| m.start_ms == 10_000;
+        assert!(give_ids(&mut markers, &at_item));
+        assert_eq!(markers[1].id, premiere.id, "the one at the item keeps it");
+        assert_ne!(markers[0].id, premiere.id);
     }
 
     #[test]
