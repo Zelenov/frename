@@ -493,6 +493,200 @@ fn a_copied_part_stays_a_part_and_the_copy_becomes_a_moment() {
     let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
 }
 
+/// #671: an editor's part made in frename, copied in Premiere and pasted **before** it. The
+/// original keeps its id (its GUID was made from it), so the part stays bound to it: moving the
+/// copy later moves only the copy's moment.
+#[test]
+fn a_part_copied_and_pasted_before_it_stays_bound_to_the_original() {
+    copied_and_pasted_before(
+        "copied-part-earlier",
+        &crate::markers::guid_for_id("k3m9xa"),
+    );
+}
+
+/// #671: the same with a part whose marker was made in Premiere (Premiere's GUID, the id given
+/// by frename later): the original is the one where the description file has the part.
+#[test]
+fn a_premiere_part_copied_and_pasted_before_it_stays_bound_to_the_original() {
+    copied_and_pasted_before(
+        "copied-premiere-part-earlier",
+        "11111111-2222-4333-8444-555555555555",
+    );
+}
+
+/// #671: the copy is pasted in Premiere while frename holds the clip's markers, and frename
+/// saves them before it reads the clip again (the copy, unknown to it, stays in the video). The
+/// part stays a part, bound to the original.
+#[test]
+fn a_save_while_a_copy_shares_the_id_keeps_the_part() {
+    for (test, guid) in [
+        ("save-frename-part", crate::markers::guid_for_id("k3m9xa")),
+        (
+            "save-premiere-part",
+            "11111111-2222-4333-8444-555555555555".to_string(),
+        ),
+    ] {
+        let (clip, mut held, before) = paste_a_copy_before(test, &guid);
+        let known: HashSet<String> = held.iter().filter_map(|m| m.guid.clone()).collect();
+        let lion = held
+            .iter_mut()
+            .find(|m| m.id.as_deref() == Some("1qc62f"))
+            .expect("the lion");
+        lion.name = "Lion roars".to_string();
+        crate::metadata::save_markers(&clip, &held, &known).expect("saved");
+        let after = read(&clip).expect("description");
+        assert_eq!(
+            after.parts, before.parts,
+            "{test}: the part stays where it was"
+        );
+
+        // The editor resizes the original in frename, the copy still unread: the item follows
+        // the original, and the next read keeps the id on it.
+        let original = held
+            .iter_mut()
+            .find(|m| m.id.as_deref() == Some("k3m9xa"))
+            .expect("the original");
+        original.duration_ms = 50_000;
+        crate::metadata::save_markers(&clip, &held, &known).expect("saved");
+        let resized = read(&clip).expect("description");
+        let item = resized
+            .moments
+            .iter()
+            .flatten()
+            .chain(resized.parts.iter().flatten())
+            .find(|item| item.id == "k3m9xa")
+            .expect("the item");
+        assert_eq!((item.start_s, item.end_s), (0.0, Some(50.0)), "{test}");
+        let read_markers = crate::metadata::load_markers(&clip).expect("markers");
+        let original = read_markers
+            .iter()
+            .find(|m| m.duration_ms == 50_000)
+            .expect("the original");
+        assert_eq!(
+            original.id.as_deref(),
+            Some("k3m9xa"),
+            "{test}: the original keeps it"
+        );
+        let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+    }
+}
+
+/// #671 (round 4 of PR #674): a part made in Premiere, copied and pasted at the same time and
+/// length, then the original moved later in frename before frename reads the copy: the marker
+/// that kept the id before the save still keeps it, though the copy now sits at the item.
+#[test]
+fn a_moved_original_beats_a_same_place_copy_on_a_save() {
+    let clip = clip_with_file("save-same-place-copy");
+    let mut file = file();
+    file.parts.as_mut().expect("parts")[0].by = By::User;
+    file.write(&path(&clip)).expect("description file");
+    let mut part = Marker::new(0);
+    part.id = Some("k3m9xa".to_string());
+    part.guid = Some("11111111-2222-4333-8444-555555555555".to_string());
+    part.duration_ms = 60_000;
+    part.color = MarkerColor::Red;
+    let mut copy = part.clone();
+    copy.guid = Some("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d".to_string());
+    let mut held = markers(&file);
+    held.retain(|m| m.id.as_deref() != Some("k3m9xa"));
+    held.push(part);
+    crate::metadata::save_markers(&clip, &held, &HashSet::new()).expect("saved");
+    let known: HashSet<String> = held.iter().filter_map(|m| m.guid.clone()).collect();
+    let hidden = clip.with_file_name("hidden.json");
+    std::fs::rename(path(&clip), &hidden).expect("hide");
+    let mut pasted = held.clone();
+    pasted.push(copy);
+    crate::metadata::save_markers(&clip, &pasted, &HashSet::new()).expect("saved");
+    std::fs::rename(&hidden, path(&clip)).expect("back");
+
+    let original = held
+        .iter_mut()
+        .find(|m| m.id.as_deref() == Some("k3m9xa"))
+        .expect("the original");
+    original.start_ms = 10_000;
+    original.duration_ms = 50_000;
+    crate::metadata::save_markers(&clip, &held, &known).expect("saved");
+    let read_markers = crate::metadata::load_markers(&clip).expect("markers");
+    let moved = read_markers
+        .iter()
+        .find(|m| m.start_ms == 10_000)
+        .expect("the original");
+    assert_eq!(moved.id.as_deref(), Some("k3m9xa"), "the original keeps it");
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
+/// The editor's part `k3m9xa` (0–60 s, marker GUID `part_guid`) saved by frename, then copied in
+/// Premiere and pasted at 0 s for 5 s. Returns the clip, the markers frename held before the
+/// paste and the description file before it.
+fn paste_a_copy_before(test: &str, part_guid: &str) -> (PathBuf, Vec<Marker>, DescribeFile) {
+    let clip = clip_with_file(test);
+    let mut file = file();
+    file.parts.as_mut().expect("parts")[0].by = By::User;
+    file.write(&path(&clip)).expect("description file");
+    let mut part = Marker::new(0);
+    part.id = Some("k3m9xa".to_string());
+    part.guid = Some(part_guid.to_string());
+    part.duration_ms = 60_000;
+    part.name = "Fortress walk".to_string();
+    part.comment = "Someone walks up to the gate.".to_string();
+    part.color = MarkerColor::Red;
+    let mut copy = part.clone();
+    copy.guid = Some("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d".to_string());
+    copy.duration_ms = 5_000;
+    let mut markers = markers(&file);
+    markers.retain(|m| m.id.as_deref() != Some("k3m9xa"));
+    markers.push(part);
+    crate::metadata::save_markers(&clip, &markers, &HashSet::new()).expect("saved");
+    let before = read(&clip).expect("description");
+
+    let held = markers.clone();
+    // Premiere pastes the copy: no save of frename's sees the description file.
+    let hidden = clip.with_file_name("hidden.json");
+    std::fs::rename(path(&clip), &hidden).expect("hide");
+    markers.push(copy);
+    crate::metadata::save_markers(&clip, &markers, &HashSet::new()).expect("saved");
+    std::fs::rename(&hidden, path(&clip)).expect("back");
+
+    (clip, held, before)
+}
+
+/// The editor's part `k3m9xa` (0–60 s) with the marker GUID `part_guid`, copied in Premiere and
+/// pasted at 0 s for 5 s; then the copy moved to 30 s in frename.
+fn copied_and_pasted_before(test: &str, part_guid: &str) {
+    let (clip, _, before) = paste_a_copy_before(test, part_guid);
+    let mut read_markers = crate::metadata::load_markers(&clip).expect("markers");
+    let original = read_markers
+        .iter()
+        .find(|m| m.duration_ms == 60_000)
+        .expect("the original");
+    assert_eq!(
+        original.id.as_deref(),
+        Some("k3m9xa"),
+        "the original keeps it"
+    );
+    let after = read(&clip).expect("description");
+    assert_eq!(after.parts, before.parts, "the part stays where it was");
+
+    // The editor moves the copy: the part does not follow it.
+    let copy = read_markers
+        .iter_mut()
+        .find(|m| m.duration_ms == 5_000)
+        .expect("the copy");
+    let copy_id = copy.id.clone().expect("an id");
+    copy.start_ms = 30_000;
+    crate::metadata::save_markers(&clip, &read_markers, &HashSet::new()).expect("saved");
+    let moved = read(&clip).expect("description");
+    assert_eq!(moved.parts, before.parts, "the part still stays");
+    let item = moved
+        .moments
+        .iter()
+        .flatten()
+        .find(|m| m.id == copy_id)
+        .expect("the copy's moment");
+    assert_eq!(item.start_s, 30.0);
+    let _ = std::fs::remove_dir_all(clip.parent().expect("dir"));
+}
+
 /// Described before ids: an AI run wrote white markers without parameters. On a described clip
 /// (its comment has an `AI:` block) they read as the AI's, and keep being the AI's once frename
 /// has given them an id; on a clip never described, a white marker is the editor's.

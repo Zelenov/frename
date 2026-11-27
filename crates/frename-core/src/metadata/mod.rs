@@ -456,7 +456,7 @@ fn read_markers_and_ids(path: &Path) -> Option<(Vec<Marker>, bool)> {
             marker.ai = false;
         }
     }
-    let given = crate::markers::give_ids(&mut markers);
+    let given = crate::markers::give_ids(&mut markers, &[&crate::description::at_item(path)]);
     Some((markers, given))
 }
 
