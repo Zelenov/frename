@@ -729,8 +729,22 @@ pub fn comment_to_markers(
             lines_moved += 1;
         }
         // Another line for a moment already given: its text joins the marker's, so a line is
-        // never dropped without a trace. An AI segment only ever adds its marker once.
-        if let Some(pending) = added.iter_mut().find(|m| is_at(m, &parsed, in_block)) {
+        // never dropped without a trace. An AI segment only ever adds its marker once: it meets
+        // only a marker an earlier segment line added, never an editor's white line on the same
+        // moment (#676).
+        let pending = added.iter_mut().find(|m| {
+            if in_block {
+                m.ai && same_moment(
+                    m.start_ms,
+                    m.duration_ms,
+                    parsed.start_ms,
+                    parsed.duration_ms,
+                )
+            } else {
+                is_at(m, &parsed, in_block)
+            }
+        });
+        if let Some(pending) = pending {
             if !in_block {
                 join_text(pending, &parsed);
             }
@@ -1807,16 +1821,49 @@ mod tests {
             .collect();
         assert_eq!(editors, ["Street, my take", "Take 3", "Mine too"]);
 
-        // A new AI run replaces only the AI's markers: the editor's white ones stay.
-        let mut new_ai = Marker::new(5_000);
-        new_ai.name = "New".to_string();
-        new_ai.color = AI_MARKER_COLOR;
-        new_ai.ai = true;
-        let (after, _) = replace_ai_markers(&back, vec![new_ai]);
+        // A new AI run replaces only the AI's markers: the editor's white ones stay, also next
+        // to a new segment on the very moment of the renamed one.
+        let new_ai = |start_ms: u64, duration_ms: u64, name: &str| {
+            let mut m = marker(start_ms, duration_ms, name, "");
+            m.color = AI_MARKER_COLOR;
+            m.ai = true;
+            m
+        };
+        let (after, _) = replace_ai_markers(
+            &back,
+            vec![new_ai(0, 14_000, "Street again"), new_ai(5_000, 0, "New")],
+        );
         let names: Vec<&str> = after.iter().map(|m| m.name.as_str()).collect();
-        assert_eq!(names, ["Street, my take", "Take 3", "New", "Mine too"]);
+        assert_eq!(
+            names,
+            [
+                "Street, my take",
+                "Street again",
+                "Take 3",
+                "New",
+                "Mine too"
+            ]
+        );
+        // Saved and opened again, both markers of that moment come back, each as whose it is.
+        let saved_after = markers_into_comment(&text_back, &after);
+        assert!(comment_holds_markers(&saved_after, &after), "{saved_after}");
+        let (_, reopened) = markers_from_comment(&saved_after);
+        let whose: Vec<(&str, bool)> = reopened
+            .iter()
+            .filter(|m| m.start_ms == 0)
+            .map(|m| (m.name.as_str(), m.ai))
+            .collect();
+        assert_eq!(whose, [("Street, my take", false), ("Street again", true)]);
         // Stable: out and back again gives the same comment.
         assert_eq!(markers_into_comment(&text_back, &back), saved);
+    }
+
+    #[test]
+    fn an_editors_white_marker_with_a_comment_is_held_exactly_on_a_described_clip() {
+        let mut mine = marker(2_000, 0, "Street", "keep this note");
+        mine.color = AI_MARKER_COLOR;
+        let comment = markers_into_comment("AI: Two lions.", std::slice::from_ref(&mine));
+        assert!(comment_holds_markers(&comment, &[mine]), "{comment}");
     }
 
     #[test]
