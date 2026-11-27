@@ -1,3 +1,7 @@
+# 0.306
+## Fixed
+- Markers ⇄ comment: changing the line of a white marker of your own now renames that marker. Before, the marker kept its old name with the new one added after a dash.
+
 # 0.305
 ## Fixed
 - A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment. Before, the next Describe with AI run could drop it, with your text.

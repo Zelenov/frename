@@ -727,19 +727,57 @@ pub fn comment_to_markers(
             lines_moved += 1;
         }
         // Another line for a moment already given: its text joins the marker's, so a line is
-        // never dropped without a trace. An AI segment only ever adds its marker once.
-        if let Some(pending) = added.iter_mut().find(|m| is_at(m, &parsed, in_block)) {
+        // never dropped without a trace. An AI segment only ever adds its marker once. An
+        // editor's line joins only a marker of its kind (white or not, see [`same_kind`]); a
+        // block line parses as green, so the kind is not asked of it.
+        if let Some(pending) = added
+            .iter_mut()
+            .find(|m| is_at(m, &parsed, in_block) && (in_block || same_kind(m.color, parsed.color)))
+        {
             if !in_block {
                 join_text(pending, &parsed);
             }
             continue;
         }
-        // A marker the line can change is preferred (the first one if several): one without a
-        // GUID is read-only.
+        // An editor's line that only repeats one of the AI's white markers of the moment is
+        // that marker's own line (Markers → comment writes it so): it changes nothing.
+        if !in_block
+            && existing.iter().any(|m| {
+                m.ai && m.color == AI_MARKER_COLOR
+                    && same_moment(
+                        m.start_ms,
+                        m.duration_ms,
+                        parsed.start_ms,
+                        parsed.duration_ms,
+                    )
+                    && has_text(m, &parsed)
+            })
+        {
+            continue;
+        }
+        // Of several markers of the moment, the line meets the one that already says what it
+        // says, else one of its colour, else one it can change (one without a GUID is
+        // read-only); the first one if several. So each of two markers of one moment meets its
+        // own line, and a round trip through the comment changes nothing.
         let found = existing
             .iter()
-            .filter(|m| is_at(m, &parsed, in_block))
-            .min_by_key(|m| m.guid.is_none());
+            // A marker an earlier line made of the other kind (white or not) is not this one's.
+            .filter(|m| {
+                is_at(m, &parsed, in_block)
+                    && (in_block
+                        || !touched.iter().any(|t| {
+                            t.guid.is_some()
+                                && t.guid == m.guid
+                                && !same_kind(t.color, parsed.color)
+                        }))
+            })
+            .min_by_key(|m| {
+                (
+                    !has_text(m, &parsed),
+                    m.color != parsed.color,
+                    m.guid.is_none(),
+                )
+            });
         if let Some(found) = found {
             if !in_block {
                 match found.guid.as_ref() {
@@ -778,9 +816,25 @@ pub fn comment_to_markers(
         }
         // The same name close by (a range cut short, a nudged start) is the same marker: as
         // before, the line is consumed and adds nothing.
-        let same_name_close_by = existing.iter().chain(added.iter()).any(|m| {
-            m.name.trim() == parsed.name && m.start_ms.abs_diff(parsed.start_ms) <= MARKER_SNAP_MS
-        });
+        // Names as the lines leave them: a marker an earlier line renamed no longer has its
+        // old name, so a line with that name is a marker of its own, not lost.
+        let as_left = |m: &'_ Marker| -> String {
+            touched
+                .iter()
+                .find(|t| t.guid.is_some() && t.guid == m.guid)
+                .map_or_else(|| m.name.trim().to_string(), |t| t.name.trim().to_string())
+        };
+        let same_name_close_by = existing
+            .iter()
+            .map(|m| (as_left(m), m.start_ms))
+            .chain(
+                added
+                    .iter()
+                    .map(|m| (m.name.trim().to_string(), m.start_ms)),
+            )
+            .any(|(name, start_ms)| {
+                name == parsed.name && start_ms.abs_diff(parsed.start_ms) <= MARKER_SNAP_MS
+            });
         if same_name_close_by {
             continue;
         }
@@ -864,11 +918,23 @@ pub fn markers_to_comment(comment: &str, markers: &[Marker]) -> (String, usize) 
     (result, added)
 }
 
-/// Whether the marker `m` is the one a line is about: the AI's segments only meet the AI's
-/// markers, the editor's lines the editor's, and the moment is the same.
+/// Whether the marker `m` is the one a line is about: the moment is the same, and
+/// - a segment line of the AI block meets a white marker: the AI's, or the editor's (an AI
+///   marker the editor renamed keeps its old segment line until the next run, and comment
+///   storage writes the editor's white markers into the block: [`markers_into_comment`]);
+/// - an editor's line meets any marker of another colour than white, as before, and the
+///   editor's own white marker when the line is white too (#673): Markers → comment writes it
+///   as a `[white]` line among the editor's lines. A line of another colour for that moment is
+///   a marker of its own, as a white and a coloured marker never merge ([`same_kind`]). The
+///   AI's white markers never meet an editor's line.
 fn is_at(m: &Marker, line: &MarkerLine, in_block: bool) -> bool {
-    (m.color == AI_MARKER_COLOR) == in_block
-        && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
+    let white = m.color == AI_MARKER_COLOR;
+    let side = if in_block {
+        white
+    } else {
+        !white || (!m.ai && line.color == AI_MARKER_COLOR)
+    };
+    side && same_moment(m.start_ms, m.duration_ms, line.start_ms, line.duration_ms)
 }
 
 /// The text of a line added to a marker's own (see [`merge_text`]).
@@ -918,7 +984,7 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
                 && same_moment(m.start_ms, m.duration_ms, marker.start_ms, marker.duration_ms)
                 // White markers and markers of other colors never merge: the comment keeps the
                 // AI's segments (white) apart from the editor's lines.
-                && (m.color == AI_MARKER_COLOR) == (marker.color == AI_MARKER_COLOR)
+                && same_kind(m.color, marker.color)
                 // An editor's white marker never merges into the AI's: a new AI run would drop
                 // it, and the editor's text with it (#669).
                 && m.ai == marker.ai
@@ -933,6 +999,12 @@ pub fn merge_duplicate_markers(markers: &[Marker]) -> (Vec<Marker>, usize) {
         }
     }
     (merged, count)
+}
+
+/// Whether two colours are of one kind: both white ([`AI_MARKER_COLOR`]) or both not. Markers
+/// of two kinds on one moment stay two, whether merged (#669) or met by comment lines (#673).
+fn same_kind(a: MarkerColor, b: MarkerColor) -> bool {
+    (a == AI_MARKER_COLOR) == (b == AI_MARKER_COLOR)
 }
 
 /// Two texts of one marker as one: the longer when it holds the other, else both as
@@ -1709,6 +1781,208 @@ mod tests {
         assert_eq!(dropped, [old_ai.guid.unwrap()].into_iter().collect());
     }
 
+    /// #673: without an AI block, a white marker is written as an editor's line; that line,
+    /// edited, renames it in place (as for any other colour) instead of adding a second one.
+    #[test]
+    fn an_edited_line_renames_a_white_marker_when_there_is_no_ai_block() {
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let comment = markers_into_comment("", std::slice::from_ref(&white));
+        assert!(comment.contains("Use this"), "{comment}");
+        let edited = comment.replace("Use this", "Use that");
+        let result = comment_to_markers(&edited, std::slice::from_ref(&white), None);
+        assert!(result.added.is_empty(), "{:?}", result.added);
+        assert_eq!(result.updated.len(), 1);
+        assert_eq!(result.updated[0].name, "Use that");
+        assert_eq!(result.updated[0].guid, white.guid);
+        assert_eq!(result.updated[0].color, AI_MARKER_COLOR);
+        // Unchanged, it changes nothing.
+        let same = comment_to_markers(&comment, std::slice::from_ref(&white), None);
+        assert!(same.added.is_empty() && same.comment.is_empty(), "{same:?}");
+    }
+
+    /// #673, the issue's steps on a described clip: Markers → comment writes the editor's white
+    /// marker above the AI block; the line, edited, renames it in place.
+    #[test]
+    fn an_edited_line_renames_a_white_marker_above_the_ai_block() {
+        let (_, ai_markers) = markers_from_comment(AI_COMMENT);
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let mut all = ai_markers.clone();
+        all.push(white.clone());
+        let (comment, added) = markers_to_comment("Mine\n\nAI: A walk.", &all);
+        assert!(added >= 1, "{comment}");
+        let block = crate::ai::block::ai_block_range(&comment).expect("the block");
+        assert!(
+            comment[..block.start].contains("[white] — Use this"),
+            "above the block: {comment}"
+        );
+        let edited = comment.replace("Use this", "Use that");
+        let result = comment_to_markers(&edited, &all, None);
+        assert!(
+            !result.added.iter().any(|m| m.name.contains("Use")),
+            "{:?}",
+            result.added
+        );
+        let renamed = result
+            .updated
+            .iter()
+            .find(|m| m.guid == white.guid)
+            .expect("the white marker renamed");
+        assert_eq!(renamed.name, "Use that");
+        assert!(!renamed.ai);
+    }
+
+    /// A white and a green marker of the editor's on one moment (white first): each line meets
+    /// its own marker, so a round trip through the comment changes nothing.
+    #[test]
+    fn two_colours_on_one_moment_each_meet_their_own_line() {
+        let mut white = marker(5_000, 0, "B", "");
+        white.color = AI_MARKER_COLOR;
+        let green = marker(5_000, 0, "A", "");
+        let all = [white.clone(), green.clone()];
+        let (comment, _) = markers_to_comment("Mine", &all);
+        let back = comment_to_markers(&comment, &all, None);
+        assert!(back.added.is_empty(), "{comment}: {:?}", back.added);
+        for m in &back.updated {
+            let before = all.iter().find(|b| b.guid == m.guid).expect("one of them");
+            assert_eq!(
+                (&m.name, m.color),
+                (&before.name, before.color),
+                "{comment}"
+            );
+        }
+    }
+
+    /// A read-only green marker and the editor's white one on one moment: a round trip changes
+    /// neither (each line meets the marker that says what it says).
+    #[test]
+    fn a_read_only_marker_and_a_white_one_on_one_moment_keep_their_lines() {
+        let mut read_only = marker(5_000, 0, "R", "");
+        read_only.guid = None;
+        let mut white = marker(5_000, 0, "W", "");
+        white.color = AI_MARKER_COLOR;
+        let all = [read_only, white];
+        let (comment, _) = markers_to_comment("Mine", &all);
+        let back = comment_to_markers(&comment, &all, None);
+        assert!(back.added.is_empty(), "{comment}: {:?}", back.added);
+        for m in &back.updated {
+            let before = all.iter().find(|b| b.guid == m.guid).expect("one of them");
+            assert_eq!(
+                (&m.name, m.color),
+                (&before.name, before.color),
+                "{comment}"
+            );
+        }
+    }
+
+    /// The editor's white marker renamed by its line, and a new green line typed for the same
+    /// moment: the green line is a marker of its own, not text joined to the white one.
+    #[test]
+    fn a_green_line_for_a_renamed_white_marker_is_its_own_marker() {
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let comment = markers_into_comment("", std::slice::from_ref(&white))
+            .replace("Use this", "Use that")
+            + "\n0:05 — Lion";
+        let result = comment_to_markers(&comment, std::slice::from_ref(&white), None);
+        assert_eq!(result.updated.len(), 1, "{comment}");
+        assert_eq!(result.updated[0].name, "Use that");
+        assert_eq!(result.added.len(), 1, "{comment}: {:?}", result.added);
+        assert_eq!(
+            (result.added[0].name.as_str(), result.added[0].color),
+            ("Lion", MarkerColor::Green)
+        );
+    }
+
+    /// A green note typed earlier for the moment of the editor's white marker, above the white
+    /// marker's line: both stay, each the marker it was.
+    #[test]
+    fn a_green_line_above_a_white_markers_line_keeps_both() {
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let (comment, _) = markers_to_comment("0:05 — Lion", std::slice::from_ref(&white));
+        let result = comment_to_markers(&comment, std::slice::from_ref(&white), None);
+        assert!(result.updated.is_empty(), "{comment}: {:?}", result.updated);
+        assert_eq!(result.added.len(), 1, "{comment}: {:?}", result.added);
+        assert_eq!(
+            (result.added[0].name.as_str(), result.added[0].color),
+            ("Lion", MarkerColor::Green)
+        );
+        assert!(result.comment.is_empty(), "{:?}", result.comment);
+    }
+
+    /// A white line typed above the line of the editor's green marker: the green line, with the
+    /// marker's old name, is not lost (review of PR #675).
+    #[test]
+    fn a_white_line_above_a_green_markers_line_loses_no_text() {
+        let green = marker(5_000, 0, "A", "");
+        let comment = format!(
+            "0:05 [white] — Note\n{}",
+            markers_into_comment("", std::slice::from_ref(&green))
+        );
+        let result = comment_to_markers(&comment, std::slice::from_ref(&green), None);
+        let names: Vec<&str> = result
+            .updated
+            .iter()
+            .chain(result.added.iter())
+            .map(|m| m.name.as_str())
+            .collect();
+        assert!(
+            names.iter().any(|n| n.contains("Note")),
+            "{comment}: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.contains('A')) || result.comment.contains("— A"),
+            "{comment}: {names:?} / {:?}",
+            result.comment
+        );
+    }
+
+    /// The AI's white marker and the editor's on one moment, no AI block: an unchanged round
+    /// trip changes neither (review of PR #675).
+    #[test]
+    fn an_ai_and_an_editors_white_marker_on_one_moment_keep_their_lines() {
+        let mut ai = marker(0, 14_000, "Street", "");
+        ai.color = AI_MARKER_COLOR;
+        ai.ai = true;
+        let mut mine = marker(0, 14_000, "Mine", "");
+        mine.color = AI_MARKER_COLOR;
+        let all = [ai, mine];
+        let (comment, _) = markers_to_comment("", &all);
+        let back = comment_to_markers(&comment, &all, None);
+        assert!(back.updated.is_empty(), "{comment}: {:?}", back.updated);
+        assert!(back.added.is_empty(), "{comment}: {:?}", back.added);
+    }
+
+    /// The same two markers through comment storage (no AI block): they come back as two.
+    #[test]
+    fn two_colours_on_one_moment_come_back_from_comment_storage_as_two() {
+        let mut white = marker(5_000, 0, "B", "");
+        white.color = AI_MARKER_COLOR;
+        let green = marker(5_000, 0, "A", "");
+        let written = markers_into_comment("", &[white, green]);
+        let (_, back) = markers_from_comment(&written);
+        let mut names: Vec<_> = back.iter().map(|m| (m.name.as_str(), m.color)).collect();
+        names.sort_by_key(|(name, _)| *name);
+        assert_eq!(
+            names,
+            [("A", MarkerColor::Green), ("B", AI_MARKER_COLOR)],
+            "{written}"
+        );
+    }
+
+    /// Comment storage writes an editor's white marker into the AI block; reading the comment
+    /// back meets it again instead of adding a second marker.
+    #[test]
+    fn a_white_marker_written_into_the_block_meets_its_line_again() {
+        let mut white = marker(5_000, 0, "Use this", "");
+        white.color = AI_MARKER_COLOR;
+        let written = markers_into_comment("AI: Two lions.", std::slice::from_ref(&white));
+        let back = comment_to_markers(&written, std::slice::from_ref(&white), None);
+        assert!(back.added.is_empty(), "{written}: {:?}", back.added);
+    }
+
     /// A comment line that renames an AI marker makes it the editor's (#388).
     #[test]
     fn a_comment_line_that_changes_an_ai_marker_makes_it_the_editors() {
@@ -1868,6 +2142,7 @@ mod tests {
     fn an_ai_segment_and_the_editors_line_do_not_meet() {
         let mut ai = marker(10_000, 0, "AI", "");
         ai.color = AI_MARKER_COLOR;
+        ai.ai = true;
         let result = comment_to_markers("0:10 — Mine", &[ai], None);
         assert_eq!(result.added.len(), 1, "the AI's marker is not renamed");
         assert!(result.updated.is_empty());
