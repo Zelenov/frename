@@ -1,3 +1,7 @@
+# 0.305
+## Fixed
+- When you copy a marker in Premiere and paste the copy earlier in the clip, the original now stays the original in the clip's `.describe.json`. Before, the copy took the original's place there, so moving or deleting the copy in frename moved or deleted the original's entry.
+
 # 0.304
 ## Fixed
 - A marker you copy and paste in Premiere now gets one entry of its own in the clip's `.describe.json`, and keeps it. Before, frename gave the copy a new entry each time it opened the clip, until you changed its markers.

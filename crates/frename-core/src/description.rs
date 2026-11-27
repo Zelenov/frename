@@ -91,20 +91,15 @@ pub(crate) fn markers_saved(video: &Path, before: &[Marker], after: &[Marker]) {
 }
 
 /// Each editable marker's `(start_ms, duration_ms)` by its id. Of markers that share an id (a
-/// copy made in Premiere), the one [`crate::markers::give_ids`] lets keep it counts: the first by
-/// time. The copy's times are not a move of the original (#668).
+/// copy pasted in Premiere), the one [`crate::markers::give_ids`] lets keep it counts, in the
+/// order it sees them: the copy's times are not a move of the original (#668, #671).
 fn spans(markers: &[Marker]) -> HashMap<String, (u64, u64)> {
-    let mut sorted: Vec<&Marker> = markers.iter().filter(|m| m.is_editable()).collect();
-    sorted.sort_by_key(|m| (m.start_ms, m.duration_ms));
-    let mut spans = HashMap::new();
-    for m in sorted {
-        if let Some(id) = &m.id {
-            spans
-                .entry(id.clone())
-                .or_insert((m.start_ms, m.duration_ms));
-        }
-    }
-    spans
+    let mut sorted = markers.to_vec();
+    crate::markers::sort_markers(&mut sorted);
+    crate::markers::id_keepers(&sorted)
+        .into_iter()
+        .map(|(id, n)| (id.to_string(), (sorted[n].start_ms, sorted[n].duration_ms)))
+        .collect()
 }
 
 /// The clip's In and Out points were just saved: bring its description file, if it has one,
