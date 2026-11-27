@@ -1,3 +1,7 @@
+# 0.306
+## Changed
+- Describe with AI now picks the frames of a clip with subtitles where the speech pauses and where lines start, so the AI sees what happens when someone starts or stops talking. It sends as many frames as before and costs the same.
+
 # 0.305
 ## Fixed
 - A white marker of your own on the same moment as an AI marker is no longer merged into the AI one by Markers ⇄ comment. Before, the next Describe with AI run could drop it, with your text.

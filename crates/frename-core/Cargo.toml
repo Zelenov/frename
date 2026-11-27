@@ -27,7 +27,7 @@ chardetng = "0.1"
 unicode-segmentation = "1"
 # AI descriptions (issue #17): the models, languages and descriptions (without GStreamer), and
 # the API key in the OS credential store.
-clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "a2f260cf78e6b037a0ab950fa43a22c559041df1", default-features = false }
+clipscribe = { git = "https://github.com/Zelenov/clipscribe", rev = "3309e69fa4fcfab2a8c50017fe49dced1dfa2b6c", default-features = false }
 # Reading a Premiere Pro transcript back as subtitles (`.premiere.json`, #219); same version as the root crate.
 sonisub = { version = "0.9", default-features = false }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }

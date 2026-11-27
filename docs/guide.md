@@ -436,7 +436,7 @@ Actions:
 
 **Describe with AI** writes what happens in each checked video, and when: a one-line summary and
 time-ranged segments, even for clips with no speech. frename sends up to 60 frames per clip, picked
-where the picture changes the most, and the subtitles the clip shows, if it has any, to Claude (Haiku 4.5 unless you pick Sonnet
+where the picture changes the most (in a clip with subtitles, also where the speech pauses and where lines start), and the subtitles the clip shows, if it has any, to Claude (Haiku 4.5 unless you pick Sonnet
 or Opus in Settings) or to ChatGPT (GPT-4.1 mini or GPT-4.1, if you pick one there), and puts the answer at the end of the comment, below your own text, which is
 never changed. Before you run it, the panel shows how many videos will be sent, the price (with
 Haiku, about $10 per 1000 one-minute clips) and how long it takes. Videos already described are skipped unless you tick Redo, and so are clips over 30 min.
